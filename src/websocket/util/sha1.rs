@@ -17,7 +17,9 @@ where
     let mut message: Vec<u8> = vec![0; message_len];
     message[0..self.as_ref().len()].copy_from_slice(self.as_ref());
     message[self.as_ref().len()] = 0x80;
-    message[message_len - 8..].copy_from_slice(&(self.as_ref().len() * 8).to_be_bytes());
+    message[message_len - 8..].copy_from_slice(
+      &(u64::try_from(self.as_ref().len() * 8).expect("T must fit in 64 bits")).to_be_bytes(),
+    );
 
     // Initialize hash values
     let mut h0: u32 = 0x67452301;
