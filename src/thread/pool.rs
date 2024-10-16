@@ -18,7 +18,7 @@ pub struct ThreadPool {
   started: bool,
   threads: Arc<Mutex<Vec<Thread>>>,
   recovery_thread: Option<RecoveryThread>,
-  tx: Sender<Message>,
+  tx: Option<Sender<Message>>,
   monitor: Option<MonitorConfig>,
 }
 
@@ -32,12 +32,7 @@ pub struct Thread {
 }
 
 /// Represents a message between threads.
-pub enum Message {
-  /// A task to be processed by a thread.
-  Function(Task, Instant),
-  /// The thread should be shut down.
-  Shutdown,
-}
+pub type Message = (Task, Instant);
 
 /// Represents a task to run in the thread pool.
 pub type Task = Box<dyn FnOnce() + Send + 'static>;
@@ -55,7 +50,7 @@ impl ThreadPool {
       started: false,
       threads: Arc::new(Mutex::new(Vec::new())),
       recovery_thread: None,
-      tx: channel().0,
+      tx: Some(channel().0),
       monitor: None,
     }
   }
@@ -66,14 +61,14 @@ impl ThreadPool {
     let rx = Arc::new(Mutex::new(rx));
     let mut threads = Vec::with_capacity(self.thread_count);
 
-    let (recovery_tx, recovery_rx): (Sender<usize>, Receiver<usize>) = channel();
+    let (recovery_tx, recovery_rx): (Sender<Option<usize>>, Receiver<Option<usize>>) = channel();
 
     for id in 0..self.thread_count {
       threads.push(Thread::new(id, rx.clone(), recovery_tx.clone(), self.monitor.clone()))
     }
 
     self.threads = Arc::new(Mutex::new(threads));
-    self.tx = tx;
+    self.tx = Some(tx);
 
     let recovery_thread =
       RecoveryThread::new(recovery_rx, recovery_tx, rx, self.threads.clone(), self.monitor.clone());
@@ -84,8 +79,12 @@ impl ThreadPool {
 
   /// Stops the thread pool.
   pub fn stop(&mut self) {
-    self.recovery_thread = None;
-    self.tx.send(Message::Shutdown).unwrap();
+    self.tx = None;
+    if let Some(rt) = self.recovery_thread.take() {
+      if rt.0.is_some() {
+        let _ = rt.0.unwrap().join();
+      }
+    }
     self.monitor = None;
     self.started = false;
   }
@@ -107,7 +106,9 @@ impl ThreadPool {
 
     let boxed_task = Box::new(task);
     let time_into_pool = Instant::now();
-    self.tx.send(Message::Function(boxed_task, time_into_pool)).unwrap();
+    if let Some(tx) = &self.tx {
+      tx.send((boxed_task, time_into_pool)).unwrap();
+    };
   }
 }
 
@@ -116,17 +117,17 @@ impl Thread {
   pub fn new(
     id: usize,
     rx: Arc<Mutex<Receiver<Message>>>,
-    panic_tx: Sender<usize>,
+    panic_tx: Sender<Option<usize>>,
     monitor: Option<MonitorConfig>,
   ) -> Self {
     let thread = Builder::new()
       .name(format!("{}", id))
       .spawn(move || {
-        let panic_marker = PanicMarker(id, panic_tx);
+        let panic_marker = PanicMarker(id, panic_tx.clone());
 
         loop {
           // When the tx pair has been dropped (shutdown initiated), we want to break out.
-          let task = match rx.lock() {
+          let (func, time) = match rx.lock() {
             Ok(res) => match res.recv() {
               Ok(res) => res,
               Err(_) => break,
@@ -134,22 +135,18 @@ impl Thread {
             Err(_) => break,
           };
 
-          match task {
-            Message::Function(f, t) => {
-              if let Some(monitor) = &monitor {
-                let time_in_pool = t.elapsed().as_millis();
+          if let Some(monitor) = &monitor {
+            let time_in_pool = time.elapsed().as_millis();
 
-                if time_in_pool > OVERLOAD_THRESHOLD {
-                  monitor.send(EventType::ThreadPoolOverload);
-                }
-              }
-
-              (f)()
+            if time_in_pool > OVERLOAD_THRESHOLD {
+              monitor.send(EventType::ThreadPoolOverload);
             }
-            Message::Shutdown => break,
           }
+
+          (func)()
         }
 
+        let _ = panic_tx.send(None); // Shutdown panic_thread
         drop(panic_marker);
       })
       .expect("Thread could not be spawned");
@@ -168,7 +165,7 @@ impl Drop for ThreadPool {
 
     for thread in &mut *self.threads.lock().unwrap() {
       if let Some(thread) = thread.os_thread.take() {
-        drop(thread)
+        thread.join().unwrap();
       }
     }
   }
