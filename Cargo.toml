@@ -1,0 +1,16 @@
+[package]
+name = "humpty"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://github.com/Grinkers/humpty"
+repository = "https://github.com/Grinkers/humpty"
+readme = "README.md"
+description = "A Low-Latency Web Server."
+keywords = ["http", "server", "http-server"]
+categories = ["web-programming::http-server", "network-programming"]
+
+[lints.rust]
+future-incompatible = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "deny"
