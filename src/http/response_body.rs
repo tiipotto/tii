@@ -13,7 +13,6 @@ pub enum ResponseBody {
   FixedSizeBinaryData(Vec<u8>),
 
   //Fixed length data, content length header will be set automatically
-  //Encoding utf-8 header will be set automatically
   FixedSizeTextData(String),
 
   //Streams a file.
@@ -135,8 +134,8 @@ impl ResponseBody {
     }
   }
 
-  pub fn is_text(&self) -> bool {
-    matches!(self, ResponseBody::FixedSizeTextData(_))
+  pub fn is_chunked(&self) -> bool {
+    matches!(self, ResponseBody::ChunkedStream(_))
   }
 
   pub fn content_length(&self) -> Option<u64> {

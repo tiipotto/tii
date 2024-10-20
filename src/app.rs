@@ -372,19 +372,6 @@ fn client_handler<T: IntoConnectionStream>(
           }
         }
 
-        match response.headers.get_mut(HeaderType::ContentLength) {
-          Some(_) => (),
-          None => {
-            if let Some(resp) = response.body.as_ref() {
-              if let Some(len) = resp.content_length() {
-                response.headers.add(HeaderType::ContentLength, len.to_string());
-              }
-            } else {
-              response.headers.add(HeaderType::ContentLength, "0");
-            }
-          }
-        }
-
         // Set HTTP version
         response.version.clone_from(&request.version);
         response

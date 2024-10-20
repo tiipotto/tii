@@ -6,8 +6,9 @@ use crate::http::status::StatusCode;
 
 use crate::http::response_body::{ReadAndSeek, ResponseBody};
 use crate::stream::ConnectionStreamWrite;
-use std::error::Error;
 use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
 
 /// Represents a response from the server.
 /// Implements `Into<Vec<u8>>` so can be serialised into bytes to transmit.
@@ -50,7 +51,7 @@ impl std::fmt::Display for ResponseError {
   }
 }
 
-impl Error for ResponseError {}
+impl std::error::Error for ResponseError {}
 
 impl Response {
   /// Creates a new response object with the given status code, bytes and request.
@@ -158,6 +159,22 @@ impl Response {
     destination.write(self.status_code.status_line().as_bytes())?;
 
     for header in self.get_headers().iter() {
+      if header.name == HeaderType::ContentLength {
+        //TODO we should make it impossible for a response object with this header to be constructed
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Response contains forbidden header Content-Length",
+        ));
+      }
+
+      if header.name == HeaderType::TransferEncoding {
+        //TODO we should make it impossible for a response object with this header to be constructed
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Response contains forbidden header Transfer-Encoding",
+        ));
+      }
+
       destination.write(b"\r\n")?;
       //TODO remove this clone
       destination.write(header.name.to_string().as_bytes())?;
@@ -165,13 +182,25 @@ impl Response {
       destination.write(header.value.as_bytes())?;
     }
 
-    destination.write(b"\r\n\r\n")?;
     if let Some(body) = self.body.as_mut() {
+      if body.is_chunked() {
+        destination.write(b"\r\nTransfer-Encoding: chunked\r\n\r\n")?;
+        body.write_to(destination)?;
+        destination.flush()?;
+        return Ok(());
+      }
+
+      if let Some(len) = body.content_length() {
+        destination.write(format!("\r\nContent-Length: {}\r\n\r\n", len).as_bytes())?;
+      }
+
       body.write_to(destination)?;
+      destination.flush()?;
+      return Ok(());
     }
 
+    destination.write(b"\r\nContent-Length: 0\r\n\r\n")?;
     destination.flush()?;
-
     Ok(())
   }
 }
