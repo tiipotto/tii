@@ -3,36 +3,40 @@
 use crate::app::error_handler;
 use crate::http::headers::HeaderType;
 use crate::http::mime::MimeType;
+use crate::http::response_body::ResponseBody;
 use crate::http::{Request, Response, StatusCode};
 use crate::route::{try_find_path, LocatedPath};
 
 use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 
 const INDEX_FILES: [&str; 2] = ["index.html", "index.htm"];
+
+fn try_file_open(path: &PathBuf) -> Response {
+  let Ok(file) = File::open(path) else {
+    return error_handler(StatusCode::NotFound);
+  };
+  let Ok(rb) = ResponseBody::from_file(file) else {
+    return error_handler(StatusCode::InternalServerError);
+  };
+
+  let response = Response::empty(StatusCode::OK).with_body(rb);
+
+  if let Some(extension) = path.extension() {
+    return response.with_header(
+      HeaderType::ContentType,
+      MimeType::from_extension(extension.to_str().unwrap()).to_string(),
+    );
+  };
+
+  response
+}
 
 /// Serve the specified file, or a default error 404 if not found.
 pub fn serve_file(file_path: &'static str) -> impl Fn(Request) -> Response {
   let path_buf = PathBuf::from(file_path);
 
-  move |_| {
-    if let Ok(mut file) = File::open(&path_buf) {
-      let mut buf = Vec::new();
-      if file.read_to_end(&mut buf).is_ok() {
-        return if let Some(extension) = path_buf.extension() {
-          Response::new(StatusCode::OK, buf).with_header(
-            HeaderType::ContentType,
-            MimeType::from_extension(extension.to_str().unwrap()).to_string(),
-          )
-        } else {
-          Response::new(StatusCode::OK, buf)
-        };
-      }
-    }
-
-    error_handler(StatusCode::NotFound)
-  }
+  move |_| try_file_open(&path_buf)
 }
 
 /// Treat the request URI as a file path relative to the given directory and serve files from there.
@@ -51,21 +55,7 @@ pub fn serve_as_file_path(directory_path: &'static str) -> impl Fn(Request) -> R
 
     let path_buf = PathBuf::from(path);
 
-    if let Ok(mut file) = File::open(&path_buf) {
-      let mut buf = Vec::new();
-      if file.read_to_end(&mut buf).is_ok() {
-        return if let Some(extension) = path_buf.extension() {
-          Response::new(StatusCode::OK, buf).with_header(
-            HeaderType::ContentType,
-            MimeType::from_extension(extension.to_str().unwrap()).to_string(),
-          )
-        } else {
-          Response::new(StatusCode::OK, buf)
-        };
-      }
-    }
-
-    error_handler(StatusCode::NotFound)
+    try_file_open(&path_buf)
   }
 }
 
@@ -86,23 +76,7 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(Request, &str) -> Resp
       match located {
         LocatedPath::Directory => Response::empty(StatusCode::MovedPermanently)
           .with_header(HeaderType::Location, format!("{}/", &request.uri)),
-        LocatedPath::File(path) => {
-          if let Ok(mut file) = File::open(&path) {
-            let mut buf = Vec::new();
-            if file.read_to_end(&mut buf).is_ok() {
-              return if let Some(extension) = path.extension() {
-                Response::new(StatusCode::OK, buf).with_header(
-                  HeaderType::ContentType,
-                  MimeType::from_extension(extension.to_str().unwrap()).to_string(),
-                )
-              } else {
-                Response::new(StatusCode::OK, buf)
-              };
-            }
-          }
-
-          error_handler(StatusCode::InternalServerError)
-        }
+        LocatedPath::File(path) => try_file_open(&path),
       }
     } else {
       error_handler(StatusCode::NotFound)
