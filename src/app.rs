@@ -395,14 +395,6 @@ fn client_handler<T: IntoConnectionStream>(
       break;
     };
 
-    // if let Err(e) = stream.flush() {
-    //   monitor.send(
-    //     Event::new(EventType::RequestServedError).with_peer(addr.clone()).with_info(e.to_string()),
-    //   );
-    //
-    //   break;
-    // };
-
     let status_str: &str = status.status_line();
 
     match &status {
