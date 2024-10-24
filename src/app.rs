@@ -8,11 +8,11 @@ use crate::http::request::{Request, RequestError};
 use crate::http::response::Response;
 use crate::http::status::StatusCode;
 use crate::krauss::wildcard_match;
-use crate::monitor::event::{Event, EventType};
-use crate::monitor::MonitorConfig;
 use crate::route::{Route, RouteHandler, SubApp};
 use crate::thread::pool::ThreadPool;
 
+#[cfg(feature = "log")]
+use log::trace;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -26,7 +26,6 @@ pub struct App {
   subapps: Vec<SubApp>,
   default_subapp: SubApp,
   error_handler: ErrorHandler,
-  monitor: MonitorConfig,
   connection_condition: ConnectionCondition,
   connection_timeout: Option<Duration>,
   shutdown: Option<Receiver<()>>,
@@ -58,7 +57,6 @@ impl Default for App {
       subapps: Vec::new(),
       default_subapp: SubApp::default(),
       error_handler,
-      monitor: MonitorConfig::default(),
       connection_condition: |_| true,
       connection_timeout: None,
       shutdown: None,
@@ -83,7 +81,6 @@ impl App {
     let default_subapp = Arc::new(self.default_subapp);
     let error_handler = Arc::new(self.error_handler);
 
-    self.thread_pool.register_monitor(self.monitor.clone());
     self.thread_pool.start();
 
     // Shared shutdown signal between socket.incoming() and shutdown signal receiver.
@@ -99,41 +96,35 @@ impl App {
           Ok(mut stream) => {
             // Check that the client is allowed to connect
             if (self.connection_condition)(&mut stream) {
-              let cloned_monitor = self.monitor.clone();
               let cloned_subapps = subapps.clone();
               let cloned_default_subapp = default_subapp.clone();
               let cloned_error_handler = error_handler.clone();
               let cloned_timeout = self.connection_timeout;
 
-              cloned_monitor.send(
-                Event::new(EventType::ConnectionSuccess).with_peer_result(stream.peer_addr()),
-              );
-
+              #[cfg(feature = "log")]
+              trace!("ConnectionSuccess {:?}", stream.peer_addr());
               // Spawn a new thread to handle the connection
               self.thread_pool.execute(move || {
-                cloned_monitor.send(
-                  Event::new(EventType::ThreadPoolProcessStarted)
-                    .with_peer_result(stream.peer_addr()),
-                );
-
                 client_handler(
                   stream,
                   cloned_subapps,
                   cloned_default_subapp,
                   cloned_error_handler,
-                  cloned_monitor,
                   cloned_timeout,
                 )
               });
-            } else {
-              self
-                .monitor
-                .send(Event::new(EventType::ConnectionDenied).with_peer_result(stream.peer_addr()));
             }
           }
+          #[cfg(feature = "log")]
           Err(e) => {
-            self.monitor.send(Event::new(EventType::ConnectionError).with_info(e.to_string()))
+            // TODO this will be removed eventually.
+            // Having a connection filter that acts as a "firewall" here is not the best idea.
+            // Once we feed the connections externally instead of doing the listening
+            // here this becomes redundant anyways.
+            trace!("ConnectionDenied {:?}", e);
           }
+          #[cfg(not(feature = "log"))]
+          Err(_) => {}
         }
       }
       self.thread_pool.stop();
@@ -207,12 +198,6 @@ impl App {
     self
   }
 
-  /// Registers a monitor for the server.
-  pub fn with_monitor(mut self, monitor: MonitorConfig) -> Self {
-    self.monitor = monitor;
-    self
-  }
-
   /// Registers a shutdown signal to gracefully shutdown the app, ending the run/run_tls loop.
   pub fn with_shutdown(mut self, shutdown_receiver: Receiver<()>) -> Self {
     self.shutdown = Some(shutdown_receiver);
@@ -265,16 +250,21 @@ fn client_handler<T: IntoConnectionStream>(
   subapps: Arc<Vec<SubApp>>,
   default_subapp: Arc<SubApp>,
   error_handler: Arc<ErrorHandler>,
-  monitor: MonitorConfig,
   timeout: Option<Duration>,
 ) {
   let stream = stream.into_connection_stream();
 
-  let addr = if let Ok(addr) = stream.peer_addr() {
-    addr
-  } else {
-    monitor.send(EventType::StreamDisconnectedWhileWaiting);
-    return;
+  let addr = match stream.peer_addr() {
+    Ok(addr) => addr,
+    #[cfg(feature = "log")]
+    Err(err) => {
+      trace!("FailedToGetPeerAddress {}", err);
+      return;
+    }
+    #[cfg(not(feature = "log"))]
+    Err(_) => {
+      return;
+    }
   };
 
   loop {
@@ -287,11 +277,13 @@ fn client_handler<T: IntoConnectionStream>(
     // If the request is valid an is a WebSocket request, call the corresponding handler
     if let Ok(req) = &request {
       if req.headers.get(&HeaderType::Upgrade) == Some("websocket") {
-        monitor.send(Event::new(EventType::WebsocketConnectionRequested).with_peer(addr.clone()));
+        #[cfg(feature = "log")]
+        trace!("WebsocketConnectionRequested");
 
         call_websocket_handler(req, &subapps, &default_subapp, stream.as_ref());
 
-        monitor.send(Event::new(EventType::WebsocketConnectionClosed).with_peer(addr.clone()));
+        #[cfg(feature = "log")]
+        trace!("WebsocketConnectionClosed");
         break;
       }
     }
@@ -380,65 +372,46 @@ fn client_handler<T: IntoConnectionStream>(
         RequestError::Request => error_handler(StatusCode::BadRequest),
         RequestError::Timeout => error_handler(StatusCode::RequestTimeout),
         RequestError::Disconnected => return,
-        RequestError::Stream => return monitor.send(Event::new(EventType::RequestServedError)),
+        RequestError::Stream => {
+          #[cfg(feature = "log")]
+          trace!("RequestServedError");
+          return;
+        }
       },
     };
 
-    // Write the response to the stream
-    let status = response.status_code.clone();
+    #[cfg(feature = "log")]
+    trace!("RequestRespondedWith HTTP {}", response.status_code.code());
 
-    if let Err(e) = response.write_to(stream.as_stream_write()) {
-      monitor.send(
-        Event::new(EventType::RequestServedError).with_peer(addr.clone()).with_info(e.to_string()),
-      );
+    let write_result = response.write_to(stream.as_stream_write());
 
+    #[cfg(feature = "log")]
+    if let Err(e) = write_result {
+      trace!("RequestServedError {}", e);
       break;
     };
 
-    let status_str: &str = status.status_line();
-
-    match &status {
-      StatusCode::OK => monitor.send(
-        Event::new(EventType::RequestServedSuccess)
-          .with_peer(addr.clone())
-          .with_info(format!("200 OK {}", request.unwrap().uri)),
-      ),
-      StatusCode::RequestTimeout => monitor.send(
-        Event::new(EventType::RequestTimeout)
-          .with_peer(addr.clone())
-          .with_info("408 Request Timeout"),
-      ),
-      e => {
-        if let Ok(request) = request {
-          monitor.send(
-            Event::new(EventType::RequestServedError).with_peer(addr.clone()).with_info(format!(
-              "{} {} {}",
-              e.code(),
-              status_str,
-              request.uri
-            )),
-          )
-        } else {
-          monitor.send(
-            Event::new(EventType::RequestServedError).with_peer(addr.clone()).with_info(format!(
-              "{} {}",
-              e.code(),
-              status_str
-            )),
-          )
-        }
-      }
-    }
-
-    // If the request specified to keep the connection open, respect this
-    if !keep_alive {
+    #[cfg(not(feature = "log"))]
+    if write_result.is_err() {
       break;
     }
 
-    monitor.send(Event::new(EventType::KeepAliveRespected).with_peer(addr.clone()));
+    #[cfg(feature = "log")]
+    trace!("RequestServedSuccess");
+
+    // If the request specified to keep the connection open, respect this
+    if !keep_alive {
+      #[cfg(feature = "log")]
+      trace!("NoKeepAlive");
+      break;
+    }
+
+    #[cfg(feature = "log")]
+    trace!("KeepAliveRespected");
   }
 
-  monitor.send(Event::new(EventType::ConnectionClosed).with_peer(addr.clone()));
+  #[cfg(feature = "log")]
+  trace!("ConnectionClosed");
 }
 
 /// Gets the correct handler for the given request.
