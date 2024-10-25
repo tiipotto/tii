@@ -1,23 +1,36 @@
-use humpty::{handlers, App};
+use humpty::handlers;
 
 use humpty::websocket::error::WebsocketError;
 use humpty::websocket::message::Message;
 use humpty::websocket::stream::WebsocketStream;
 use humpty::websocket::websocket_handler;
 
+use humpty::humpty_builder::HumptyBuilder;
 use std::error::Error;
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{io, thread};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = App::default()
-    // Serve the `static` directory to regular HTTP requests.
-    .with_path_aware_route("/*", handlers::serve_dir("./examples/static/ws"))
-    // Use the `humpty_ws` WebSocket handler to wrap our own echo handler.
-    .with_websocket_route("/ws", websocket_handler(echo_handler));
-  app.run("0.0.0.0:8080")?;
+  let app = HumptyBuilder::default()
+    .router(|router| {
+      router
+        .with_route("/*", handlers::serve_dir("./examples/static/ws"))
+        .with_websocket_route("/ws", websocket_handler(echo_handler))
+    })
+    .build_arc();
+
+  let listen = TcpListener::bind("0.0.0.0:8080")?;
+  for stream in listen.incoming() {
+    let app = app.clone();
+    thread::spawn(move || {
+      app.handle_connection(stream?)?;
+      Ok::<(), io::Error>(())
+    });
+  }
 
   Ok(())
 }

@@ -1,8 +1,7 @@
 //! Provides functionality for recovering from thread panics.
 use crate::thread::pool::{Message, Thread};
 
-#[cfg(feature = "log")]
-use log::trace;
+use crate::trace_log;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{panicking, spawn, JoinHandle};
@@ -43,8 +42,7 @@ impl RecoveryThread {
           // Put the new thread in the old thread's place.
           threads[panicking_thread] = restarted_thread;
 
-          #[cfg(feature = "log")]
-          trace!("Thread {} was restarted", panicking_thread);
+          trace_log!("Thread {} was restarted", panicking_thread);
         }
       }
     });

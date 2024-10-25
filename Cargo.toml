@@ -2,7 +2,6 @@
 name = "humpty"
 version = "0.1.0"
 edition = "2021"
-authors = ["Alexander Schuetz <aschuetz@protonmail.com>", "Kevin Nakamura <grinkers@grinkers.net>"]
 license = "MIT"
 homepage = "https://github.com/Grinkers/humpty"
 repository = "https://github.com/Grinkers/humpty"
@@ -12,6 +11,7 @@ keywords = ["http", "server", "http-server"]
 categories = ["web-programming::http-server", "network-programming"]
 
 [dependencies]
+rand = "0.8.5"
 log = { version = "^0.4.22", optional = true }
 
 [features]

@@ -1,28 +1,10 @@
-use humpty::http::{Response, StatusCode};
-use humpty::App;
-
-use std::sync::mpsc;
-use std::thread::{sleep, spawn};
-use std::time::Duration;
-
 fn main() {
-  let (shutdown_app, app_rx) = mpsc::sync_channel(0);
-
-  let app = App::default()
-    .with_shutdown(app_rx)
-    .with_route("/hello", |_| Response::new(StatusCode::OK, "Hello world!"));
-
-  // Shutdown the main app after 5 seconds
-  let t = spawn(move || {
-    sleep(Duration::from_secs(5));
-    let _ = shutdown_app.send(());
-  });
-
-  // Returns after shutdown signal
-  app.run("0.0.0.0:8080").unwrap();
-
-  // Wait for thread to fully finish. Unneeded but placed here for full memory tests.
-  t.join().unwrap();
+  // empty on purpose, the CI tests that this file is here, showdown is no longer something that the library cares about.
+  // the previous impl not great anyways (setting atomic boolean and connecting to localhost is not good, this can fail if there is port exhaustion)
+  // To implement this properly one has to call shutdown syscall on the rawfd of the TcpListen on unix.
+  // On windows its not possible with the sockets provided by the STL because they do not use overlapped (interruptible) WSOCK2 io.
+  // Its my honest opinion that outsourcing this to the user is best. They can use a third party socket library that implements this properly
+  // On windows and I can just call shutdown on the fd in my unix code.
 }
 
 #[test]

@@ -1,6 +1,9 @@
-use humpty::http::{Request, Response, StatusCode};
-use humpty::App;
+use humpty::http::request_context::RequestContext;
+use humpty::http::{Response, StatusCode};
+use humpty::humpty_builder::HumptyBuilder;
 use std::error::Error;
+use std::net::TcpListener;
+use std::{io, thread};
 
 const HTML: &str = r##"
 <html>
@@ -29,24 +32,34 @@ const HTML: &str = r##"
 </html>"##;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app: App = App::default().with_route("/", home).with_route("/wildcard/*", wildcard);
+  let app = HumptyBuilder::default()
+    .router(|router| router.with_route("/", home).with_route("/wildcard/*", wildcard))
+    .build_arc();
 
-  app.run("127.0.0.1:8080")?;
+  let listen = TcpListener::bind("0.0.0.0:8080")?;
+  for stream in listen.incoming() {
+    let app = app.clone();
+    thread::spawn(move || {
+      app.handle_connection(stream?)?;
+      Ok::<(), io::Error>(())
+    });
+  }
 
   Ok(())
 }
 
-fn home(_: Request) -> Response {
-  Response::new(StatusCode::OK, HTML)
+fn home(_: &RequestContext) -> io::Result<Response> {
+  Ok(Response::new(StatusCode::OK, HTML))
 }
 
-fn wildcard(request: Request) -> Response {
+fn wildcard(request: &RequestContext) -> io::Result<Response> {
   let wildcard_path = request
-    .uri // get the URI of the request
+    .request_head()
+    .path // get the URI of the request
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option
 
   let html = format!("<html><body><h1>Wildcard Path: {}</h1></body></html>", wildcard_path);
 
-  Response::new(StatusCode::OK, html)
+  Ok(Response::new(StatusCode::OK, html))
 }
