@@ -7,10 +7,11 @@ use crate::websocket::restion::Restion;
 use crate::websocket::stream::WebsocketStream;
 
 use crate::thread::pool::ThreadPool;
-use crate::App;
+use crate::{error_log, trace_log};
 
+use crate::humpty_builder::HumptyBuilder;
 use std::collections::HashMap;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{sleep, spawn};
@@ -80,7 +81,7 @@ pub enum OutgoingMessage {
 /// Each enum variant has corresponding fields for the configuration.
 pub enum HumptyLink {
   /// The app uses its own internal Humpty application.
-  Internal(Box<App>, SocketAddr),
+  Internal(Box<HumptyBuilder>, SocketAddr),
   /// The app is linked to an external Humpty application and receives connections through a channel.
   External(Arc<Mutex<Sender<WebsocketStream>>>),
 }
@@ -122,8 +123,8 @@ impl Default for AsyncWebsocketApp {
 
     let (message_sender, outgoing_messages) = channel();
 
-    let humpty_app =
-      App::new_with_config(1).with_websocket_route("/*", async_websocket_handler(connect_hook));
+    let humpty_app = HumptyBuilder::default()
+      .router(|router| router.with_websocket_route("/*", async_websocket_handler(connect_hook)));
 
     Self {
       humpty_link: HumptyLink::Internal(
@@ -151,12 +152,12 @@ impl AsyncWebsocketApp {
   ///
   /// - `handler_threads`: The size of the handler thread pool.
   /// - `connection_threads`: The size of the connection handler thread pool (the underlying Humpty app).
-  pub fn new_with_config(handler_threads: usize, connection_threads: usize) -> Self {
+  pub fn new_with_config(handler_threads: usize, _connection_threads: usize) -> Self {
     let (connect_hook, incoming_streams) = channel();
     let connect_hook = Arc::new(Mutex::new(connect_hook));
 
-    let humpty_app = App::new_with_config(connection_threads)
-      .with_websocket_route("/*", async_websocket_handler(connect_hook));
+    let humpty_app = HumptyBuilder::default()
+      .router(|router| router.with_websocket_route("/*", async_websocket_handler(connect_hook)));
 
     Self {
       humpty_link: HumptyLink::Internal(
@@ -297,7 +298,30 @@ impl AsyncWebsocketApp {
   pub fn run(mut self) {
     // Ensure that the underlying Humpty application is running if it is internal.
     if let HumptyLink::Internal(app, addr) = self.humpty_link {
-      spawn(move || app.run(addr).unwrap());
+      spawn(move || {
+        //TODO make this not terrible pending a rewrite of this class
+        //This is just low effort...
+        let humpty = Arc::new(app.build());
+        let listener = TcpListener::bind(addr).unwrap();
+        for stream in listener.incoming() {
+          match stream {
+            Ok(stream) => {
+              let humpty_clone = humpty.clone();
+              //TODO this is 100% not desired, as this doesnt use threads from the threadpool.move || {}
+              spawn(move || {
+                if let Err(e) = humpty_clone.handle_connection(stream) {
+                  trace_log!("ConnectionFailure {:?}", e);
+                } else {
+                  trace_log!("ConnectionSuccess");
+                }
+              });
+            }
+            Err(e) => {
+              error_log!("error accepting connection: {}", e);
+            }
+          }
+        }
+      });
     }
 
     self.thread_pool.start();

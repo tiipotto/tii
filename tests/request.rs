@@ -1,12 +1,12 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use humpty::http::address::Address;
 use humpty::http::cookie::Cookie;
 use humpty::http::headers::{HeaderType, Headers};
 use humpty::http::method::Method;
-use humpty::http::Request;
+use humpty::http::RequestHead;
 
+use humpty::http::request::HttpVersion;
 use humpty::stream::IntoConnectionStream;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
@@ -17,17 +17,15 @@ fn test_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = Request::from_stream(raw_stream.as_ref(), "1.2.3.4:5678".parse().unwrap());
+  let request = RequestHead::new(raw_stream.as_ref());
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
   let expected_query: String = "foo=bar".into();
   assert_eq!(request.method, Method::Get);
-  assert_eq!(request.uri, expected_uri);
+  assert_eq!(request.path, expected_uri);
   assert_eq!(request.query, expected_query);
-  assert_eq!(request.version, "HTTP/1.1");
-  assert!(request.content.is_none());
-  assert_eq!(request.address, Address::new("1.2.3.4:5678").unwrap());
+  assert_eq!(request.version, HttpVersion::Http11);
 
   let mut expected_headers: Headers = Headers::new();
   expected_headers.add(HeaderType::Host, "localhost");
@@ -39,7 +37,7 @@ fn test_cookie_request() {
   let test_data = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: foo=bar; baz=qux\r\n\r\n";
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
-  let request = Request::from_stream(raw_stream.as_ref(), "1.2.3.4:5678".parse().unwrap()).unwrap();
+  let request = RequestHead::new(raw_stream.as_ref()).unwrap();
 
   let mut expected_cookies = vec![Cookie::new("foo", "bar"), Cookie::new("baz", "qux")];
 
@@ -57,22 +55,13 @@ fn test_proxied_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = Request::from_stream(raw_stream.as_ref(), "1.2.3.4:5678".parse().unwrap());
+  let request = RequestHead::new(raw_stream.as_ref());
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
   assert_eq!(request.method, Method::Get);
-  assert_eq!(request.uri, expected_uri);
-  assert_eq!(request.version, "HTTP/1.1");
-  assert!(request.content.is_none());
-  assert_eq!(
-    request.address,
-    Address {
-      origin_addr: "13.14.15.16".parse().unwrap(),
-      proxies: vec!["9.10.11.12".parse().unwrap(), "1.2.3.4".parse().unwrap()],
-      port: 5678
-    }
-  );
+  assert_eq!(request.path, expected_uri);
+  assert_eq!(request.version, HttpVersion::Http11);
 
   let mut expected_headers: Headers = Headers::new();
   expected_headers.add(HeaderType::Host, "localhost");

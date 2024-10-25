@@ -7,7 +7,7 @@ use crate::websocket::util::sha1::SHA1Hash;
 use crate::websocket::MAGIC_STRING;
 
 use crate::http::headers::HeaderType;
-use crate::http::{Request, Response, StatusCode};
+use crate::http::{RequestHead, Response, StatusCode};
 
 use crate::stream::ConnectionStream;
 use std::sync::mpsc::Sender;
@@ -20,30 +20,11 @@ impl<T> WebsocketHandler for T where T: Fn(WebsocketStream) + Send + Sync {}
 /// Provides WebSocket handshake functionality.
 /// Supply a `WebsocketHandler` to handle the subsequent messages.
 ///
-/// ## Example
-/// ```no_run
-/// use humpty::App;
-/// use humpty::websocket::message::Message;
-/// use humpty::websocket::stream::WebsocketStream;
-/// use humpty::websocket::websocket_handler;
-///
-///
-/// fn main() {
-///     let app = App::default()
-///         .with_websocket_route("/", websocket_handler(my_handler));
-///
-///     app.run("0.0.0.0:8080").unwrap();
-/// }
-///
-/// fn my_handler(mut stream: WebsocketStream) {
-///     stream.send(Message::new("Hello, World!")).unwrap();
-/// }
-/// ```
-pub fn websocket_handler<T>(handler: T) -> impl Fn(Request, Box<dyn ConnectionStream>)
+pub fn websocket_handler<T>(handler: T) -> impl Fn(RequestHead, Box<dyn ConnectionStream>)
 where
   T: WebsocketHandler,
 {
-  move |request: Request, mut stream: Box<dyn ConnectionStream>| {
+  move |request: RequestHead, mut stream: Box<dyn ConnectionStream>| {
     if handshake(request, &mut stream).is_ok() {
       handler(WebsocketStream::new(stream));
     }
@@ -57,40 +38,10 @@ where
 ///   easier to simply create a regular app with `AsyncWebsocketApp::new()` which manages the Humpty
 ///   application internally.
 ///
-/// ## Example
-/// ```no_run
-/// use humpty::App;
-/// use humpty::websocket::async_app::{AsyncStream, AsyncWebsocketApp};
-/// use humpty::websocket::handler::async_websocket_handler;
-/// use humpty::websocket::message::Message;
-///
-/// use std::thread::spawn;
-///
-/// fn main() {
-///     let websocket_app = AsyncWebsocketApp::new_unlinked().with_message_handler(message_handler);
-///
-///     let humpty_app = App::default()
-///         .with_websocket_route("/ws", async_websocket_handler(websocket_app.connect_hook().unwrap()));
-///
-///     spawn(move || humpty_app.run("0.0.0.0:80").unwrap());
-///
-///     websocket_app.run();
-/// }
-///
-/// fn message_handler(stream: AsyncStream, message: Message) {
-///     println!(
-///         "{}: Message received: {}",
-///         stream.peer_addr(),
-///         message.text().unwrap().trim()
-///     );
-///
-///     stream.send(Message::new("Message received!"));
-/// }
-/// ```
 pub fn async_websocket_handler(
   hook: Arc<Mutex<Sender<WebsocketStream>>>,
-) -> impl Fn(Request, Box<dyn ConnectionStream>) {
-  move |request: Request, mut stream: Box<dyn ConnectionStream>| {
+) -> impl Fn(RequestHead, Box<dyn ConnectionStream>) {
+  move |request: RequestHead, mut stream: Box<dyn ConnectionStream>| {
     if handshake(request, &mut stream).is_ok() {
       hook.lock().unwrap().send(WebsocketStream::new(stream)).ok();
     }
@@ -99,7 +50,7 @@ pub fn async_websocket_handler(
 
 /// Performs the WebSocket handshake.
 fn handshake(
-  request: Request,
+  request: RequestHead,
   stream: &mut Box<dyn ConnectionStream>,
 ) -> Result<(), WebsocketError> {
   // Get the handshake key header
@@ -116,7 +67,9 @@ fn handshake(
     .with_header("Sec-WebSocket-Accept", sec_websocket_accept);
 
   // Transmit the handshake response
-  response.write_to(stream.as_stream_write()).map_err(|_| WebsocketError::WriteError)?;
+  response
+    .write_to(request.version, stream.as_stream_write())
+    .map_err(|_| WebsocketError::WriteError)?;
 
   Ok(())
 }

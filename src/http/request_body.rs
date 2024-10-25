@@ -28,7 +28,6 @@ impl RequestBody {
       RequestBodyWithContentLength((Box::new(read) as Box<dyn Read + Send>).take(len)),
     ))))
   }
-
   pub fn new_chunked<T: Read + Send + 'static>(read: T) -> RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::Chunked(RequestBodyChunked {
       read: Box::new(read) as Box<dyn Read + Send>,
@@ -43,6 +42,20 @@ impl RequestBody {
     match unwrap_poison(self.0.lock())?.deref_mut() {
       RequestBodyInner::WithContentLength(body) => body.0.read(buf),
       RequestBodyInner::Chunked(body) => body.read(buf),
+    }
+  }
+
+  pub fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
+    match unwrap_poison(self.0.lock())?.deref_mut() {
+      RequestBodyInner::WithContentLength(body) => body.0.read_to_end(buf),
+      RequestBodyInner::Chunked(body) => body.read_to_end(buf),
+    }
+  }
+
+  pub fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
+    match unwrap_poison(self.0.lock())?.deref_mut() {
+      RequestBodyInner::WithContentLength(body) => body.0.read_exact(buf),
+      RequestBodyInner::Chunked(body) => body.read_exact(buf),
     }
   }
 
@@ -90,8 +103,8 @@ impl Debug for RequestBodyChunked {
   }
 }
 
-impl RequestBodyChunked {
-  pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+impl Read for RequestBodyChunked {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     if buf.is_empty() {
       return Ok(0);
     }
