@@ -3,7 +3,6 @@
 use crate::http::response::Response;
 
 use std::io;
-use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,7 +12,6 @@ pub struct HumptyBuilder {
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
   connection_timeout: Option<Duration>,
-  shutdown: Option<Receiver<()>>,
 }
 
 use crate::default_functions::{default_error_handler, default_not_found_handler};
@@ -42,7 +40,6 @@ impl Default for HumptyBuilder {
       error_handler: default_error_handler,
       not_found_handler: default_not_found_handler,
       connection_timeout: None,
-      shutdown: None,
     }
   }
 }
@@ -77,12 +74,6 @@ impl HumptyBuilder {
   /// Adds a new router to the server and calls the closure with the new router so it can be configured.
   pub fn router<T: FnOnce(HumptyRouterBuilder) -> HumptyRouterBuilder>(self, builder: T) -> Self {
     self.with_router(builder(HumptyRouterBuilder::default()).build())
-  }
-
-  /// Registers a shutdown signal to gracefully shutdown the app, ending the run/run_tls loop.
-  pub fn with_shutdown(mut self, shutdown_receiver: Receiver<()>) -> Self {
-    self.shutdown = Some(shutdown_receiver);
-    self
   }
 
   /// Sets the error handler for the server.
