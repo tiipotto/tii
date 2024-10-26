@@ -73,16 +73,12 @@ pub fn serve_as_file_path(
 pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> io::Result<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
-    println!("Route: {}", route);
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
-    println!("Route2: {}", route_without_wildcard);
     let uri_without_route = request
       .request_head()
       .path
       .strip_prefix(route_without_wildcard)
-      .unwrap_or(&request.routed_path());
-
-    println!("Route3: {}", uri_without_route);
+      .unwrap_or(request.routed_path());
 
     let located = try_find_path(directory_path, uri_without_route, &INDEX_FILES);
 
