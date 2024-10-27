@@ -2,7 +2,7 @@ mod mock_stream;
 
 use crate::mock_stream::MockStream;
 use humpty::http::cookie::Cookie;
-use humpty::http::headers::{HeaderType, Headers};
+use humpty::http::headers::{HeaderName, Headers};
 use humpty::http::method::Method;
 use humpty::http::RequestHead;
 
@@ -28,7 +28,7 @@ fn test_request_from_stream() {
   assert_eq!(request.version, HttpVersion::Http11);
 
   let mut expected_headers: Headers = Headers::new();
-  expected_headers.add(HeaderType::Host, "localhost");
+  expected_headers.add(HeaderName::Host, "localhost");
   assert_eq!(request.headers, expected_headers);
 }
 
@@ -64,7 +64,7 @@ fn test_proxied_request_from_stream() {
   assert_eq!(request.version, HttpVersion::Http11);
 
   let mut expected_headers: Headers = Headers::new();
-  expected_headers.add(HeaderType::Host, "localhost");
+  expected_headers.add(HeaderName::Host, "localhost");
   expected_headers.add("X-Forwarded-For", "9.10.11.12,13.14.15.16");
 
   assert_eq!(request.headers, expected_headers);

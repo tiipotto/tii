@@ -3,11 +3,12 @@
 //! If no router wants to handle the request it also has a 404 handler.
 
 use crate::functional_traits::Router;
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::IntoConnectionStream;
 use crate::{error_log, trace_log};
 use std::any::Any;
@@ -56,7 +57,7 @@ impl HumptyServer {
   }
 
   /// Handles a connection without any metadata
-  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> io::Result<()> {
+  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> HumptyResult<()> {
     self.handle_connection_inner::<S, PhantomStreamMetadata>(stream, None)
   }
 
@@ -65,7 +66,7 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: M,
-  ) -> io::Result<()> {
+  ) -> HumptyResult<()> {
     self.handle_connection_inner(stream, Some(meta))
   }
 
@@ -74,7 +75,7 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: Option<M>,
-  ) -> io::Result<()> {
+  ) -> HumptyResult<()> {
     let stream = stream.into_connection_stream();
     //TODO split this into 2 parameters? Or make multiple parameters for different stages.
     //Use may desire timeout for request header but LOOOOONG/Infinite timeout for endpoints?
@@ -89,7 +90,7 @@ impl HumptyServer {
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
       if context.request_head().version == HttpVersion::Http11
-        && context.request_head().headers.get(&HeaderType::Upgrade) == Some("websocket")
+        && context.request_head().headers.get(&HeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -111,7 +112,7 @@ impl HumptyServer {
         && context
           .request_head()
           .headers
-          .get(&HeaderType::Connection)
+          .get(&HeaderName::Connection)
           .map(|e| e.eq_ignore_ascii_case("keep-alive"))
           .unwrap_or_default();
 
@@ -139,14 +140,14 @@ impl HumptyServer {
 
       if context.request_head().version == HttpVersion::Http11 {
         let previous_headers = if keep_alive {
-          response.headers.replace_all(HeaderType::Connection, "Keep-Alive")
+          response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
         } else {
-          response.headers.replace_all(HeaderType::Connection, "Close")
+          response.headers.replace_all(HeaderName::Connection, "Close")
         };
 
         if !previous_headers.is_empty() {
           trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
-          return Err(io::Error::new(
+          return Err(HumptyError::new_io(
             io::ErrorKind::InvalidInput,
             "Endpoint has set banned header 'Connection'",
           ));
@@ -176,7 +177,7 @@ impl HumptyServer {
     Ok(())
   }
 
-  fn fallback_error_handler(&self, request: &mut RequestContext, error: io::Error) -> Response {
+  fn fallback_error_handler(&self, request: &mut RequestContext, error: HumptyError) -> Response {
     request.force_connection_close();
 
     error_log!(

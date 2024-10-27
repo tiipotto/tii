@@ -6,7 +6,7 @@ use crate::websocket::util::base64::Base64Encode;
 use crate::websocket::util::sha1::SHA1Hash;
 use crate::websocket::MAGIC_STRING;
 
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::{RequestHead, Response, StatusCode};
 
 use crate::stream::ConnectionStream;
@@ -62,8 +62,8 @@ fn handshake(
 
   // Serialise the handshake response
   let response = Response::empty(StatusCode::SwitchingProtocols)
-    .with_header(HeaderType::Upgrade, "websocket")
-    .with_header(HeaderType::Connection, "Upgrade")
+    .with_header(HeaderName::Upgrade, "websocket")
+    .with_header(HeaderName::Connection, "Upgrade")
     .with_header("Sec-WebSocket-Accept", sec_websocket_accept);
 
   // Transmit the handshake response

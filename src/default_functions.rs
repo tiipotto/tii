@@ -1,9 +1,9 @@
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::{error_log, info_log};
-use std::io;
 
-pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> io::Result<bool> {
+pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> HumptyResult<bool> {
   Ok(true)
 }
 
@@ -11,8 +11,8 @@ pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> io::Resul
 /// This can be overridden by using the `with_error_handler` method when building the app.
 pub(crate) fn default_error_handler(
   request: &mut RequestContext,
-  error: io::Error,
-) -> io::Result<Response> {
+  error: HumptyError,
+) -> HumptyResult<Response> {
   error_log!(
     "Internal Server Error {} {} {:?}",
     &request.request_head().method,
@@ -22,7 +22,7 @@ pub(crate) fn default_error_handler(
   Ok(Response::empty(StatusCode::InternalServerError))
 }
 
-pub(crate) fn default_not_found_handler(request: &mut RequestContext) -> io::Result<Response> {
+pub(crate) fn default_not_found_handler(request: &mut RequestContext) -> HumptyResult<Response> {
   info_log!(
     "Not found {} {}",
     &request.request_head().method,

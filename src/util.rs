@@ -1,6 +1,26 @@
 use std::io;
 use std::sync::LockResult;
 
+fn do_abort() -> ! {
+  #[cfg(feature = "backtrace")]
+  {
+    let bt = backtrace::Backtrace::new();
+    crate::error_log!("A impossible state was reached by the program. Please file a bug report on https://github.com/Grinkers/humpty. The program will terminate now. bt={:?}", bt);
+    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/Grinkers/humpty. The program will terminate now. bt={:?}", bt);
+    std::process::abort();
+  }
+  #[cfg(not(feature = "backtrace"))]
+  unreachable!("A condition that should be unreachable was reached. Please enable the 'backtrace' feature on humpty for more information and then file a bug report!");
+}
+
+pub fn unwrap_some<T>(some: Option<T>) -> T {
+  if let Some(t) = some {
+    return t;
+  }
+
+  do_abort();
+}
+
 pub fn unwrap_poison<T>(result: LockResult<T>) -> io::Result<T> {
   result.map_err(|_| io::Error::new(io::ErrorKind::Other, "Poisoned Mutex"))
 }

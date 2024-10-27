@@ -9,6 +9,7 @@ pub mod websocket;
 mod default_functions;
 mod functional_traits;
 pub mod humpty_builder;
+pub mod humpty_error;
 pub mod humpty_router;
 pub mod humpty_router_builder;
 pub mod humpty_server;

@@ -6,10 +6,11 @@ use humpty::websocket::stream::WebsocketStream;
 use humpty::websocket::websocket_handler;
 
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::HumptyError;
 use std::error::Error;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{io, thread};
+use std::thread;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -28,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = app.clone();
     thread::spawn(move || {
       app.handle_connection(stream?)?;
-      Ok::<(), io::Error>(())
+      Ok::<(), HumptyError>(())
     });
   }
 

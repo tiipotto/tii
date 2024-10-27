@@ -2,7 +2,6 @@
 
 use crate::http::response::Response;
 
-use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,6 +16,7 @@ pub struct HumptyBuilder {
 use crate::default_functions::{default_error_handler, default_not_found_handler};
 pub use crate::functional_traits::*;
 use crate::http::request_context::RequestContext;
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::humpty_router_builder::HumptyRouterBuilder;
 use crate::humpty_server::HumptyServer;
 
@@ -27,10 +27,10 @@ use crate::humpty_server::HumptyServer;
 /// Every app has a default error handler, which simply displays the status code.
 /// The source code for this default error handler is copied below since it is a good example.
 ///
-pub type ErrorHandler = fn(&mut RequestContext, io::Error) -> io::Result<Response>;
+pub type ErrorHandler = fn(&mut RequestContext, HumptyError) -> HumptyResult<Response>;
 
 /// Handler for request that didn't find anything
-pub type NotFoundHandler = fn(&mut RequestContext) -> io::Result<Response>;
+pub type NotFoundHandler = fn(&mut RequestContext) -> HumptyResult<Response>;
 
 impl Default for HumptyBuilder {
   /// Initialises a new Humpty app.

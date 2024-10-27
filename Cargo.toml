@@ -14,8 +14,10 @@ categories = ["web-programming::http-server", "network-programming"]
 [dependencies]
 rand = "0.8.5"
 log = { version = "^0.4.22", optional = true }
+backtrace = { version = "0.3.74", optional = true}
 
 [features]
+default = []
 
 [lints.rust]
 future-incompatible = "warn"

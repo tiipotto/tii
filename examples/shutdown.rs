@@ -2,6 +2,7 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
 
+use humpty::humpty_error::HumptyResult;
 use std::error::Error;
 use std::net::{self, IpAddr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
@@ -9,7 +10,7 @@ use std::thread::{sleep, spawn};
 use std::time::Duration;
 use std::{io, thread};
 
-fn hello(_: &RequestContext) -> io::Result<Response> {
+fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::new(StatusCode::OK, "<html><body><h1>Hello</h1></body></html>"))
 }
 

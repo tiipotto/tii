@@ -1,9 +1,10 @@
 //! Contains all state that's needed to process a request.
 
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
 use crate::http::RequestHead;
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::humpty_server::ConnectionStreamMetadata;
 use crate::stream::ConnectionStream;
 use std::any::Any;
@@ -43,7 +44,7 @@ impl RequestContext {
   pub fn new(
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
-  ) -> io::Result<RequestContext> {
+  ) -> HumptyResult<RequestContext> {
     let id = next_id();
     let address = stream.peer_addr()?;
     let req = RequestHead::new(stream)?;
@@ -62,7 +63,7 @@ impl RequestContext {
     }
 
     if req.version == HttpVersion::Http11 {
-      match req.headers.get(&HeaderType::TransferEncoding) {
+      match req.headers.get(&HeaderName::TransferEncoding) {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
@@ -77,18 +78,17 @@ impl RequestContext {
           });
         }
         Some(other) => {
-          return Err(io::Error::new(
-            ErrorKind::InvalidData,
-            format!("Request Transfer-Encoding {other} is not supported"),
-          ))
+          return Err(HumptyError::from(RequestHeadParsingError::TransferEncodingNotSupported(
+            other.to_string(),
+          )))
         }
         None => {}
       }
     }
 
-    if let Some(content_length) = req.headers.get(&HeaderType::ContentLength) {
+    if let Some(content_length) = req.headers.get(&HeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
-        io::Error::new(ErrorKind::InvalidData, "Failed to parse content length header value")
+        HumptyError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
       let is_http_10 = req.version == HttpVersion::Http10;
