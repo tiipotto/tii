@@ -3,10 +3,11 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use std::io;
+use humpty::humpty_error::HumptyResult;
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &RequestContext) -> io::Result<Response> {
+fn dummy_route(_ctx: &RequestContext) -> HumptyResult<Response> {
   unreachable!();
 }
 
@@ -18,7 +19,7 @@ pub fn tc13() {
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-  assert_eq!(err.to_string(), "status line did not end with CRLF");
+  assert_eq!(err.to_string(), "StatusLineNoCRLF");
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");
 }

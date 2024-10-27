@@ -17,3 +17,4 @@ mod percent;
 pub mod stream;
 mod thread;
 mod util;
+pub mod humpty_error;

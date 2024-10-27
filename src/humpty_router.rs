@@ -9,8 +9,8 @@ use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
 use crate::stream::ConnectionStream;
 use crate::{krauss, trace_log};
 use std::fmt::{Debug, Formatter};
-use std::io;
 use std::sync::Arc;
+use crate::humpty_error::{HumptyError, HumptyResult};
 
 /// Encapsulates a route and its handler.
 pub struct RouteHandler {
@@ -123,7 +123,7 @@ impl HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> io::Result<bool> {
+  ) -> HumptyResult<bool> {
     if !self.router_filter.filter(request)? {
       return Ok(false);
     }
@@ -145,8 +145,8 @@ impl HumptyRouter {
   fn call_error_handler(
     &self,
     request: &mut RequestContext,
-    error: io::Error,
-  ) -> io::Result<Response> {
+    error: HumptyError,
+  ) -> HumptyResult<Response> {
     //TODO i am not 100% sure this is a good idea, but it probably is a good idea.
     //The only thing i could consider is having the default impl do this and outsource this responsibility to the user
     //Not doing this on io::Errors when reading the request body will cause stuff to break in a horrific manner.
@@ -157,7 +157,7 @@ impl HumptyRouter {
     (self.error_handler)(request, error)
   }
 
-  fn serve_outer(&self, request: &mut RequestContext) -> io::Result<Option<Response>> {
+  fn serve_outer(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     if !self.router_filter.filter(request)? {
       return Ok(None);
     }
@@ -169,7 +169,7 @@ impl HumptyRouter {
 
     Ok(Some(resp))
   }
-  fn serve_inner(&self, request: &mut RequestContext) -> io::Result<Response> {
+  fn serve_inner(&self, request: &mut RequestContext) -> HumptyResult<Response> {
     for filter in self.pre_routing_filters.iter() {
       if let Some(resp) = filter.filter(request)? {
         return Ok(resp);
@@ -197,7 +197,7 @@ impl HumptyRouter {
 }
 
 impl Router for HumptyRouter {
-  fn serve(&self, request: &mut RequestContext) -> io::Result<Option<Response>> {
+  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     self.serve_outer(request)
   }
 
@@ -205,13 +205,13 @@ impl Router for HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> io::Result<bool> {
+  ) -> HumptyResult<bool> {
     self.serve_ws(stream, request)
   }
 }
 
 impl Router for Arc<HumptyRouter> {
-  fn serve(&self, request: &mut RequestContext) -> io::Result<Option<Response>> {
+  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     Arc::as_ref(self).serve(request)
   }
 
@@ -219,7 +219,7 @@ impl Router for Arc<HumptyRouter> {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> io::Result<bool> {
+  ) -> HumptyResult<bool> {
     Arc::as_ref(self).serve_websocket(stream, request)
   }
 }

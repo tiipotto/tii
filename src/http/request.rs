@@ -7,8 +7,7 @@ use crate::http::method::Method;
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use std::fmt::{Display, Formatter};
-use std::io;
-use std::io::ErrorKind;
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 
 /// Enum for http versions humpty supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -109,7 +108,7 @@ pub struct RequestHead {
 
 impl RequestHead {
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn new(stream: &dyn ConnectionStream) -> io::Result<Self> {
+  pub fn new(stream: &dyn ConnectionStream) -> HumptyResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
     //TODO fix ddos potential here, limit read to 64k or some other reasonable size.
     //Possible attack on this is to just write ~Mem amount of data and then just keep
@@ -118,11 +117,11 @@ impl RequestHead {
 
     let start_line_string =
         // TODO this must be US-ASCII not utf-8!
-        std::str::from_utf8(&start_line_buf).map_err(|_| io::Error::new(ErrorKind::InvalidData, "status line is not valid US-ASCII"))?;
+        std::str::from_utf8(&start_line_buf).map_err(|_| RequestHeadParsingError::StatusLineIsNotUsAscii)?;
 
     let status_line = start_line_string
       .strip_suffix("\r\n")
-      .ok_or_else(|| io::Error::new(ErrorKind::InvalidData, "status line did not end with CRLF"))?;
+      .ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
 
     let mut start_line = status_line.split(' ');
 
@@ -130,9 +129,7 @@ impl RequestHead {
 
     let mut uri_iter = start_line
       .next()
-      .ok_or_else(|| {
-        io::Error::new(ErrorKind::InvalidData, "status line did not contain ' ' (0x32) bytes")
-      })?
+      .ok_or(RequestHeadParsingError::StatusLineNoWhitespace)?
       .splitn(2, '?');
 
     let version = start_line
@@ -140,17 +137,11 @@ impl RequestHead {
       .map(HttpVersion::try_from_net_str)
       .unwrap_or(Ok(HttpVersion::Http09)) //Http 0.9 has no suffix
       .map_err(|version| {
-        io::Error::new(
-          ErrorKind::InvalidData,
-          format!("The http version {version} is not supported."),
-        )
+        RequestHeadParsingError::HttpVersionNotSupported(version.to_string())
       })?;
 
     if start_line.next().is_some() {
-      return Err(io::Error::new(
-        ErrorKind::InvalidData,
-        "The request status line contains more than two ' ' (0x32) bytes.",
-      ));
+      return Err(HumptyError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
     }
 
     let uri = uri_iter.next().unwrap().to_string();
@@ -160,10 +151,7 @@ impl RequestHead {
 
     if version == HttpVersion::Http09 {
       if method != Method::Get {
-        return Err(io::Error::new(
-          ErrorKind::InvalidData,
-          format!("HTTP 0.9 only supports GET but method was {method}"),
-        ));
+        return Err(HumptyError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(version, method)));
       }
 
       return Ok(Self {
@@ -180,33 +168,28 @@ impl RequestHead {
       let mut line_buf: Vec<u8> = Vec::with_capacity(256);
       stream.read_until(0xA, &mut line_buf)?;
       let line = std::str::from_utf8(&line_buf)
-        .map_err(|_| io::Error::new(ErrorKind::InvalidData, "header line is not valid US-ASCII"))?;
+        .map_err(|_| RequestHeadParsingError::HeaderLineIsNotUsAscii)?;
 
       if line == "\r\n" {
         break;
       }
 
-      let line = line.strip_suffix("\r\n").ok_or_else(|| {
-        io::Error::new(ErrorKind::InvalidData, "header line did not end with CRLF")
-      })?;
+      let line = line.strip_suffix("\r\n").ok_or(RequestHeadParsingError::HeaderLineNoCRLF)?;
 
       let mut line_parts = line.splitn(2, ": ");
-      let name = line_parts
-        .next()
-        .ok_or_else(|| io::Error::new(ErrorKind::InvalidData, "Malformed http header name"))?
-        .trim();
+      let name = unwrap_some(line_parts.next()).trim();
 
       if name.is_empty() {
-        return Err(io::Error::new(ErrorKind::InvalidData, "Header name cannot be empty"));
+        return Err(HumptyError::from(RequestHeadParsingError::HeaderNameEmpty));
       }
 
       let value = line_parts
         .next()
-        .ok_or_else(|| io::Error::new(ErrorKind::InvalidData, "Malformed http header value"))?
+        .ok_or(RequestHeadParsingError::HeaderValueMissing)?
         .trim();
 
       if value.is_empty() {
-        return Err(io::Error::new(ErrorKind::InvalidData, "Header value cannot be empty"));
+        return Err(HumptyError::from(RequestHeadParsingError::HeaderValueEmpty));
       }
 
       headers.add(HeaderName::from(name), value);

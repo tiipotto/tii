@@ -8,8 +8,9 @@ use std::sync::mpsc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
 use std::{io, thread};
+use humpty::humpty_error::HumptyResult;
 
-fn hello(_: &RequestContext) -> io::Result<Response> {
+fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::new(StatusCode::OK, "<html><body><h1>Hello</h1></body></html>"))
 }
 

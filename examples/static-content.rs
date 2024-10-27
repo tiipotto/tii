@@ -9,7 +9,8 @@ use humpty::handlers;
 use humpty::humpty_builder::HumptyBuilder;
 use std::error::Error;
 use std::net::TcpListener;
-use std::{io, thread};
+use std::{thread};
+use humpty::humpty_error::HumptyError;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let app = HumptyBuilder::default()
@@ -31,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = app.clone();
     thread::spawn(move || {
       app.handle_connection(stream?)?;
-      Ok::<(), io::Error>(())
+      Ok::<(), HumptyError>(())
     });
   }
 

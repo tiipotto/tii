@@ -15,6 +15,7 @@ use std::fmt::Debug;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::humpty_error::{HumptyError, HumptyResult};
 
 /// Trait for metadata for streams. This could for example be an indicator of what type of stream this is
 /// if this is relevant for your application. For example an app may ingest connections from a plain and tls socket at the same time.
@@ -56,7 +57,7 @@ impl HumptyServer {
   }
 
   /// Handles a connection without any metadata
-  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> io::Result<()> {
+  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> HumptyResult<()> {
     self.handle_connection_inner::<S, PhantomStreamMetadata>(stream, None)
   }
 
@@ -65,7 +66,7 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: M,
-  ) -> io::Result<()> {
+  ) -> HumptyResult<()> {
     self.handle_connection_inner(stream, Some(meta))
   }
 
@@ -74,7 +75,7 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: Option<M>,
-  ) -> io::Result<()> {
+  ) -> HumptyResult<()> {
     let stream = stream.into_connection_stream();
     //TODO split this into 2 parameters? Or make multiple parameters for different stages.
     //Use may desire timeout for request header but LOOOOONG/Infinite timeout for endpoints?
@@ -146,7 +147,7 @@ impl HumptyServer {
 
         if !previous_headers.is_empty() {
           trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
-          return Err(io::Error::new(
+          return Err(HumptyError::new_io(
             io::ErrorKind::InvalidInput,
             "Endpoint has set banned header 'Connection'",
           ));
@@ -176,7 +177,7 @@ impl HumptyServer {
     Ok(())
   }
 
-  fn fallback_error_handler(&self, request: &mut RequestContext, error: io::Error) -> Response {
+  fn fallback_error_handler(&self, request: &mut RequestContext, error: HumptyError) -> Response {
     request.force_connection_close();
 
     error_log!(

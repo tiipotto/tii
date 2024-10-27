@@ -3,7 +3,8 @@ use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
 use std::error::Error;
 use std::net::TcpListener;
-use std::{io, thread};
+use std::{thread};
+use humpty::humpty_error::{HumptyError, HumptyResult};
 
 const HTML: &str = r##"
 <html>
@@ -41,18 +42,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = app.clone();
     thread::spawn(move || {
       app.handle_connection(stream?)?;
-      Ok::<(), io::Error>(())
+      Ok::<(), HumptyError>(())
     });
   }
 
   Ok(())
 }
 
-fn home(_: &RequestContext) -> io::Result<Response> {
+fn home(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::new(StatusCode::OK, HTML))
 }
 
-fn wildcard(request: &RequestContext) -> io::Result<Response> {
+fn wildcard(request: &RequestContext) -> HumptyResult<Response> {
   let wildcard_path = request
     .request_head()
     .path // get the URI of the request

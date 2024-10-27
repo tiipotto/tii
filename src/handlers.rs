@@ -4,16 +4,16 @@
 //It could be argued that this may be bloat for an app that just wants to serve json.
 //Its also reasonably trivial for any user of humpty to implement this himself.
 
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::response_body::ResponseBody;
 use crate::http::{Response, StatusCode};
 
 use crate::http::request_context::RequestContext;
 use crate::percent::PercentDecode;
 use std::fs::{metadata, File};
-use std::io;
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use crate::humpty_error::HumptyResult;
 
 const INDEX_FILES: [&str; 2] = ["index.html", "index.htm"];
 
@@ -25,18 +25,18 @@ pub enum LocatedPath {
   File(PathBuf),
 }
 
-fn try_file_open(path: &PathBuf) -> io::Result<Response> {
-  File::open(path).and_then(ResponseBody::from_file).map(Response::ok).or_else(|e| {
+fn try_file_open(path: &PathBuf) -> HumptyResult<Response> {
+  Ok(File::open(path).and_then(ResponseBody::from_file).map(Response::ok).or_else(|e| {
     if e.kind() == ErrorKind::NotFound {
       Ok(Response::not_found())
     } else {
       Err(e)
     }
-  })
+  })?)
 }
 
 /// Serve the specified file, or a default error 404 if not found.
-pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> io::Result<Response> {
+pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
   let path_buf = PathBuf::from(file_path);
 
   move |_| try_file_open(&path_buf)
@@ -52,7 +52,7 @@ pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> io::Re
 /// This is **not** equivalent to `serve_dir`, as `serve_dir` respects index files within nested directories.
 pub fn serve_as_file_path(
   directory_path: &'static str,
-) -> impl Fn(&RequestContext) -> io::Result<Response> {
+) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
   move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
     let file_path =
@@ -70,7 +70,7 @@ pub fn serve_as_file_path(
 /// Respects index files with the following rules:
 ///   - requests to `/directory` will return either the file `directory`, 301 redirect to `/directory/` if it is a directory, or return 404
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
-pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> io::Result<Response> {
+pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
@@ -86,7 +86,7 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> io
       match located {
         LocatedPath::Directory => Ok(
           Response::empty(StatusCode::MovedPermanently)
-            .with_header(HeaderType::Location, format!("{}/", &request.request_head().path)),
+            .with_header(HeaderName::Location, format!("{}/", &request.request_head().path)),
         ),
         LocatedPath::File(path) => try_file_open(&path),
       }
@@ -139,6 +139,6 @@ pub fn try_find_path(
 }
 
 /// Redirects requests to the given location with status code 301.
-pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> io::Result<Response> {
+pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
   move |_| Ok(Response::redirect(location))
 }

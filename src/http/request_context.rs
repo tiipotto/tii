@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
@@ -43,7 +44,7 @@ impl RequestContext {
   pub fn new(
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
-  ) -> io::Result<RequestContext> {
+  ) -> HumptyResult<RequestContext> {
     let id = next_id();
     let address = stream.peer_addr()?;
     let req = RequestHead::new(stream)?;
@@ -77,10 +78,7 @@ impl RequestContext {
           });
         }
         Some(other) => {
-          return Err(io::Error::new(
-            ErrorKind::InvalidData,
-            format!("Request Transfer-Encoding {other} is not supported"),
-          ))
+          return Err(HumptyError::from(RequestHeadParsingError::TransferEncodingNotSupported(other.to_string())))
         }
         None => {}
       }
@@ -88,7 +86,7 @@ impl RequestContext {
 
     if let Some(content_length) = req.headers.get(&HeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
-        io::Error::new(ErrorKind::InvalidData, "Failed to parse content length header value")
+        HumptyError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
       let is_http_10 = req.version == HttpVersion::Http10;

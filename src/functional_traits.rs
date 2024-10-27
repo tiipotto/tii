@@ -4,7 +4,7 @@ use crate::http::request_context::RequestContext;
 use crate::http::{RequestHead, Response};
 use crate::stream::ConnectionStream;
 use std::fmt::Debug;
-use std::io;
+use crate::humpty_error::HumptyResult;
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
 pub trait WebsocketHandler: Send + Sync {
@@ -32,14 +32,14 @@ where
 /// ```
 pub trait RequestHandler: Send + Sync {
   /// Serve an ordinary http request.
-  fn serve(&self, request: &RequestContext) -> io::Result<Response>;
+  fn serve(&self, request: &RequestContext) -> HumptyResult<Response>;
 }
 
 impl<F> RequestHandler for F
 where
-  F: Fn(&RequestContext) -> io::Result<Response> + Send + Sync,
+  F: Fn(&RequestContext) -> HumptyResult<Response> + Send + Sync,
 {
-  fn serve(&self, request: &RequestContext) -> io::Result<Response> {
+  fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
     self(request)
   }
 }
@@ -51,11 +51,11 @@ pub trait RouterFilter: Send + Sync {
   /// true -> the router should handle this one,
   /// false -> the router should not handle this one,
   //TODO make it impossible for this shit to read the body.
-  fn filter(&self, request: &RequestContext) -> io::Result<bool>;
+  fn filter(&self, request: &RequestContext) -> HumptyResult<bool>;
 }
 
-impl<F: Fn(&RequestContext) -> io::Result<bool> + Send + Sync> RouterFilter for F {
-  fn filter(&self, request: &RequestContext) -> io::Result<bool> {
+impl<F: Fn(&RequestContext) -> HumptyResult<bool> + Send + Sync> RouterFilter for F {
+  fn filter(&self, request: &RequestContext) -> HumptyResult<bool> {
     self(request)
   }
 }
@@ -72,11 +72,11 @@ pub trait RequestFilter: Send + Sync {
   /// Ok(None) -> proceed.
   /// Ok(Some) -> abort request with given response.
   /// Err -> Call error handler and proceed (endpoint won't be called)
-  fn filter(&self, request: &mut RequestContext) -> io::Result<Option<Response>>;
+  fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
 }
 
-impl<F: Fn(&mut RequestContext) -> io::Result<Option<Response>> + Send + Sync> RequestFilter for F {
-  fn filter(&self, request: &mut RequestContext) -> io::Result<Option<Response>> {
+impl<F: Fn(&mut RequestContext) -> HumptyResult<Option<Response>> + Send + Sync> RequestFilter for F {
+  fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     self(request)
   }
 }
@@ -91,13 +91,13 @@ pub trait ResponseFilter: Send + Sync {
   /// Called with the request context adn response after the endpoint or error handler is called.
   /// Ok(...) -> proceed.
   /// Err -> Call error handler and proceed. (You cannot create a loop, a Response filter will only be called exactly once per RequestContext)
-  fn filter(&self, request: &mut RequestContext, response: Response) -> io::Result<Response>;
+  fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response>;
 }
 
-impl<F: Fn(&mut RequestContext, Response) -> io::Result<Response> + Send + Sync> ResponseFilter
+impl<F: Fn(&mut RequestContext, Response) -> HumptyResult<Response> + Send + Sync> ResponseFilter
   for F
 {
-  fn filter(&self, request: &mut RequestContext, response: Response) -> io::Result<Response> {
+  fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response> {
     self(request, response)
   }
 }
@@ -110,7 +110,7 @@ pub trait Router: Debug + Send + Sync {
   /// Err -> abort
   ///
   /// Note: If the request body is read then returning Ok(None) will most likely result in unintended behavior in the next Router.
-  fn serve(&self, request: &mut RequestContext) -> io::Result<Option<Response>>;
+  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
 
   /// Handle a web socket request.
   /// Ok(true) -> request was handled
@@ -122,5 +122,5 @@ pub trait Router: Debug + Send + Sync {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> io::Result<bool>;
+  ) -> HumptyResult<bool>;
 }
