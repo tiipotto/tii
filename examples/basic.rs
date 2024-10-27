@@ -1,10 +1,10 @@
 use humpty::http::request_context::RequestContext;
 use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::HumptyResult;
 use std::error::Error;
 use std::net::TcpListener;
 use std::{io, thread};
-use humpty::humpty_error::HumptyResult;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let app = HumptyBuilder::default()

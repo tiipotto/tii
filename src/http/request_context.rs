@@ -4,6 +4,7 @@ use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
 use crate::http::RequestHead;
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::humpty_server::ConnectionStreamMetadata;
 use crate::stream::ConnectionStream;
 use std::any::Any;
@@ -11,7 +12,6 @@ use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
@@ -78,7 +78,9 @@ impl RequestContext {
           });
         }
         Some(other) => {
-          return Err(HumptyError::from(RequestHeadParsingError::TransferEncodingNotSupported(other.to_string())))
+          return Err(HumptyError::from(RequestHeadParsingError::TransferEncodingNotSupported(
+            other.to_string(),
+          )))
         }
         None => {}
       }

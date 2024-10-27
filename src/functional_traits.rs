@@ -2,9 +2,9 @@
 
 use crate::http::request_context::RequestContext;
 use crate::http::{RequestHead, Response};
+use crate::humpty_error::HumptyResult;
 use crate::stream::ConnectionStream;
 use std::fmt::Debug;
-use crate::humpty_error::HumptyResult;
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
 pub trait WebsocketHandler: Send + Sync {
@@ -75,7 +75,9 @@ pub trait RequestFilter: Send + Sync {
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
 }
 
-impl<F: Fn(&mut RequestContext) -> HumptyResult<Option<Response>> + Send + Sync> RequestFilter for F {
+impl<F: Fn(&mut RequestContext) -> HumptyResult<Option<Response>> + Send + Sync> RequestFilter
+  for F
+{
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     self(request)
   }

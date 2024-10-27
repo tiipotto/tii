@@ -4,10 +4,10 @@ use crate::http::cookie::Cookie;
 use crate::http::headers::{HeaderName, Headers};
 use crate::http::method::Method;
 
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use std::fmt::{Display, Formatter};
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 
 /// Enum for http versions humpty supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -119,26 +119,21 @@ impl RequestHead {
         // TODO this must be US-ASCII not utf-8!
         std::str::from_utf8(&start_line_buf).map_err(|_| RequestHeadParsingError::StatusLineIsNotUsAscii)?;
 
-    let status_line = start_line_string
-      .strip_suffix("\r\n")
-      .ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
+    let status_line =
+      start_line_string.strip_suffix("\r\n").ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
 
     let mut start_line = status_line.split(' ');
 
     let method = Method::from(unwrap_some(start_line.next()));
 
-    let mut uri_iter = start_line
-      .next()
-      .ok_or(RequestHeadParsingError::StatusLineNoWhitespace)?
-      .splitn(2, '?');
+    let mut uri_iter =
+      start_line.next().ok_or(RequestHeadParsingError::StatusLineNoWhitespace)?.splitn(2, '?');
 
     let version = start_line
       .next()
       .map(HttpVersion::try_from_net_str)
       .unwrap_or(Ok(HttpVersion::Http09)) //Http 0.9 has no suffix
-      .map_err(|version| {
-        RequestHeadParsingError::HttpVersionNotSupported(version.to_string())
-      })?;
+      .map_err(|version| RequestHeadParsingError::HttpVersionNotSupported(version.to_string()))?;
 
     if start_line.next().is_some() {
       return Err(HumptyError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
@@ -151,7 +146,9 @@ impl RequestHead {
 
     if version == HttpVersion::Http09 {
       if method != Method::Get {
-        return Err(HumptyError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(version, method)));
+        return Err(HumptyError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(
+          version, method,
+        )));
       }
 
       return Ok(Self {
@@ -183,10 +180,7 @@ impl RequestHead {
         return Err(HumptyError::from(RequestHeadParsingError::HeaderNameEmpty));
       }
 
-      let value = line_parts
-        .next()
-        .ok_or(RequestHeadParsingError::HeaderValueMissing)?
-        .trim();
+      let value = line_parts.next().ok_or(RequestHeadParsingError::HeaderValueMissing)?.trim();
 
       if value.is_empty() {
         return Err(HumptyError::from(RequestHeadParsingError::HeaderValueEmpty));

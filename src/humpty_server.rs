@@ -8,6 +8,7 @@ use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::IntoConnectionStream;
 use crate::{error_log, trace_log};
 use std::any::Any;
@@ -15,7 +16,6 @@ use std::fmt::Debug;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::humpty_error::{HumptyError, HumptyResult};
 
 /// Trait for metadata for streams. This could for example be an indicator of what type of stream this is
 /// if this is relevant for your application. For example an app may ingest connections from a plain and tls socket at the same time.

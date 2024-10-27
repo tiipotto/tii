@@ -2,8 +2,8 @@ use crate::mock_stream::MockStream;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
-use std::io;
 use humpty::humpty_error::HumptyResult;
+use std::io;
 
 mod mock_stream;
 

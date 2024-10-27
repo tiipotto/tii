@@ -7,10 +7,10 @@
 use humpty::handlers;
 
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::HumptyError;
 use std::error::Error;
 use std::net::TcpListener;
-use std::{thread};
-use humpty::humpty_error::HumptyError;
+use std::thread;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let app = HumptyBuilder::default()

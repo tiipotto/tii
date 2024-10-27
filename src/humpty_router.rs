@@ -6,11 +6,11 @@ use crate::functional_traits::{
 use crate::http::request_context::RequestContext;
 use crate::http::Response;
 use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::ConnectionStream;
 use crate::{krauss, trace_log};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use crate::humpty_error::{HumptyError, HumptyResult};
 
 /// Encapsulates a route and its handler.
 pub struct RouteHandler {

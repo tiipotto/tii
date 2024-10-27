@@ -4,8 +4,8 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::response_body::ResponseBody;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
-use std::sync::atomic::AtomicU64;
 use humpty::humpty_error::HumptyResult;
+use std::sync::atomic::AtomicU64;
 
 mod mock_stream;
 

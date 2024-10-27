@@ -6,11 +6,11 @@ use humpty::websocket::stream::WebsocketStream;
 use humpty::websocket::websocket_handler;
 
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::HumptyError;
 use std::error::Error;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{thread};
-use humpty::humpty_error::HumptyError;
+use std::thread;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);

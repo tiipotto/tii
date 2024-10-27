@@ -1,7 +1,7 @@
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
-use crate::{error_log, info_log};
 use crate::humpty_error::{HumptyError, HumptyResult};
+use crate::{error_log, info_log};
 
 pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> HumptyResult<bool> {
   Ok(true)

@@ -1,10 +1,10 @@
 use humpty::http::request_context::RequestContext;
 use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::{HumptyError, HumptyResult};
 use std::error::Error;
 use std::net::TcpListener;
-use std::{thread};
-use humpty::humpty_error::{HumptyError, HumptyResult};
+use std::thread;
 
 const HTML: &str = r##"
 <html>

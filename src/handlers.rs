@@ -9,11 +9,11 @@ use crate::http::response_body::ResponseBody;
 use crate::http::{Response, StatusCode};
 
 use crate::http::request_context::RequestContext;
+use crate::humpty_error::HumptyResult;
 use crate::percent::PercentDecode;
 use std::fs::{metadata, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use crate::humpty_error::HumptyResult;
 
 const INDEX_FILES: [&str; 2] = ["index.html", "index.htm"];
 
@@ -70,7 +70,9 @@ pub fn serve_as_file_path(
 /// Respects index files with the following rules:
 ///   - requests to `/directory` will return either the file `directory`, 301 redirect to `/directory/` if it is a directory, or return 404
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
-pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
+pub fn serve_dir(
+  directory_path: &'static str,
+) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
