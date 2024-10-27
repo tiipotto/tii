@@ -1,6 +1,6 @@
 //! Contains all state that's needed to process a request.
 
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
 use crate::http::RequestHead;
@@ -62,7 +62,7 @@ impl RequestContext {
     }
 
     if req.version == HttpVersion::Http11 {
-      match req.headers.get(&HeaderType::TransferEncoding) {
+      match req.headers.get(&HeaderName::TransferEncoding) {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
@@ -86,7 +86,7 @@ impl RequestContext {
       }
     }
 
-    if let Some(content_length) = req.headers.get(&HeaderType::ContentLength) {
+    if let Some(content_length) = req.headers.get(&HeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
         io::Error::new(ErrorKind::InvalidData, "Failed to parse content length header value")
       })?;

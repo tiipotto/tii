@@ -3,7 +3,7 @@
 //! If no router wants to handle the request it also has a 404 handler.
 
 use crate::functional_traits::Router;
-use crate::http::headers::HeaderType;
+use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
@@ -89,7 +89,7 @@ impl HumptyServer {
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
       if context.request_head().version == HttpVersion::Http11
-        && context.request_head().headers.get(&HeaderType::Upgrade) == Some("websocket")
+        && context.request_head().headers.get(&HeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -111,7 +111,7 @@ impl HumptyServer {
         && context
           .request_head()
           .headers
-          .get(&HeaderType::Connection)
+          .get(&HeaderName::Connection)
           .map(|e| e.eq_ignore_ascii_case("keep-alive"))
           .unwrap_or_default();
 
@@ -139,9 +139,9 @@ impl HumptyServer {
 
       if context.request_head().version == HttpVersion::Http11 {
         let previous_headers = if keep_alive {
-          response.headers.replace_all(HeaderType::Connection, "Keep-Alive")
+          response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
         } else {
-          response.headers.replace_all(HeaderType::Connection, "Close")
+          response.headers.replace_all(HeaderName::Connection, "Close")
         };
 
         if !previous_headers.is_empty() {

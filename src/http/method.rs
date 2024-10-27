@@ -19,39 +19,72 @@ pub enum Method {
   Custom(String),
 }
 
+static WELL_KNOWN: &[Method] =
+  &[Method::Get, Method::Post, Method::Put, Method::Delete, Method::Options];
+
 impl Method {
   /// Attempts to convert from the HTTP verb into an enum variant.
   ///
   /// ## Example
   /// ```
-  /// let method = humpty::http::method::Method::from_name("GET");
+  /// let method = humpty::http::method::Method::from("GET");
   /// assert_eq!(method, humpty::http::method::Method::Get);
   /// ```
-  pub fn from_name(name: &str) -> Self {
+  pub fn from(name: &str) -> Self {
     match name {
       "GET" => Self::Get,
       "POST" => Self::Post,
       "PUT" => Self::Put,
       "DELETE" => Self::Delete,
       "OPTIONS" => Self::Options,
-      _ => Self::Custom(name.to_string()),
+      _ => Self::Custom(name.to_ascii_uppercase()),
+    }
+  }
+
+  /// Returns an array of all well known http Methods.
+  #[must_use]
+  pub fn well_known() -> &'static [Method] {
+    WELL_KNOWN
+  }
+
+  /// returns true if this is a well known http method.
+  pub fn is_well_known(&self) -> bool {
+    !matches!(self, Self::Custom(_))
+  }
+
+  /// returns true if this is a custom http method.
+  pub fn is_custom(&self) -> bool {
+    matches!(self, Self::Custom(_))
+  }
+
+  /// returns a static &str for well known http methods, returns none for custom http methods.
+  #[must_use]
+  pub fn well_known_str(&self) -> Option<&'static str> {
+    Some(match self {
+      Method::Get => "GET",
+      Method::Post => "POST",
+      Method::Put => "PUT",
+      Method::Delete => "DELETE",
+      Method::Options => "OPTIONS",
+      Method::Custom(_) => return None,
+    })
+  }
+
+  /// returns a &str with the same lifetime as self. this works for custom and none custom methods.
+  pub fn as_str(&self) -> &str {
+    match self {
+      Method::Get => "GET",
+      Method::Post => "POST",
+      Method::Put => "PUT",
+      Method::Delete => "DELETE",
+      Method::Options => "OPTIONS",
+      Method::Custom(meth) => meth.as_str(),
     }
   }
 }
 
 impl Display for Method {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(
-      f,
-      "{}",
-      match self {
-        Method::Get => "GET",
-        Method::Post => "POST",
-        Method::Put => "PUT",
-        Method::Delete => "DELETE",
-        Method::Options => "OPTIONS",
-        Method::Custom(name) => name.as_str(),
-      }
-    )
+    f.write_str(self.as_str())
   }
 }

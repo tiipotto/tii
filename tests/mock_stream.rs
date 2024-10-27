@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use humpty::stream::{ConnectionStream, IntoConnectionStream};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -10,18 +11,32 @@ pub struct MockStream {
 }
 
 impl MockStream {
+  pub fn with_str(data: &str) -> Self {
+    Self::with_data(VecDeque::from_iter(data.to_string().bytes().into_iter()))
+  }
+
+  pub fn with_slice(data: &[u8]) -> Self {
+    Self::with_data(VecDeque::from(data.to_vec()))
+  }
+
   pub fn with_data(data: VecDeque<u8>) -> Self {
     Self { read_data: Arc::new(Mutex::new(data)), write_data: Arc::new(Mutex::new(Vec::new())) }
   }
 
-  #[allow(dead_code)]
   pub fn without_data() -> Self {
     Self::with_data(VecDeque::new())
   }
 
-  #[allow(dead_code)]
   pub fn copy_written_data(&self) -> Vec<u8> {
     self.write_data.lock().unwrap().clone()
+  }
+
+  pub fn copy_written_data_to_string(&self) -> String {
+    String::from_utf8_lossy(self.copy_written_data().as_slice()).to_string()
+  }
+
+  pub fn to_stream(&self) -> Box<dyn ConnectionStream> {
+    self.clone().into_connection_stream()
   }
 }
 

@@ -17,7 +17,7 @@ pub struct Headers(Vec<Header>);
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Header {
   /// The name of the header.
-  pub name: HeaderType,
+  pub name: HeaderName,
   /// The value of the header.
   pub value: String,
 }
@@ -109,10 +109,8 @@ impl Headers {
   }
 
   /// Return an iterator over the headers in the collection.
-  pub fn iter(&self) -> impl Iterator<Item = Header> {
-    let mut headers = self.0.clone();
-    headers.sort_unstable_by_key(|h| h.name.clone());
-    headers.into_iter()
+  pub fn iter(&self) -> impl Iterator<Item = &Header> {
+    self.0.iter()
   }
 }
 
@@ -131,17 +129,17 @@ impl Header {
 /// This includes `HeaderType` and strings.
 pub trait HeaderLike {
   /// Consume the value and return the corresponding header type.
-  fn to_header(self) -> HeaderType;
+  fn to_header(self) -> HeaderName;
 }
 
-impl HeaderLike for HeaderType {
-  fn to_header(self) -> HeaderType {
+impl HeaderLike for HeaderName {
+  fn to_header(self) -> HeaderName {
     self
   }
 }
 
-impl HeaderLike for &HeaderType {
-  fn to_header(self) -> HeaderType {
+impl HeaderLike for &HeaderName {
+  fn to_header(self) -> HeaderName {
     self.clone()
   }
 }
@@ -150,8 +148,8 @@ impl<T> HeaderLike for T
 where
   T: AsRef<str>,
 {
-  fn to_header(self) -> HeaderType {
-    HeaderType::from(self.as_ref())
+  fn to_header(self) -> HeaderName {
+    HeaderName::from(self.as_ref())
   }
 }
 
@@ -159,7 +157,7 @@ where
 ///TODO implement to &str fn to prevent clone on serialization!
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum HeaderType {
+pub enum HeaderName {
   /// Informs the server about the types of data that can be sent back.
   Accept,
   /// Informs the server about the accepted character encodings.
@@ -248,23 +246,186 @@ pub enum HeaderType {
   Custom(String),
 }
 
-impl PartialOrd for HeaderType {
+/// Contains a list of all well known headers.
+static WELL_KNOWN: &[HeaderName] = &[
+  HeaderName::Accept,
+  HeaderName::Accept,
+  HeaderName::AcceptCharset,
+  HeaderName::AcceptEncoding,
+  HeaderName::AcceptLanguage,
+  HeaderName::AccessControlRequestMethod,
+  HeaderName::AccessControlRequestHeaders,
+  HeaderName::Authorization,
+  HeaderName::CacheControl,
+  HeaderName::Connection,
+  HeaderName::ContentEncoding,
+  HeaderName::ContentLength,
+  HeaderName::ContentType,
+  HeaderName::Cookie,
+  HeaderName::Date,
+  HeaderName::Expect,
+  HeaderName::Forwarded,
+  HeaderName::From,
+  HeaderName::Host,
+  HeaderName::Origin,
+  HeaderName::Pragma,
+  HeaderName::Referer,
+  HeaderName::Upgrade,
+  HeaderName::UserAgent,
+  HeaderName::Via,
+  HeaderName::Warning,
+  HeaderName::AccessControlAllowOrigin,
+  HeaderName::AccessControlAllowHeaders,
+  HeaderName::AccessControlAllowMethods,
+  HeaderName::Age,
+  HeaderName::Allow,
+  HeaderName::ContentDisposition,
+  HeaderName::ContentLanguage,
+  HeaderName::ContentLocation,
+  HeaderName::ETag,
+  HeaderName::Expires,
+  HeaderName::LastModified,
+  HeaderName::Link,
+  HeaderName::Location,
+  HeaderName::Server,
+  HeaderName::SetCookie,
+  HeaderName::TransferEncoding,
+];
+impl HeaderName {
+  /// Returns a static array of all well known header types
+  #[must_use]
+  pub fn well_known() -> &'static [HeaderName] {
+    WELL_KNOWN
+  }
+
+  /// Returns true if the header is not well known and the name is heap allocated.
+  #[must_use]
+  pub fn is_custom(&self) -> bool {
+    self.well_known_str().is_none()
+  }
+
+  /// Returns true if the header is well known and not heap allocated.
+  #[must_use]
+  pub fn is_well_known(&self) -> bool {
+    self.well_known_str().is_some()
+  }
+
+  /// Returns a &str of the header value without copying.
+  /// This has the same lifetime as self because
+  /// the header string may be a custom header that is heap allocated.
+  #[must_use]
+  pub fn to_str(&self) -> &str {
+    match self {
+      HeaderName::Accept => "Accept",
+      HeaderName::AcceptCharset => "Accept-Charset",
+      HeaderName::AcceptEncoding => "Accept-Encoding",
+      HeaderName::AcceptLanguage => "Accept-Language",
+      HeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HeaderName::Authorization => "Authorization",
+      HeaderName::CacheControl => "Cache-Control",
+      HeaderName::Connection => "Connection",
+      HeaderName::ContentEncoding => "Content-Encoding",
+      HeaderName::ContentLength => "Content-Length",
+      HeaderName::ContentType => "Content-Type",
+      HeaderName::Cookie => "Cookie",
+      HeaderName::Date => "Date",
+      HeaderName::Expect => "Expect",
+      HeaderName::Forwarded => "Forwarded",
+      HeaderName::From => "From",
+      HeaderName::Host => "Host",
+      HeaderName::Origin => "Origin",
+      HeaderName::Pragma => "Pragma",
+      HeaderName::Referer => "Referer",
+      HeaderName::Upgrade => "Upgrade",
+      HeaderName::UserAgent => "User-Agent",
+      HeaderName::Via => "Via",
+      HeaderName::Warning => "Warning",
+      HeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HeaderName::Age => "Age",
+      HeaderName::Allow => "Allow",
+      HeaderName::ContentDisposition => "Content-Disposition",
+      HeaderName::ContentLanguage => "Content-Language",
+      HeaderName::ContentLocation => "Content-Location",
+      HeaderName::ETag => "ETag",
+      HeaderName::Expires => "Expires",
+      HeaderName::LastModified => "Last-Modified",
+      HeaderName::Link => "Link",
+      HeaderName::Location => "Location",
+      HeaderName::Server => "Server",
+      HeaderName::SetCookie => "Set-Cookie",
+      HeaderName::TransferEncoding => "Transfer-Encoding",
+      HeaderName::Custom(name) => name.as_str(),
+    }
+  }
+
+  /// Return Some with a static lifetime if self is not a heap allocated custom header.
+  /// If self is a custom header that is heap allocated (and therefore has a non-static lifetime)
+  /// It will return none
+  #[must_use]
+  pub fn well_known_str(&self) -> Option<&'static str> {
+    Some(match self {
+      HeaderName::Accept => "Accept",
+      HeaderName::AcceptCharset => "Accept-Charset",
+      HeaderName::AcceptEncoding => "Accept-Encoding",
+      HeaderName::AcceptLanguage => "Accept-Language",
+      HeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HeaderName::Authorization => "Authorization",
+      HeaderName::CacheControl => "Cache-Control",
+      HeaderName::Connection => "Connection",
+      HeaderName::ContentEncoding => "Content-Encoding",
+      HeaderName::ContentLength => "Content-Length",
+      HeaderName::ContentType => "Content-Type",
+      HeaderName::Cookie => "Cookie",
+      HeaderName::Date => "Date",
+      HeaderName::Expect => "Expect",
+      HeaderName::Forwarded => "Forwarded",
+      HeaderName::From => "From",
+      HeaderName::Host => "Host",
+      HeaderName::Origin => "Origin",
+      HeaderName::Pragma => "Pragma",
+      HeaderName::Referer => "Referer",
+      HeaderName::Upgrade => "Upgrade",
+      HeaderName::UserAgent => "User-Agent",
+      HeaderName::Via => "Via",
+      HeaderName::Warning => "Warning",
+      HeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HeaderName::Age => "Age",
+      HeaderName::Allow => "Allow",
+      HeaderName::ContentDisposition => "Content-Disposition",
+      HeaderName::ContentLanguage => "Content-Language",
+      HeaderName::ContentLocation => "Content-Location",
+      HeaderName::ETag => "ETag",
+      HeaderName::Expires => "Expires",
+      HeaderName::LastModified => "Last-Modified",
+      HeaderName::Link => "Link",
+      HeaderName::Location => "Location",
+      HeaderName::Server => "Server",
+      HeaderName::SetCookie => "Set-Cookie",
+      HeaderName::TransferEncoding => "Transfer-Encoding",
+      HeaderName::Custom(_) => return None,
+    })
+  }
+}
+
+impl PartialOrd for HeaderName {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for HeaderType {
+impl Ord for HeaderName {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    if self.category() != other.category() {
-      self.category().cmp(&other.category())
-    } else {
-      self.to_string().cmp(&other.to_string())
-    }
+    self.to_str().cmp(other.to_str())
   }
 }
 
-impl From<&str> for HeaderType {
+impl From<&str> for HeaderName {
   fn from(name: &str) -> Self {
     //TODO to_ascii_lowercase is a heap allocation...
     match name.to_ascii_lowercase().as_str() {
@@ -314,115 +475,8 @@ impl From<&str> for HeaderType {
   }
 }
 
-impl Display for HeaderType {
+impl Display for HeaderName {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if let HeaderType::Custom(name) = self {
-      return write!(f, "{}", name);
-    }
-
-    let header = match self {
-      HeaderType::Accept => "Accept",
-      HeaderType::AcceptCharset => "Accept-Charset",
-      HeaderType::AcceptEncoding => "Accept-Encoding",
-      HeaderType::AcceptLanguage => "Accept-Language",
-      HeaderType::AccessControlRequestMethod => "Access-Control-Request-Method",
-      HeaderType::AccessControlRequestHeaders => "Access-Control-Request-Headers",
-      HeaderType::Authorization => "Authorization",
-      HeaderType::CacheControl => "Cache-Control",
-      HeaderType::Connection => "Connection",
-      HeaderType::ContentEncoding => "Content-Encoding",
-      HeaderType::ContentLength => "Content-Length",
-      HeaderType::ContentType => "Content-Type",
-      HeaderType::Cookie => "Cookie",
-      HeaderType::Date => "Date",
-      HeaderType::Expect => "Expect",
-      HeaderType::Forwarded => "Forwarded",
-      HeaderType::From => "From",
-      HeaderType::Host => "Host",
-      HeaderType::Origin => "Origin",
-      HeaderType::Pragma => "Pragma",
-      HeaderType::Referer => "Referer",
-      HeaderType::Upgrade => "Upgrade",
-      HeaderType::UserAgent => "User-Agent",
-      HeaderType::Via => "Via",
-      HeaderType::Warning => "Warning",
-      HeaderType::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
-      HeaderType::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
-      HeaderType::AccessControlAllowMethods => "Access-Control-Allow-Methods",
-      HeaderType::Age => "Age",
-      HeaderType::Allow => "Allow",
-      HeaderType::ContentDisposition => "Content-Disposition",
-      HeaderType::ContentLanguage => "Content-Language",
-      HeaderType::ContentLocation => "Content-Location",
-      HeaderType::ETag => "ETag",
-      HeaderType::Expires => "Expires",
-      HeaderType::LastModified => "Last-Modified",
-      HeaderType::Link => "Link",
-      HeaderType::Location => "Location",
-      HeaderType::Server => "Server",
-      HeaderType::SetCookie => "Set-Cookie",
-      HeaderType::TransferEncoding => "Transfer-Encoding",
-      _ => "",
-    };
-    write!(f, "{}", header)
-  }
-}
-
-/// Represents a category of headers, as defined in [RFC 2616, section 4.2](https://datatracker.ietf.org/doc/html/rfc2616#section-4.2).
-/// Used for ordering headers in responses.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-enum HeaderCategory {
-  General,
-  Response,
-  Entity,
-  Other,
-}
-
-impl HeaderType {
-  fn category(&self) -> HeaderCategory {
-    match self {
-      HeaderType::AccessControlAllowOrigin => HeaderCategory::Other,
-      HeaderType::AccessControlAllowHeaders => HeaderCategory::Other,
-      HeaderType::AccessControlAllowMethods => HeaderCategory::Other,
-      HeaderType::Age => HeaderCategory::Response,
-      HeaderType::Allow => HeaderCategory::Entity,
-      HeaderType::CacheControl => HeaderCategory::General,
-      HeaderType::Connection => HeaderCategory::General,
-      HeaderType::ContentDisposition => HeaderCategory::Entity,
-      HeaderType::ContentEncoding => HeaderCategory::Entity,
-      HeaderType::ContentLanguage => HeaderCategory::Entity,
-      HeaderType::ContentLength => HeaderCategory::Entity,
-      HeaderType::ContentLocation => HeaderCategory::Entity,
-      HeaderType::ContentType => HeaderCategory::Entity,
-      HeaderType::Date => HeaderCategory::General,
-      HeaderType::ETag => HeaderCategory::Response,
-      HeaderType::Expires => HeaderCategory::Entity,
-      HeaderType::LastModified => HeaderCategory::Entity,
-      HeaderType::Link => HeaderCategory::Other,
-      HeaderType::Location => HeaderCategory::Response,
-      HeaderType::Pragma => HeaderCategory::General,
-      HeaderType::Server => HeaderCategory::Response,
-      HeaderType::SetCookie => HeaderCategory::Other,
-      HeaderType::TransferEncoding => HeaderCategory::Entity,
-      HeaderType::Upgrade => HeaderCategory::General,
-      HeaderType::Via => HeaderCategory::General,
-      HeaderType::Warning => HeaderCategory::General,
-      HeaderType::Accept => HeaderCategory::Entity,
-      HeaderType::AcceptCharset => HeaderCategory::Entity,
-      HeaderType::AcceptEncoding => HeaderCategory::Entity,
-      HeaderType::AcceptLanguage => HeaderCategory::Entity,
-      HeaderType::AccessControlRequestMethod => HeaderCategory::Other,
-      HeaderType::AccessControlRequestHeaders => HeaderCategory::Other,
-      HeaderType::Authorization => HeaderCategory::General,
-      HeaderType::Cookie => HeaderCategory::General,
-      HeaderType::Expect => HeaderCategory::Entity,
-      HeaderType::Forwarded => HeaderCategory::Response,
-      HeaderType::From => HeaderCategory::Response,
-      HeaderType::Host => HeaderCategory::General,
-      HeaderType::Origin => HeaderCategory::General,
-      HeaderType::Referer => HeaderCategory::General,
-      HeaderType::UserAgent => HeaderCategory::General,
-      HeaderType::Custom(_) => HeaderCategory::Other,
-    }
+    f.write_str(self.to_str())
   }
 }

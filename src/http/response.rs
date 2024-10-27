@@ -1,7 +1,7 @@
 //! Provides functionality for handling HTTP responses.
 
 use crate::http::cookie::SetCookie;
-use crate::http::headers::{HeaderLike, HeaderType, Headers};
+use crate::http::headers::{HeaderLike, HeaderName, Headers};
 use crate::http::status::StatusCode;
 
 use crate::http::request::HttpVersion;
@@ -23,7 +23,7 @@ use std::io::ErrorKind;
 /// ```
 /// humpty::http::Response::empty(humpty::http::StatusCode::OK)
 ///     .with_body_slice(b"Success")
-///     .with_header(humpty::http::headers::HeaderType::ContentType, "text/plain");
+///     .with_header(humpty::http::headers::HeaderName::ContentType, "text/plain");
 /// ```
 #[derive(Debug)]
 pub struct Response {
@@ -86,7 +86,7 @@ impl Response {
   where
     T: AsRef<str>,
   {
-    Self::empty(StatusCode::MovedPermanently).with_header(HeaderType::Location, location)
+    Self::empty(StatusCode::MovedPermanently).with_header(HeaderName::Location, location)
   }
 
   ///Removes the body from the response
@@ -168,14 +168,14 @@ impl Response {
       return Ok(());
     }
 
-    destination.write(version.as_bytes())?;
+    destination.write(version.as_net_str().as_bytes())?;
     destination.write(b" ")?;
     destination.write(self.status_code.code_as_utf())?;
     destination.write(b" ")?;
     destination.write(self.status_code.status_line().as_bytes())?;
 
     for header in self.get_headers().iter() {
-      if header.name == HeaderType::ContentLength {
+      if header.name == HeaderName::ContentLength {
         //TODO we should make it impossible for a response object with this header to be constructed
         return Err(Error::new(
           ErrorKind::Other,
@@ -183,7 +183,7 @@ impl Response {
         ));
       }
 
-      if header.name == HeaderType::TransferEncoding {
+      if header.name == HeaderName::TransferEncoding {
         //TODO we should make it impossible for a response object with this header to be constructed
         return Err(Error::new(
           ErrorKind::Other,
