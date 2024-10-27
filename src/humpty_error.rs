@@ -4,7 +4,7 @@
 
 use crate::http::method::Method;
 use crate::http::request::HttpVersion;
-use core::error::Error;
+use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::io::ErrorKind;
