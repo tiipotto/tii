@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 /// Represents an HTTP method.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Method {
   /// The `GET` method.
   Get,

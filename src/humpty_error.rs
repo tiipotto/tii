@@ -11,7 +11,8 @@ use std::io::ErrorKind;
 
 pub type HumptyResult<T> = Result<T, HumptyError>;
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum RequestHeadParsingError {
   StatusLineIsNotUsAscii,
   StatusLineNoCRLF,
@@ -38,6 +39,7 @@ impl Display for RequestHeadParsingError {
 impl Error for RequestHeadParsingError {}
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
   IO(io::Error),
