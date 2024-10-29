@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct RequestContext {
   #[cfg(feature = "unique_id")]
-  id: uuid::Uuid,
+  id: u128,
   address: String,
   request: RequestHead,
   body: Option<RequestBody>,
@@ -32,8 +32,10 @@ pub struct RequestContext {
 }
 
 #[cfg(feature = "unique_id")]
-fn next_id() -> uuid::Uuid {
-  uuid::Uuid::new_v4()
+fn next_id() -> u128 {
+  let mut bytes = [0u8; 16];
+  getrandom::getrandom(&mut bytes).unwrap_or_else(|err| panic!("getrandom has no source: {}", err));
+  u128::from_ne_bytes(bytes)
 }
 
 impl RequestContext {
@@ -137,8 +139,8 @@ impl RequestContext {
 
   /// unique id for this request.
   #[cfg(feature = "unique_id")]
-  pub fn id(&self) -> &uuid::Uuid {
-    &self.id
+  pub fn id(&self) -> u128 {
+    self.id
   }
 
   /// address of the peer we are talking to, entirely socket dependant.
