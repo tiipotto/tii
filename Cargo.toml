@@ -12,12 +12,13 @@ keywords = ["http", "server", "http-server"]
 categories = ["web-programming::http-server", "network-programming"]
 
 [dependencies]
-rand = "0.8.5"
+uuid = { version = "^1.11", optional = true, features = ["v4"] }
 log = { version = "^0.4.22", optional = true }
 backtrace = { version = "0.3.74", optional = true}
 
 [features]
 default = []
+unique_id = ["uuid"]
 
 [lints.rust]
 future-incompatible = "warn"

@@ -17,7 +17,8 @@ use std::sync::Arc;
 /// for a single request.
 #[derive(Debug)]
 pub struct RequestContext {
-  id: u128,
+  #[cfg(feature = "unique_id")]
+  id: uuid::Uuid,
   address: String,
   request: RequestHead,
   body: Option<RequestBody>,
@@ -30,12 +31,9 @@ pub struct RequestContext {
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
 }
 
-fn next_id() -> u128 {
-  //TODO think hard on how to make this unique. Java for example uses UUID for this purpose, however that is only pseudo unique.
-  //Java's UUID basically (through several indirections) boils down to reading an u128 from /dev/urandom... and prays that there are no collisions.
-  //Maybe this should maybe be similar? rand::random() is not quite as good as /dev/urandom, it appears to delegate to a thread local salsa20 engine,
-  //How its seeded, god knows i dont.
-  rand::random()
+#[cfg(feature = "unique_id")]
+fn next_id() -> uuid::Uuid {
+  uuid::Uuid::new_v4()
 }
 
 impl RequestContext {
@@ -45,12 +43,14 @@ impl RequestContext {
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   ) -> HumptyResult<RequestContext> {
+    #[cfg(feature = "unique_id")]
     let id = next_id();
     let address = stream.peer_addr()?;
     let req = RequestHead::new(stream)?;
 
     if req.version == HttpVersion::Http09 {
       return Ok(RequestContext {
+        #[cfg(feature = "unique_id")]
         id,
         address,
         request: req,
@@ -67,6 +67,7 @@ impl RequestContext {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
+            #[cfg(feature = "unique_id")]
             id,
             address,
             request: req,
@@ -95,6 +96,7 @@ impl RequestContext {
 
       if content_length == 0 {
         return Ok(RequestContext {
+          #[cfg(feature = "unique_id")]
           id,
           address,
           request: req,
@@ -108,6 +110,7 @@ impl RequestContext {
 
       let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
       return Ok(RequestContext {
+        #[cfg(feature = "unique_id")]
         id,
         address,
         request: req,
@@ -120,6 +123,7 @@ impl RequestContext {
     }
 
     Ok(RequestContext {
+      #[cfg(feature = "unique_id")]
       id,
       address,
       request: req,
@@ -132,8 +136,9 @@ impl RequestContext {
   }
 
   /// unique id for this request.
-  pub fn id(&self) -> u128 {
-    self.id
+  #[cfg(feature = "unique_id")]
+  pub fn id(&self) -> &uuid::Uuid {
+    &self.id
   }
 
   /// address of the peer we are talking to, entirely socket dependant.
