@@ -98,11 +98,11 @@ mod tcp {
   use crate::util::unwrap_poison;
   use std::fmt::Debug;
   use std::io;
-  use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+  use std::io::{Read, Write};
   use std::net::TcpStream;
-  use std::ops::Deref;
   use std::sync::{Arc, Mutex};
   use std::time::Duration;
+  use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
   pub fn new(stream: TcpStream) -> Box<dyn ConnectionStream> {
     Box::new(TcpStreamOuter(Arc::new(TcpStreamInner::new(stream))))
@@ -113,44 +113,15 @@ mod tcp {
 
   #[derive(Debug)]
   struct TcpStreamInner {
-    //TODO, we just play micky mouse with Arc for now because I cannot be asked to implement the stuff we need from BufRead/BufWrite here yet...
-    read_mutex: Mutex<BufReader<ArcTcpStream>>,
-    write_mutex: Mutex<BufWriter<ArcTcpStream>>,
-    stream: ArcTcpStream,
+    read_mutex: Mutex<UnownedReadBuffer<0x4000>>,
+    write_mutex: Mutex<UnownedWriteBuffer<0x4000>>,
+    stream: TcpStream,
   }
-
-  //TODO get rid of this and replace it with a custom "BufReader/BufWriter" impl in TcpStreamInner
-  #[derive(Debug, Clone)]
-  struct ArcTcpStream(Arc<TcpStream>);
-
-  impl ArcTcpStream {
-    fn new(stream: TcpStream) -> ArcTcpStream {
-      ArcTcpStream(Arc::new(stream))
-    }
-  }
-
-  impl Read for ArcTcpStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-      (&mut self.0.as_ref()).read(buf)
-    }
-  }
-
-  impl Write for ArcTcpStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-      (&mut self.0.deref()).write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-      (&mut self.0.deref()).flush()
-    }
-  }
-
   impl TcpStreamInner {
     fn new(stream: TcpStream) -> TcpStreamInner {
-      let stream = ArcTcpStream::new(stream);
       TcpStreamInner {
-        read_mutex: Mutex::new(BufReader::new(stream.clone())),
-        write_mutex: Mutex::new(BufWriter::new(stream.clone())),
+        read_mutex: Mutex::new(UnownedReadBuffer::new()),
+        write_mutex: Mutex::new(UnownedWriteBuffer::new()),
         stream,
       }
     }
@@ -164,19 +135,19 @@ mod tcp {
 
   impl ConnectionStreamRead for TcpStreamOuter {
     fn set_read_non_block(&self, on: bool) -> io::Result<()> {
-      self.0.stream.0.set_nonblocking(on)
+      self.0.stream.set_nonblocking(on)
     }
 
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read(buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
 
     fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_until(end, buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read_until(&mut &self.0.stream, end, buf)
     }
 
     fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_exact(buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read_exact(&mut &self.0.stream, buf)
     }
 
     fn new_ref_read(&self) -> Box<dyn Read + Send> {
@@ -192,25 +163,25 @@ mod tcp {
     }
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-      self.0.stream.0.set_read_timeout(dur)
+      self.0.stream.set_read_timeout(dur)
     }
   }
 
   impl ConnectionStreamWrite for TcpStreamOuter {
     fn write(&self, buf: &[u8]) -> io::Result<usize> {
-      unwrap_poison(self.0.write_mutex.lock())?.write(buf)
+      unwrap_poison(self.0.write_mutex.lock())?.write(&mut &self.0.stream, buf)
     }
 
     fn write_all(&self, buf: &[u8]) -> io::Result<()> {
-      unwrap_poison(self.0.write_mutex.lock())?.write_all(buf)
+      unwrap_poison(self.0.write_mutex.lock())?.write_all(&mut &self.0.stream, buf)
     }
 
     fn flush(&self) -> io::Result<()> {
-      unwrap_poison(self.0.write_mutex.lock())?.flush()
+      unwrap_poison(self.0.write_mutex.lock())?.flush(&mut &self.0.stream)
     }
 
     fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-      self.0.stream.0.set_write_timeout(dur)
+      self.0.stream.set_write_timeout(dur)
     }
 
     fn new_ref_write(&self) -> Box<dyn Write + Send> {
@@ -242,7 +213,7 @@ mod tcp {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
-      Ok(format!("{}", self.0.stream.0.peer_addr()?))
+      Ok(format!("{}", self.0.stream.peer_addr()?))
     }
   }
 }
@@ -385,11 +356,11 @@ mod unix {
   use crate::util::unwrap_poison;
   use std::fmt::Debug;
   use std::io;
-  use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-  use std::ops::Deref;
+  use std::io::{Read, Write};
   use std::os::unix::net::UnixStream;
   use std::sync::{Arc, Mutex};
   use std::time::Duration;
+  use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
   pub fn new(stream: UnixStream) -> Box<dyn ConnectionStream> {
     Box::new(UnixStreamOuter(Arc::new(UnixStreamInner::new(stream))))
@@ -400,44 +371,16 @@ mod unix {
 
   #[derive(Debug)]
   struct UnixStreamInner {
-    //TODO, we just play micky mouse with Arc for now because I cannot be asked to implement the stuff we need from BufRead/BufWrite here yet...
-    read_mutex: Mutex<BufReader<ArcUnixStream>>,
-    write_mutex: Mutex<BufWriter<ArcUnixStream>>,
-    stream: ArcUnixStream,
-  }
-
-  //TODO get rid of this and replace it with a custom "BufReader/BufWriter" impl in UnixStreamInner
-  #[derive(Debug, Clone)]
-  struct ArcUnixStream(Arc<UnixStream>);
-
-  impl ArcUnixStream {
-    fn new(stream: UnixStream) -> ArcUnixStream {
-      ArcUnixStream(Arc::new(stream))
-    }
-  }
-
-  impl Read for ArcUnixStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-      (&mut self.0.as_ref()).read(buf)
-    }
-  }
-
-  impl Write for ArcUnixStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-      (&mut self.0.deref()).write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-      (&mut self.0.deref()).flush()
-    }
+    read_mutex: Mutex<UnownedReadBuffer<0x4000>>,
+    write_mutex: Mutex<UnownedWriteBuffer<0x4000>>,
+    stream: UnixStream,
   }
 
   impl UnixStreamInner {
     fn new(stream: UnixStream) -> UnixStreamInner {
-      let stream = ArcUnixStream::new(stream);
       UnixStreamInner {
-        read_mutex: Mutex::new(BufReader::new(stream.clone())),
-        write_mutex: Mutex::new(BufWriter::new(stream.clone())),
+        read_mutex: Mutex::new(UnownedReadBuffer::new()),
+        write_mutex: Mutex::new(UnownedWriteBuffer::new()),
         stream,
       }
     }
@@ -455,15 +398,15 @@ mod unix {
     }
 
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read(buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
 
     fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_until(end, buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read_until(&mut &self.0.stream, end, buf)
     }
 
     fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_exact(buf)
+      unwrap_poison(self.0.read_mutex.lock())?.read_exact(&mut &self.0.stream, buf)
     }
 
     fn new_ref_read(&self) -> Box<dyn Read + Send> {
@@ -479,25 +422,25 @@ mod unix {
     }
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-      self.0.stream.0.set_read_timeout(dur)
+      self.0.stream.set_read_timeout(dur)
     }
   }
 
   impl ConnectionStreamWrite for UnixStreamOuter {
     fn write(&self, buf: &[u8]) -> io::Result<usize> {
-      unwrap_poison(self.0.write_mutex.lock())?.write(buf)
+      unwrap_poison(self.0.write_mutex.lock())?.write(&mut &self.0.stream, buf)
     }
 
     fn write_all(&self, buf: &[u8]) -> io::Result<()> {
-      unwrap_poison(self.0.write_mutex.lock())?.write_all(buf)
+      unwrap_poison(self.0.write_mutex.lock())?.write_all(&mut &self.0.stream, buf)
     }
 
     fn flush(&self) -> io::Result<()> {
-      unwrap_poison(self.0.write_mutex.lock())?.flush()
+      unwrap_poison(self.0.write_mutex.lock())?.flush(&mut &self.0.stream)
     }
 
     fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-      self.0.stream.0.set_write_timeout(dur)
+      self.0.stream.set_write_timeout(dur)
     }
 
     fn new_ref_write(&self) -> Box<dyn Write + Send> {
@@ -533,7 +476,6 @@ mod unix {
         self
           .0
           .stream
-          .0
           .peer_addr()?
           .as_pathname()
           .map(|a| a.to_string_lossy().to_string())
@@ -542,5 +484,3 @@ mod unix {
     }
   }
 }
-
-//TODO implement for UnixStream(cfg-if unix), Windows Pipe (cfg-if + feature gate?)
