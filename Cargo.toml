@@ -17,9 +17,18 @@ getrandom = { version = "0.2", optional = true }
 log = { version = "^0.4.22", optional = true }
 unowned-buf = "0.1.0"
 
+## SSL
+rustls = { version = "0.23.16", optional = true }
+rust-tls-duplex-stream = { version = "0.1.0", optional = true }
+
+[dev-dependencies]
+rustls-pemfile = "2.2.0"
+rustls = "0.23.16"
+
 [features]
-default = []
+default = ["ssl"]
 unique_id = ["getrandom"]
+ssl = ["rust-tls-duplex-stream", "rustls"]
 
 [lints.rust]
 future-incompatible = "warn"

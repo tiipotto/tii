@@ -150,7 +150,7 @@ impl ResponseBody {
 
 struct StreamSink<'a>(&'a dyn ConnectionStreamWrite);
 
-impl<'a> Write for StreamSink<'a> {
+impl Write for StreamSink<'_> {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     self.0.write(buf)
   }
@@ -161,7 +161,7 @@ impl<'a> Write for StreamSink<'a> {
   }
 }
 
-impl<'a> ResponseBodySink for StreamSink<'a> {
+impl ResponseBodySink for StreamSink<'_> {
   fn write(&self, buffer: &[u8]) -> io::Result<usize> {
     self.0.write(buffer)
   }

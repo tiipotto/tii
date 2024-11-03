@@ -71,7 +71,6 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, immediately returning instead of blocking if there is no frame to read.
-
   #[allow(deprecated)]
   pub fn from_stream_nonblocking<T: ConnectionStreamRead + ?Sized>(
     stream: &T,

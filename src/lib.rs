@@ -17,4 +17,9 @@ mod krauss;
 mod percent;
 pub mod stream;
 mod thread;
+#[cfg(feature = "ssl")]
+mod tls_stream;
 mod util;
+
+#[cfg(feature = "ssl")]
+pub use tls_stream::{HumptyTlsStream, TlsCapableStream};
