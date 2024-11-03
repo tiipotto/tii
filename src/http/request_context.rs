@@ -7,12 +7,12 @@ use crate::http::RequestHead;
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::humpty_server::ConnectionStreamMetadata;
 use crate::stream::ConnectionStream;
+use crate::util;
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
-use crate::util;
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
