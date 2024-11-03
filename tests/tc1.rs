@@ -6,11 +6,11 @@ use humpty::http::response_body::ResponseBody;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
 
 mod mock_stream;
 
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
