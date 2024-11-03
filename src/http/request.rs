@@ -98,10 +98,9 @@ pub struct RequestHead {
   /// The raw query string of the request.
   pub query: String,
 
-  /// Vec of query parameters, key=value in order of appearance.
+  // Vec of query parameters, key=value in order of appearance.
   //TODO implement this
   //pub query_params: Vec<(String, String)>,
-
   /// A list of headers included in the request.
   pub headers: Headers,
 }
