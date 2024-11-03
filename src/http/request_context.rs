@@ -12,12 +12,12 @@ use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
+use crate::util;
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
 #[derive(Debug)]
 pub struct RequestContext {
-  #[cfg(feature = "unique_id")]
   id: u128,
   address: String,
   request: RequestHead,
@@ -31,13 +31,6 @@ pub struct RequestContext {
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
 }
 
-#[cfg(feature = "unique_id")]
-fn next_id() -> u128 {
-  let mut bytes = [0u8; 16];
-  getrandom::getrandom(&mut bytes).unwrap_or_else(|err| panic!("getrandom has no source: {}", err));
-  u128::from_ne_bytes(bytes)
-}
-
 impl RequestContext {
   /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
   /// Errors on IO-Error or malformed RequestHead.
@@ -45,14 +38,12 @@ impl RequestContext {
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   ) -> HumptyResult<RequestContext> {
-    #[cfg(feature = "unique_id")]
-    let id = next_id();
+    let id = util::next_id();
     let address = stream.peer_addr()?;
     let req = RequestHead::new(stream)?;
 
     if req.version == HttpVersion::Http09 {
       return Ok(RequestContext {
-        #[cfg(feature = "unique_id")]
         id,
         address,
         request: req,
@@ -69,7 +60,6 @@ impl RequestContext {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
-            #[cfg(feature = "unique_id")]
             id,
             address,
             request: req,
@@ -98,7 +88,6 @@ impl RequestContext {
 
       if content_length == 0 {
         return Ok(RequestContext {
-          #[cfg(feature = "unique_id")]
           id,
           address,
           request: req,
@@ -112,7 +101,6 @@ impl RequestContext {
 
       let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
       return Ok(RequestContext {
-        #[cfg(feature = "unique_id")]
         id,
         address,
         request: req,
@@ -125,7 +113,6 @@ impl RequestContext {
     }
 
     Ok(RequestContext {
-      #[cfg(feature = "unique_id")]
       id,
       address,
       request: req,
@@ -138,7 +125,6 @@ impl RequestContext {
   }
 
   /// unique id for this request.
-  #[cfg(feature = "unique_id")]
   pub fn id(&self) -> u128 {
     self.id
   }
