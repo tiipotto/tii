@@ -137,6 +137,20 @@ jobs:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
     steps:
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install ninja-build tool for aws-lc-fips-sys on Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Install golang toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: false
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
