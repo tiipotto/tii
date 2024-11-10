@@ -53,4 +53,3 @@ pub fn tc22b() {
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Keep-Alive\r\nContent-Length: 5\r\n\r\nOkay!");
 }
-
