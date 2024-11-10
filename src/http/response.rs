@@ -4,6 +4,8 @@ use crate::http::cookie::SetCookie;
 use crate::http::headers::{HeaderLike, HeaderName, Headers};
 use crate::http::status::StatusCode;
 
+use crate::http::method::Method;
+use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::{ReadAndSeek, ResponseBody};
 use crate::stream::ConnectionStreamWrite;
@@ -16,12 +18,15 @@ use std::io::ErrorKind;
 ///
 /// ## Simple Creation
 /// ```
-/// humpty::http::Response::new(humpty::http::StatusCode::OK, b"Success");
+/// use humpty::http::mime::MimeType;
+/// use humpty::http::StatusCode;
+/// humpty::http::Response::ok("Success", MimeType::TextPlain);
+/// humpty::http::Response::new(StatusCode::NotFound);
 /// ```
 ///
 /// ## Advanced Creation
 /// ```
-/// humpty::http::Response::empty(humpty::http::StatusCode::OK)
+/// humpty::http::Response::new(humpty::http::StatusCode::OK)
 ///     .with_body_slice(b"Success")
 ///     .with_header(humpty::http::headers::HeaderName::ContentType, "text/plain");
 /// ```
@@ -53,40 +58,311 @@ impl std::fmt::Display for ResponseError {
 impl std::error::Error for ResponseError {}
 
 impl Response {
-  /// Creates a new response object with the given status code, bytes and request.
-  ///
-  /// ## Note about Headers
-  /// If you want to add headers to a response, ideally use `Response::empty` and the builder pattern
-  ///   so as to not accidentally override important generated headers such as content length and connection.
-  pub fn new<T>(status_code: StatusCode, bytes: T) -> Self
-  where
-    T: AsRef<[u8]>,
-  {
-    Self { status_code, headers: Headers::new(), body: Some(ResponseBody::from_slice(&bytes)) }
-  }
-
   /// Creates a new response object with the given status code.
   /// Automatically sets the HTTP version to "HTTP/1.1", sets no headers, and creates an empty body.
-  pub fn empty(status_code: StatusCode) -> Self {
+  pub fn new(status_code: impl Into<StatusCode>) -> Self {
+    let status_code = status_code.into();
     Self { status_code, headers: Headers::new(), body: None }
   }
 
   /// HTTP 200 OK with body.
-  pub fn ok(bytes: ResponseBody) -> Self {
-    Self::empty(StatusCode::OK).with_body(bytes)
+  pub fn ok(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::OK)
+      .with_body(bytes.into())
+      .with_header("Content-Type", mime.into().as_str())
   }
 
-  /// HTTP 404 without body
-  pub fn not_found() -> Self {
-    Self::empty(StatusCode::NotFound)
+  /// HTTP 201 Created with body.
+  pub fn created<T: Into<ResponseBody>>(
+    bytes: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::Created)
+      .with_body(bytes.into())
+      .with_header("Content-Type", mime.into().as_str())
   }
 
-  /// Creates a redirect response to the given location.
-  pub fn redirect<T>(location: T) -> Self
-  where
-    T: AsRef<str>,
-  {
-    Self::empty(StatusCode::MovedPermanently).with_header(HeaderName::Location, location)
+  /// HTTP 202 Accepted with body.
+  pub fn accepted<T: Into<ResponseBody>>(
+    bytes: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::Created)
+      .with_body(bytes.into())
+      .with_header("Content-Type", mime.into().as_str())
+  }
+
+  /// HTTP 203 Non-Authoritative Information with body
+  pub fn non_authoritative(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::NonAuthoritative)
+      .with_body(bytes.into())
+      .with_header("Content-Type", mime.into().as_str())
+  }
+
+  /// HTTP 204 No Content
+  pub fn no_content() -> Response {
+    Self::new(StatusCode::NoContent)
+  }
+
+  /// HTTP 205 Reset Content
+  pub fn reset_content() -> Response {
+    Self::new(StatusCode::ResetContent)
+  }
+
+  /// HTTP 206 Partial Content
+  /// Note: Content-Range header must still be set by the caller. TODO
+  pub fn partial_content(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::PartialContent)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 300 Multiple Choices
+  pub fn multiple_choices(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::MultipleChoices)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 300 Multiple Choices without body
+  pub fn multiple_choices_no_body() -> Response {
+    Self::new(StatusCode::MultipleChoices)
+  }
+
+  /// HTTP 301 Moved Permanently
+  pub fn moved_permanently(
+    location: impl AsRef<str>,
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::MovedPermanently)
+      .with_header(HeaderName::Location, location)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 301 Moved Permanently without body
+  pub fn moved_permanently_no_body(location: impl AsRef<str>) -> Response {
+    Self::new(StatusCode::MovedPermanently).with_header(HeaderName::Location, location)
+  }
+
+  /// HTTP 302 Found
+  pub fn found(
+    location: impl AsRef<str>,
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::Found)
+      .with_header(HeaderName::Location, location)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 302 Found without body
+  pub fn found_no_body(location: impl AsRef<str>) -> Response {
+    Self::new(StatusCode::Found).with_header(HeaderName::Location, location)
+  }
+
+  /// HTTP 303 See Other
+  pub fn see_other(
+    location: impl AsRef<str>,
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::SeeOther)
+      .with_header(HeaderName::Location, location)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 303 See Other without body
+  pub fn see_other_no_body(location: impl AsRef<str>) -> Response {
+    Self::new(StatusCode::SeeOther).with_header(HeaderName::Location, location)
+  }
+
+  /// HTTP 304 Not modified.
+  pub fn not_modified() -> Response {
+    Self::new(StatusCode::NotModified)
+  }
+
+  /// HTTP 307 Temporary Redirect
+  pub fn temporary_redirect(
+    location: impl AsRef<str>,
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::TemporaryRedirect)
+      .with_header(HeaderName::Location, location)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 307 Temporary Redirect without body
+  pub fn temporary_redirect_no_body(location: impl AsRef<str>) -> Response {
+    Self::new(StatusCode::TemporaryRedirect).with_header(HeaderName::Location, location)
+  }
+
+  /// HTTP 308 Permanent Redirect
+  pub fn permanent_redirect(
+    location: impl AsRef<str>,
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::PermanentRedirect)
+      .with_header(HeaderName::Location, location)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 308 Permanent Redirect without body
+  pub fn permanent_redirect_no_body(location: impl AsRef<str>) -> Response {
+    Self::new(StatusCode::PermanentRedirect).with_header(HeaderName::Location, location)
+  }
+
+  /// HTTP 400 Bad Request
+  pub fn bad_request(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::BadRequest)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 400 Bad Request without body
+  pub fn bad_request_no_body() -> Response {
+    Self::new(StatusCode::BadRequest)
+  }
+
+  /// HTTP 401 Unauthorized
+  pub fn unauthorized() -> Response {
+    Self::new(StatusCode::Unauthorized)
+  }
+
+  /// HTTP 402 Payment Required with body
+  pub fn payment_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::PermanentRedirect)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 402 Payment Required without body
+  pub fn payment_required_no_body() -> Response {
+    Self::new(StatusCode::PaymentRequired)
+  }
+
+  /// HTTP 403 Forbidden
+  pub fn forbidden(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+    Self::new(StatusCode::Unauthorized)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 403 Forbidden
+  pub fn forbidden_no_body() -> Response {
+    Self::new(StatusCode::Unauthorized)
+  }
+
+  /// HTTP 404 Not Found with body
+  pub fn not_found(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::NotFound)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 404 Not Found without body
+  pub fn not_found_no_body() -> Self {
+    Self::new(StatusCode::NotFound)
+  }
+
+  /// HTTP 405 Method Not Allowed
+  pub fn method_not_allowed(allowed_methods: &[Method]) -> Self {
+    if allowed_methods.is_empty() {
+      return Self::new(StatusCode::MethodNotAllowed);
+    }
+
+    let mut buf = String::new();
+    for method in allowed_methods {
+      if !buf.is_empty() {
+        buf += ", ";
+      }
+      buf += method.as_str();
+    }
+
+    Self::new(StatusCode::MethodNotAllowed).with_header(HeaderName::Allow, buf.as_str())
+  }
+
+  /// HTTP 406 Not Acceptable
+  pub fn not_acceptable(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::NotAcceptable)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 406 Not Acceptable without body
+  pub fn not_acceptable_no_body() -> Self {
+    Self::new(StatusCode::NotAcceptable)
+  }
+
+  /// HTTP 407 Proxy Authentication Required
+  pub fn proxy_authentication_required(authenticate: impl AsRef<str>) -> Self {
+    Self::new(StatusCode::ProxyAuthenticationRequired)
+      .with_header(HeaderName::ProxyAuthenticate, authenticate)
+  }
+
+  /// HTTP 408 Request Timeout
+  pub fn request_timeout() -> Self {
+    Self::new(StatusCode::RequestTimeout)
+  }
+
+  /// HTTP 409 Conflict
+  pub fn conflict(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::Conflict)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 409 Conflict without body
+  pub fn conflict_no_body() -> Self {
+    Self::new(StatusCode::Conflict)
+  }
+
+  /// HTTP 410 Gone
+  pub fn gone(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::Gone)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 410 Gone
+  pub fn gone_no_body() -> Self {
+    Self::new(StatusCode::Gone)
+  }
+
+  /// HTTP 411 Length Required
+  pub fn length_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::LengthRequired)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 411 Length Required without body
+  pub fn length_required_no_body() -> Self {
+    Self::new(StatusCode::LengthRequired)
+  }
+
+  /// HTTP 412 Precondition Failed
+  pub fn precondition_failed() -> Self {
+    Self::new(StatusCode::PreconditionFailed)
+  }
+
+  /// HTTP 413 Content Too Large
+  pub fn content_too_large(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+    Self::new(StatusCode::ContentTooLarge)
+      .with_body(body.into())
+      .with_header(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 413 Content Too Large without body
+  pub fn content_too_large_no_body() -> Self {
+    Self::new(StatusCode::ContentTooLarge)
   }
 
   ///Removes the body from the response
@@ -96,8 +372,8 @@ impl Response {
   }
 
   ///Set the body to use with the response
-  pub fn with_body(mut self, body: ResponseBody) -> Self {
-    self.body = Some(body);
+  pub fn with_body(mut self, body: impl Into<ResponseBody>) -> Self {
+    self.body = Some(body.into());
     self
   }
 

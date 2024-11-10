@@ -61,7 +61,7 @@ fn handshake(
   let sec_websocket_accept = format!("{}{}", handshake_key, MAGIC_STRING).hash().encode();
 
   // Serialise the handshake response
-  let response = Response::empty(StatusCode::SwitchingProtocols)
+  let response = Response::new(StatusCode::SwitchingProtocols)
     .with_header(HeaderName::Upgrade, "websocket")
     .with_header(HeaderName::Connection, "Upgrade")
     .with_header("Sec-WebSocket-Accept", sec_websocket_accept);

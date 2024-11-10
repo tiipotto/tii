@@ -216,3 +216,27 @@ impl ChunkedSink<'_> {
     self.0.write_all(b"0\r\n\r\n")
   }
 }
+
+impl From<Vec<u8>> for ResponseBody {
+  fn from(value: Vec<u8>) -> Self {
+    ResponseBody::from_data(value)
+  }
+}
+
+impl From<String> for ResponseBody {
+  fn from(value: String) -> Self {
+    ResponseBody::from_data(value.into_bytes())
+  }
+}
+
+impl From<&str> for ResponseBody {
+  fn from(value: &str) -> Self {
+    ResponseBody::from_slice(value)
+  }
+}
+
+impl From<&[u8]> for ResponseBody {
+  fn from(value: &[u8]) -> Self {
+    ResponseBody::from_slice(value)
+  }
+}

@@ -1,5 +1,6 @@
+use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
-use humpty::http::{Response, StatusCode};
+use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::{HumptyError, HumptyResult};
 use std::error::Error;
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn home(_: &RequestContext) -> HumptyResult<Response> {
-  Ok(Response::new(StatusCode::OK, HTML))
+  Ok(Response::ok(HTML, MimeType::TextHtml))
 }
 
 fn wildcard(request: &RequestContext) -> HumptyResult<Response> {
@@ -62,5 +63,5 @@ fn wildcard(request: &RequestContext) -> HumptyResult<Response> {
 
   let html = format!("<html><body><h1>Wildcard Path: {}</h1></body></html>", wildcard_path);
 
-  Ok(Response::new(StatusCode::OK, html))
+  Ok(Response::ok(html, MimeType::TextHtml))
 }

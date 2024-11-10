@@ -13,7 +13,7 @@ use std::time::Duration;
 
 #[test]
 fn test_response() {
-  let response = Response::empty(StatusCode::OK)
+  let response = Response::new(StatusCode::OK)
     .with_body_slice(b"<body>test</body>\r\n")
     .with_header(HeaderName::ContentType, "text/html")
     .with_header(HeaderName::ContentLanguage, "en-GB")
@@ -45,7 +45,7 @@ fn test_chunked_response() {
     Ok(())
   };
 
-  let response = Response::empty(StatusCode::OK)
+  let response = Response::new(StatusCode::OK)
     .with_body(ResponseBody::chunked(chunker))
     .with_header(HeaderName::ContentType, "text/html")
     .with_header(HeaderName::ContentLanguage, "en-GB")
@@ -69,7 +69,7 @@ fn test_chunked_response() {
 
 #[test]
 fn test_cookie_response() {
-  let response = Response::empty(StatusCode::OK)
+  let response = Response::new(StatusCode::OK)
     .with_body_slice(b"Hello, world!\r\n")
     .with_cookie(
       SetCookie::new("X-Example-Cookie", "example-value")

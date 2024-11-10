@@ -4,6 +4,7 @@
 
 use crate::http::method::Method;
 use crate::http::request::HttpVersion;
+use crate::http::Response;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
@@ -11,9 +12,22 @@ use std::io::ErrorKind;
 
 pub type HumptyResult<T> = Result<T, HumptyError>;
 
+impl From<Response> for HumptyResult<Response> {
+  fn from(value: Response) -> Self {
+    Ok(value)
+  }
+}
+
+impl From<HumptyError> for HumptyResult<Response> {
+  fn from(value: HumptyError) -> Self {
+    Err(value)
+  }
+}
+
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum RequestHeadParsingError {
+  EofBeforeReadingAnyBytes,
   StatusLineIsNotUsAscii,
   StatusLineNoCRLF,
   StatusLineNoWhitespace,

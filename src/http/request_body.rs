@@ -2,10 +2,10 @@
 //! TODO docs before release
 #![allow(missing_docs)]
 
-use crate::util::unwrap_poison;
+use crate::util::{unwrap_poison, unwrap_some};
 use std::fmt::{Debug, Formatter};
 use std::io;
-use std::io::{Cursor, Error, Read, Take};
+use std::io::{Cursor, Error, ErrorKind, Read, Take};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
@@ -25,13 +25,17 @@ impl RequestBody {
 
   pub fn new_with_content_length<T: Read + Send + 'static>(read: T, len: u64) -> RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::WithContentLength(
-      RequestBodyWithContentLength((Box::new(read) as Box<dyn Read + Send>).take(len)),
+      RequestBodyWithContentLength {
+        err: false,
+        data: (Box::new(read) as Box<dyn Read + Send>).take(len),
+      },
     ))))
   }
   pub fn new_chunked<T: Read + Send + 'static>(read: T) -> RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::Chunked(RequestBodyChunked {
       read: Box::new(read) as Box<dyn Read + Send>,
       eof: false,
+      err: false,
       remaining_chunk_length: 0,
     }))))
   }
@@ -40,28 +44,28 @@ impl RequestBody {
 impl RequestBody {
   pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.0.read(buf),
+      RequestBodyInner::WithContentLength(body) => body.read(buf),
       RequestBodyInner::Chunked(body) => body.read(buf),
     }
   }
 
   pub fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
     match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.0.read_to_end(buf),
+      RequestBodyInner::WithContentLength(body) => body.read_to_end(buf),
       RequestBodyInner::Chunked(body) => body.read_to_end(buf),
     }
   }
 
   pub fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
     match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.0.read_exact(buf),
+      RequestBodyInner::WithContentLength(body) => body.read_exact(buf),
       RequestBodyInner::Chunked(body) => body.read_exact(buf),
     }
   }
 
   pub fn remaining(&self) -> io::Result<Option<u64>> {
     Ok(match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(wc) => Some(wc.0.limit()),
+      RequestBodyInner::WithContentLength(wc) => Some(wc.data.limit()),
       _ => None,
     })
   }
@@ -80,17 +84,33 @@ enum RequestBodyInner {
                                //...
 }
 
-struct RequestBodyWithContentLength(Take<Box<dyn Read + Send>>);
+struct RequestBodyWithContentLength {
+  err: bool,
+  data: Take<Box<dyn Read + Send>>,
+}
+
+impl Read for RequestBodyWithContentLength {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    if self.err {
+      return Err(Error::new(
+        ErrorKind::BrokenPipe,
+        "Transfer stream has failed due to previous error",
+      ));
+    }
+    self.data.read(buf).inspect_err(|_| self.err = true)
+  }
+}
 
 impl Debug for RequestBodyWithContentLength {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("RequestBodyWithContentLength(remaining={})", self.0.limit()))
+    f.write_fmt(format_args!("RequestBodyWithContentLength(remaining={})", self.data.limit()))
   }
 }
 
 struct RequestBodyChunked {
   read: Box<dyn Read + Send>,
   eof: bool,
+  err: bool,
   remaining_chunk_length: u64,
 }
 
@@ -103,8 +123,8 @@ impl Debug for RequestBodyChunked {
   }
 }
 
-impl Read for RequestBodyChunked {
-  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+impl RequestBodyChunked {
+  fn read_internal(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     if buf.is_empty() {
       return Ok(0);
     }
@@ -115,16 +135,16 @@ impl Read for RequestBodyChunked {
 
     if self.remaining_chunk_length > 0 {
       let to_read = u64::min(buf.len() as u64, self.remaining_chunk_length) as usize;
-      let read = self.read.read(&mut buf[0..to_read])?;
+      let read = self.read.read(&mut buf[..to_read])?;
       if read == 0 {
         return Err(io::Error::new(
-          io::ErrorKind::UnexpectedEof,
+          ErrorKind::UnexpectedEof,
           "chunked transfer encoding suggest more data",
         ));
       }
 
-      //TODO for now panic if Box<dyn Read> reports to have read more than bufsize?
-      self.remaining_chunk_length = self.remaining_chunk_length.checked_sub(read as u64).unwrap();
+      self.remaining_chunk_length =
+        unwrap_some(self.remaining_chunk_length.checked_sub(read as u64));
       if self.remaining_chunk_length == 0 {
         let mut tiny_buffer = [0u8; 1];
         self.read.read_exact(&mut tiny_buffer)?;
@@ -185,5 +205,17 @@ impl Read for RequestBodyChunked {
 
     self.remaining_chunk_length = chunk_len;
     self.read(buf)
+  }
+}
+
+impl Read for RequestBodyChunked {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    if self.err {
+      return Err(Error::new(
+        ErrorKind::BrokenPipe,
+        "Chunked transfer stream has failed due to previous error",
+      ));
+    }
+    self.read_internal(buf).inspect_err(|_| self.err = true)
   }
 }

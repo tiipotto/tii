@@ -19,7 +19,7 @@ pub(crate) fn default_error_handler(
     request.request_head().path.as_str(),
     error
   );
-  Ok(Response::empty(StatusCode::InternalServerError))
+  Ok(Response::new(StatusCode::InternalServerError))
 }
 
 pub(crate) fn default_not_found_handler(request: &mut RequestContext) -> HumptyResult<Response> {
@@ -28,5 +28,5 @@ pub(crate) fn default_not_found_handler(request: &mut RequestContext) -> HumptyR
     &request.request_head().method,
     request.request_head().path.as_str()
   );
-  Ok(Response::empty(StatusCode::NotFound))
+  Ok(Response::new(StatusCode::NotFound))
 }
