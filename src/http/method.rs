@@ -7,6 +7,8 @@ use std::fmt::Display;
 pub enum Method {
   /// The `GET` method.
   Get,
+  /// The `HEAD` method.
+  Head,
   /// The `POST` method.
   Post,
   /// The `PUT` method.
@@ -15,12 +17,24 @@ pub enum Method {
   Delete,
   /// The `OPTIONS` method.
   Options,
+  /// The `TRACE` method.
+  Trace,
+  /// The 'PATCH' method.
+  Patch,
   /// Anything else your heart desires.
   Custom(String),
 }
 
-static WELL_KNOWN: &[Method] =
-  &[Method::Get, Method::Post, Method::Put, Method::Delete, Method::Options];
+static WELL_KNOWN: &[Method] = &[
+  Method::Get,
+  Method::Head,
+  Method::Post,
+  Method::Put,
+  Method::Delete,
+  Method::Options,
+  Method::Trace,
+  Method::Patch,
+];
 
 impl Method {
   /// Attempts to convert from the HTTP verb into an enum variant.
@@ -33,10 +47,13 @@ impl Method {
   pub fn from(name: &str) -> Self {
     match name {
       "GET" => Self::Get,
+      "HEAD" => Self::Head,
       "POST" => Self::Post,
       "PUT" => Self::Put,
       "DELETE" => Self::Delete,
       "OPTIONS" => Self::Options,
+      "TRACE" => Self::Trace,
+      "PATCH" => Self::Patch,
       _ => Self::Custom(name.to_ascii_uppercase()),
     }
   }
@@ -62,10 +79,13 @@ impl Method {
   pub fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
       Method::Get => "GET",
+      Method::Head => "HEAD",
       Method::Post => "POST",
       Method::Put => "PUT",
       Method::Delete => "DELETE",
       Method::Options => "OPTIONS",
+      Method::Trace => "TRACE",
+      Method::Patch => "PATCH",
       Method::Custom(_) => return None,
     })
   }
@@ -74,10 +94,13 @@ impl Method {
   pub fn as_str(&self) -> &str {
     match self {
       Method::Get => "GET",
+      Method::Head => "HEAD",
       Method::Post => "POST",
       Method::Put => "PUT",
       Method::Delete => "DELETE",
       Method::Options => "OPTIONS",
+      Method::Trace => "TRACE",
+      Method::Patch => "PATCH",
       Method::Custom(meth) => meth.as_str(),
     }
   }

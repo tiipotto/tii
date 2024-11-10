@@ -1,7 +1,8 @@
 use humpty::http::request_context::RequestContext;
-use humpty::http::{Response, StatusCode};
+use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 
+use humpty::http::mime::MimeType;
 use humpty::humpty_error::HumptyResult;
 use std::error::Error;
 use std::net::{self, IpAddr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
@@ -11,7 +12,7 @@ use std::time::Duration;
 use std::{io, thread};
 
 fn hello(_: &RequestContext) -> HumptyResult<Response> {
-  Ok(Response::new(StatusCode::OK, "<html><body><h1>Hello</h1></body></html>"))
+  Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
 }
 
 fn unspecified_socket_to_loopback<S>(socket: S) -> SocketAddr

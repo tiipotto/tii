@@ -242,6 +242,9 @@ pub enum HeaderName {
   /// Indicates the encoding used in the transfer of the payload body.
   TransferEncoding,
 
+  /// Indicates that a proxy server in the connection needs authentication.
+  ProxyAuthenticate,
+
   /// Custom header with a lowercase name
   Custom(String),
 }
@@ -290,6 +293,7 @@ static WELL_KNOWN: &[HeaderName] = &[
   HeaderName::Server,
   HeaderName::SetCookie,
   HeaderName::TransferEncoding,
+  HeaderName::ProxyAuthenticate,
 ];
 impl HeaderName {
   /// Returns a static array of all well known header types
@@ -357,6 +361,7 @@ impl HeaderName {
       HeaderName::Server => "Server",
       HeaderName::SetCookie => "Set-Cookie",
       HeaderName::TransferEncoding => "Transfer-Encoding",
+      HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HeaderName::Custom(name) => name.as_str(),
     }
   }
@@ -408,6 +413,7 @@ impl HeaderName {
       HeaderName::Server => "Server",
       HeaderName::SetCookie => "Set-Cookie",
       HeaderName::TransferEncoding => "Transfer-Encoding",
+      HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HeaderName::Custom(_) => return None,
     })
   }
@@ -470,6 +476,7 @@ impl From<&str> for HeaderName {
       "server" => Self::Server,
       "set-cookie" => Self::SetCookie,
       "transfer-encoding" => Self::TransferEncoding,
+      "proxy-authenticate" => Self::ProxyAuthenticate,
       _ => Self::Custom(name.to_string()),
     }
   }

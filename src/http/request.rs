@@ -112,7 +112,11 @@ impl RequestHead {
     //TODO fix ddos potential here, limit read to 64k or some other reasonable size.
     //Possible attack on this is to just write ~Mem amount of data and then just keep
     //drip feeding us 1 byte of data every so often to deny memory to actual requests.
-    stream.read_until(0xA, &mut start_line_buf)?;
+    let count = stream.read_until(0xA, &mut start_line_buf)?;
+
+    if count == 0 {
+      return Err(RequestHeadParsingError::EofBeforeReadingAnyBytes.into());
+    }
 
     let start_line_string =
         // TODO this must be US-ASCII not utf-8!

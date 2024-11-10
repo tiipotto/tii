@@ -8,7 +8,7 @@ use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
-use crate::humpty_error::{HumptyError, HumptyResult};
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::stream::IntoConnectionStream;
 use crate::{error_log, trace_log};
 use std::any::Any;
@@ -85,8 +85,21 @@ impl HumptyServer {
 
     let meta = meta.map(|a| Arc::new(a) as Arc<dyn ConnectionStreamMetadata>);
 
+    let mut count = 0u64;
+
     loop {
-      let mut context = RequestContext::new(stream.as_ref(), meta.as_ref().cloned())?;
+      let mut context = match RequestContext::new(stream.as_ref(), meta.as_ref().cloned()) {
+        Ok(ctx) => ctx,
+        Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::EofBeforeReadingAnyBytes)) => {
+          if count == 0 {
+            return Err(RequestHeadParsingError::EofBeforeReadingAnyBytes.into());
+          }
+          trace_log!("EOF after successfully serving {count} requests");
+          return Ok(());
+        }
+        Err(err) => return Err(err),
+      };
+      count += 1;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
       if context.request_head().version == HttpVersion::Http11
@@ -134,8 +147,6 @@ impl HumptyServer {
           .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
       });
 
-      context.consume_request_body()?;
-
       keep_alive &= !context.is_connection_close_forced();
 
       if context.request_head().version == HttpVersion::Http11 {
@@ -164,6 +175,8 @@ impl HumptyServer {
 
       trace_log!("RequestServedSuccess");
 
+      context.consume_request_body()?;
+
       // If the request specified to keep the connection open, respect this
       if !keep_alive {
         trace_log!("NoKeepAlive");
@@ -187,6 +200,6 @@ impl HumptyServer {
       error
     );
 
-    Response::empty(StatusCode::InternalServerError)
+    Response::new(StatusCode::InternalServerError)
   }
 }

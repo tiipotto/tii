@@ -1,5 +1,6 @@
+use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
-use humpty::http::{Response, StatusCode};
+use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use std::error::Error;
@@ -49,11 +50,11 @@ fn resp(req: &mut RequestContext, mut resp: Response) -> HumptyResult<Response> 
 }
 
 fn home(_: &RequestContext) -> HumptyResult<Response> {
-  Ok(Response::new(StatusCode::OK, "<html><body><h1>Home</h1></body></html>"))
+  Ok(Response::ok("<html><body><h1>Home</h1></body></html>", MimeType::TextHtml))
 }
 
 fn contact(_: &RequestContext) -> HumptyResult<Response> {
-  Ok(Response::new(StatusCode::OK, "<html><body><h1>Contact</h1></body></html>"))
+  Ok(Response::ok("<html><body><h1>Contact</h1></body></html>", MimeType::TextHtml))
 }
 
 fn generic(request: &RequestContext) -> HumptyResult<Response> {
@@ -62,7 +63,7 @@ fn generic(request: &RequestContext) -> HumptyResult<Response> {
     request.request_head().path
   );
 
-  Ok(Response::new(StatusCode::OK, html))
+  Ok(Response::ok(html, MimeType::TextHtml))
 }
 
 fn pong(request: &RequestContext) -> HumptyResult<Response> {
@@ -74,5 +75,5 @@ fn pong(request: &RequestContext) -> HumptyResult<Response> {
     b"No Body".to_vec()
   };
 
-  Ok(Response::new(StatusCode::OK, body))
+  Ok(Response::ok(body, MimeType::ApplicationOctetStream))
 }

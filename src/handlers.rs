@@ -8,6 +8,7 @@ use crate::http::headers::HeaderName;
 use crate::http::response_body::ResponseBody;
 use crate::http::{Response, StatusCode};
 
+use crate::http::mime::MimeType;
 use crate::http::request_context::RequestContext;
 use crate::humpty_error::HumptyResult;
 use crate::percent::PercentDecode;
@@ -26,13 +27,18 @@ pub enum LocatedPath {
 }
 
 fn try_file_open(path: &PathBuf) -> HumptyResult<Response> {
-  Ok(File::open(path).and_then(ResponseBody::from_file).map(Response::ok).or_else(|e| {
-    if e.kind() == ErrorKind::NotFound {
-      Ok(Response::not_found())
-    } else {
-      Err(e)
-    }
-  })?)
+  let mime = MimeType::from_extension(
+    path.extension().map(|a| a.to_string_lossy().to_string()).unwrap_or("".to_string()).as_str(),
+  );
+  Ok(File::open(path).and_then(ResponseBody::from_file).map(|a| Response::ok(a, mime)).or_else(
+    |e| {
+      if e.kind() == ErrorKind::NotFound {
+        Ok(Response::not_found_no_body())
+      } else {
+        Err(e)
+      }
+    },
+  )?)
 }
 
 /// Serve the specified file, or a default error 404 if not found.
@@ -87,13 +93,13 @@ pub fn serve_dir(
     if let Some(located) = located {
       match located {
         LocatedPath::Directory => Ok(
-          Response::empty(StatusCode::MovedPermanently)
+          Response::new(StatusCode::MovedPermanently)
             .with_header(HeaderName::Location, format!("{}/", &request.request_head().path)),
         ),
         LocatedPath::File(path) => try_file_open(&path),
       }
     } else {
-      Ok(Response::empty(StatusCode::NotFound))
+      Ok(Response::new(StatusCode::NotFound))
     }
   }
 }
@@ -142,5 +148,5 @@ pub fn try_find_path(
 
 /// Redirects requests to the given location with status code 301.
 pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
-  move |_| Ok(Response::redirect(location))
+  move |_| Ok(Response::permanent_redirect_no_body(location))
 }

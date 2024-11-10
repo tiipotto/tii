@@ -1,3 +1,4 @@
+use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
 use humpty::http::response_body::ResponseBody;
 use humpty::http::Response;
@@ -61,5 +62,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn ssl_route(_ctx: &RequestContext) -> HumptyResult<Response> {
   println!("SSL route called!");
-  Ok(Response::ok(ResponseBody::from_slice("Its all good man!")))
+  Ok(Response::ok(ResponseBody::from_slice("Its all good man!"), MimeType::TextPlain))
 }

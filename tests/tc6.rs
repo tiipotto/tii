@@ -2,7 +2,7 @@ use crate::mock_stream::MockStream;
 use humpty::http::request::HttpVersion;
 use humpty::http::request_context::RequestContext;
 use humpty::http::response_body::ResponseBody;
-use humpty::http::Response;
+use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use std::sync::atomic::AtomicUsize;
@@ -15,7 +15,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
   assert_eq!(HttpVersion::Http10, ctx.request_head().version);
   assert_eq!(ctx.request_head().headers.get("Hdr"), Some("test"));
-  Ok(Response::ok(ResponseBody::from_slice("Okay!")))
+  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
 
 #[test]

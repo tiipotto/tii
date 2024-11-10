@@ -38,10 +38,15 @@ pub enum StatusCode {
   UseProxy,
   /// `307 Temporary Redirect`: The resource has moved temporarily to a new location.
   TemporaryRedirect,
+  /// `308 Permanent Redirect`: The resource has moved permanently to a new location.
+  PermanentRedirect,
   /// `400 Bad Request`: The request could not be understood by the server.
   BadRequest,
   /// `401 Unauthorized`: The request requires user authentication.
   Unauthorized,
+  /// `402 Payment Required`: Reserved non-standard status code.
+  /// Usually used to indicate that an application wants more money to perform an operation.
+  PaymentRequired,
   /// `403 Forbidden`: The client is not allowed to access this content.
   Forbidden,
   /// `404 Not Found`: The server can not find the requested resource.
@@ -63,7 +68,10 @@ pub enum StatusCode {
   /// `412 Precondition Failed`: The server does not meet one of the client's preconditions.
   PreconditionFailed,
   /// `413 Payload Too Large`: The request is larger than the server is willing or able to process.
+  #[deprecated]
   RequestEntityTooLarge,
+  /// `413 Content Too Large`: The request is larger than the server is willing or able to process. Newer version of RequestEntityTooLarge
+  ContentTooLarge,
   /// `414 URI Too Long`: The URI provided was too long for the server to process.
   RequestURITooLong,
   /// `415 Unsupported Media Type`: The request entity has a media type which the server or resource does not support.
@@ -159,7 +167,7 @@ impl StatusCode {
       410 => StatusCode::Gone,
       411 => StatusCode::LengthRequired,
       412 => StatusCode::PreconditionFailed,
-      413 => StatusCode::RequestEntityTooLarge,
+      413 => StatusCode::ContentTooLarge,
       414 => StatusCode::RequestURITooLong,
       415 => StatusCode::UnsupportedMediaType,
       416 => StatusCode::RequestedRangeNotSatisfiable,
@@ -217,7 +225,9 @@ impl StatusCode {
       StatusCode::Gone => "Gone",
       StatusCode::LengthRequired => "Length Required",
       StatusCode::PreconditionFailed => "Precondition Failed",
+      #[allow(deprecated)]
       StatusCode::RequestEntityTooLarge => "Request Entity Too Large",
+      StatusCode::ContentTooLarge => "Content Too Large",
       StatusCode::RequestURITooLong => "Request-URI Too Long",
       StatusCode::UnsupportedMediaType => "Unsupported Media Type",
       StatusCode::RequestedRangeNotSatisfiable => "Requested Range Not Satisfiable",
@@ -228,6 +238,8 @@ impl StatusCode {
       StatusCode::ServiceUnavailable => "Service Unavailable",
       StatusCode::GatewayTimeout => "Gateway Timeout",
       StatusCode::VersionNotSupported => "HTTP Version Not Supported",
+      StatusCode::PermanentRedirect => "Permanent Redirect",
+      StatusCode::PaymentRequired => "Payment Required",
       StatusCode::CustomStr(_, _, str) => str,
       StatusCode::CustomString(_, _, str) => str.as_str(),
     }
@@ -252,7 +264,9 @@ impl StatusCode {
       StatusCode::NotModified => b"304",
       StatusCode::UseProxy => b"305",
       StatusCode::TemporaryRedirect => b"307",
+      StatusCode::PermanentRedirect => b"308",
       StatusCode::BadRequest => b"400",
+      StatusCode::PaymentRequired => b"402",
       StatusCode::Unauthorized => b"401",
       StatusCode::Forbidden => b"403",
       StatusCode::NotFound => b"404",
@@ -264,7 +278,9 @@ impl StatusCode {
       StatusCode::Gone => b"410",
       StatusCode::LengthRequired => b"411",
       StatusCode::PreconditionFailed => b"412",
+      #[allow(deprecated)]
       StatusCode::RequestEntityTooLarge => b"413",
+      StatusCode::ContentTooLarge => b"413",
       StatusCode::RequestURITooLong => b"414",
       StatusCode::UnsupportedMediaType => b"415",
       StatusCode::RequestedRangeNotSatisfiable => b"416",
@@ -299,8 +315,10 @@ impl StatusCode {
       StatusCode::NotModified => 304,
       StatusCode::UseProxy => 305,
       StatusCode::TemporaryRedirect => 307,
+      StatusCode::PermanentRedirect => 308,
       StatusCode::BadRequest => 400,
       StatusCode::Unauthorized => 401,
+      StatusCode::PaymentRequired => 402,
       StatusCode::Forbidden => 403,
       StatusCode::NotFound => 404,
       StatusCode::MethodNotAllowed => 405,
@@ -311,7 +329,9 @@ impl StatusCode {
       StatusCode::Gone => 410,
       StatusCode::LengthRequired => 411,
       StatusCode::PreconditionFailed => 412,
+      #[allow(deprecated)]
       StatusCode::RequestEntityTooLarge => 413,
+      StatusCode::ContentTooLarge => 413,
       StatusCode::RequestURITooLong => 414,
       StatusCode::UnsupportedMediaType => 415,
       StatusCode::RequestedRangeNotSatisfiable => 416,

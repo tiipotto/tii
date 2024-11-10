@@ -2,7 +2,7 @@ use crate::mock_stream::MockStream;
 use humpty::http::request::HttpVersion;
 use humpty::http::request_context::RequestContext;
 use humpty::http::response_body::ResponseBody;
-use humpty::http::Response;
+use humpty::http::{Response, StatusCode};
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use std::sync::atomic::AtomicUsize;
@@ -19,7 +19,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   assert_eq!(rt, 5);
   assert_eq!(String::from_utf8_lossy(&buf), "12345");
 
-  Ok(Response::ok(ResponseBody::from_slice("Okay!")))
+  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
 
 #[test]

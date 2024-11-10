@@ -26,8 +26,10 @@ where
 /// ## Example
 /// The most basic request handler would be as follows:
 /// ```
+/// use humpty::http::mime::MimeType;
+///
 /// fn handler(_: humpty::http::RequestHead) -> humpty::http::Response {
-///     humpty::http::Response::new(humpty::http::StatusCode::OK, b"Success")
+///     humpty::http::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```
 pub trait RequestHandler: Send + Sync {
