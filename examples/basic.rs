@@ -3,11 +3,14 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
+use log::info;
 use std::error::Error;
 use std::net::TcpListener;
 use std::{io, thread};
 
 fn main() -> Result<(), Box<dyn Error>> {
+  colog::default_builder().filter_level(log::LevelFilter::Trace).init();
+
   let app = HumptyBuilder::default()
     .router(|router| {
       router
@@ -34,17 +37,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn pre_routing(req: &mut RequestContext) -> HumptyResult<Option<Response>> {
-  println!("pre_routing {:?}", req);
+  info!("pre_routing {:?}", req);
   Ok(None)
 }
 
 fn routing(req: &mut RequestContext) -> HumptyResult<Option<Response>> {
-  println!("routing {:?}", req);
+  info!("routing {:?}", req);
   Ok(None)
 }
 
 fn resp(req: &mut RequestContext, mut resp: Response) -> HumptyResult<Response> {
-  println!("resp {:?}", req);
+  info!("resp {:?}", req);
   resp.headers.add("X-Magic", "true magic");
   Ok(resp)
 }

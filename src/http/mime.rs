@@ -1,6 +1,403 @@
 //! Provides functionality for handling MIME types.
 
-use std::fmt::Display;
+use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
+
+/// QValue is defined as a fixed point number with up to 3 digits
+/// after comma. with a valid range from 0 to 1.
+/// We represent this as an u16 from 0 to 1000.
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug)]
+#[repr(transparent)]
+pub struct QValue(u16);
+
+impl QValue {
+  /// Parses the QValue in http header representation.
+  /// Note: this is without the "q=" prefix!
+  /// Returns none if the value is either out of bounds or otherwise invalid.
+  pub fn parse(qvalue: impl AsRef<str>) -> Option<QValue> {
+    let qvalue = qvalue.as_ref();
+    match qvalue.len() {
+      1 => {
+        if qvalue == "1" {
+          return Some(QValue(1000));
+        }
+
+        None
+      }
+      2 => None,
+      3 => {
+        if !qvalue.starts_with("0.") {
+          if qvalue == "1.0" {
+            return Some(QValue(1000));
+          }
+          return None;
+        }
+
+        if let Ok(value) = qvalue[2..].parse::<u16>() {
+          return Some(QValue(value * 100));
+        }
+
+        None
+      }
+      4 => {
+        if !qvalue.starts_with("0.") {
+          if qvalue == "1.00" {
+            return Some(QValue(1000));
+          }
+          return None;
+        }
+
+        if let Ok(value) = qvalue[2..].parse::<u16>() {
+          return Some(QValue(value * 10));
+        }
+
+        None
+      }
+      5 => {
+        if !qvalue.starts_with("0.") {
+          if qvalue == "1.000" {
+            return Some(QValue(1000));
+          }
+          return None;
+        }
+
+        if let Ok(value) = qvalue[2..].parse::<u16>() {
+          return Some(QValue(value));
+        }
+
+        None
+      }
+      _ => None,
+    }
+  }
+
+  /// Returns the QValue in http header representation.
+  /// Note: this is without the "q=" prefix!
+  pub const fn as_str(&self) -> &'static str {
+    constutils::qvalue_to_strs!()
+  }
+
+  /// returns this QValue as an u16. This value always ranges from 0 to 1000.
+  /// 1000 corresponds to 1.0 since q-values are fixed point numbers with up to 3 digits after comma.
+  pub const fn as_u16(&self) -> u16 {
+    self.0
+  }
+
+  /// Returns a QValue from the given u16. Parameters greater than 1000 are clamped to 1000.
+  pub const fn from_clamped(qvalue: u16) -> QValue {
+    if qvalue > 1000 {
+      return QValue(1000);
+    }
+
+    QValue(qvalue)
+  }
+}
+
+impl Display for QValue {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(self.as_str())
+  }
+}
+impl Default for QValue {
+  fn default() -> Self {
+    QValue(1000)
+  }
+}
+
+#[derive(Clone, PartialEq, Debug, Eq)]
+enum Mimes {
+  MimeGroup(MimeGroup),
+  MimeType(MimeType),
+}
+
+///
+/// Represents one part of an accept mime
+/// # See
+/// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
+#[derive(Clone, PartialEq, Debug, Eq)]
+pub struct AcceptMime {
+  value: Option<Mimes>,
+  q: QValue,
+}
+
+impl PartialOrd<Self> for AcceptMime {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for AcceptMime {
+  fn cmp(&self, other: &Self) -> Ordering {
+    other.q.cmp(&self.q)
+  }
+}
+
+impl AcceptMime {
+  /// This fn parses an Accept header value from a client http request.
+  /// The returned Vec is sorted in descending order of quality value q.
+  pub fn parse(value: impl AsRef<str>) -> Option<Vec<Self>> {
+    let value = value.as_ref();
+    let mut data = Vec::new();
+    for mut mime in value.split(",") {
+      mime = mime.trim();
+
+      if let Some((mime, rawq)) = mime.split_once(";") {
+        if !rawq.starts_with("q=") {
+          // TODO we dont support level notation...
+          return None;
+        }
+
+        let qvalue = match QValue::parse(&rawq[2..]) {
+          Some(qvalue) => qvalue,
+          None => return None,
+        };
+
+        if mime == "*/*" {
+          data.push(AcceptMime { value: None, q: qvalue });
+          continue;
+        }
+
+        match MimeType::parse(mime) {
+          None => match MimeGroup::parse(mime) {
+            Some(group) => {
+              if &mime[group.as_str().len()..] != "/*" {
+                return None;
+              }
+              data.push(AcceptMime { value: Some(Mimes::MimeGroup(group)), q: qvalue })
+            }
+            None => return None,
+          },
+          Some(mime) => data.push(AcceptMime { value: Some(Mimes::MimeType(mime)), q: qvalue }),
+        };
+
+        continue;
+      }
+
+      if mime == "*/*" {
+        data.push(AcceptMime { value: None, q: QValue::default() });
+        continue;
+      }
+
+      match MimeType::parse(mime) {
+        None => match MimeGroup::parse(mime) {
+          Some(group) => {
+            if &mime[group.as_str().len()..] != "/*" {
+              return None;
+            }
+            data.push(AcceptMime { value: Some(Mimes::MimeGroup(group)), q: QValue::default() })
+          }
+          None => return None,
+        },
+        Some(mime) => {
+          data.push(AcceptMime { value: Some(Mimes::MimeType(mime)), q: QValue::default() })
+        }
+      };
+    }
+
+    data.sort();
+    Some(data)
+  }
+
+  /// Serializes a Vec of AcceptMime's into a full http header string.
+  /// The returned string is guaranteed to work with the `parse` fn.
+  pub fn elements_to_header_value(elements: &Vec<Self>) -> String {
+    let mut buffer = String::new();
+    for element in elements {
+      if !buffer.is_empty() {
+        buffer += ",";
+      }
+      buffer += element.to_string().as_str();
+    }
+
+    buffer
+  }
+
+  /// Is this a */* accept?
+  pub const fn is_wildcard(&self) -> bool {
+    self.value.is_none()
+  }
+
+  /// Get the QValue of this accept mime.
+  pub const fn qvalue(&self) -> QValue {
+    self.q
+  }
+
+  /// Is this a group wildcard? i.e: `video/*` or `text/*`
+  pub const fn is_group_wildcard(&self) -> bool {
+    matches!(self.value, Some(Mimes::MimeGroup(_)))
+  }
+
+  /// Is this a non wildcard mime? i.e: `video/mp4`
+  pub const fn is_mime(&self) -> bool {
+    matches!(self.value, Some(Mimes::MimeType(_)))
+  }
+
+  /// Get the mime type. returns none if this is any type of wildcard mime
+  pub const fn mime(&self) -> Option<&MimeType> {
+    match &self.value {
+      Some(Mimes::MimeType(mime)) => Some(mime),
+      _ => None,
+    }
+  }
+
+  /// Get the mime type. returns none if this is the `*/*` mime.
+  pub const fn group(&self) -> Option<&MimeGroup> {
+    match &self.value {
+      Some(Mimes::MimeType(mime)) => Some(mime.mime_group()),
+      Some(Mimes::MimeGroup(group)) => Some(group),
+      _ => None,
+    }
+  }
+
+  /// Returns a AcceptMime equivalent to calling parse with `*/*`
+  pub const fn wildcard(q: QValue) -> AcceptMime {
+    AcceptMime { value: None, q }
+  }
+
+  /// Returns a AcceptMime equivalent to calling parse with `group/*` depending on MimeGroup.
+  pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptMime {
+    AcceptMime { value: Some(Mimes::MimeGroup(group)), q }
+  }
+
+  /// Returns a AcceptMime equivalent to calling parse with `group/type` depending on MimeType.
+  pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptMime {
+    AcceptMime { value: Some(Mimes::MimeType(mime)), q }
+  }
+}
+
+impl Default for AcceptMime {
+  fn default() -> Self {
+    AcceptMime::wildcard(QValue::default())
+  }
+}
+
+impl Display for AcceptMime {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match &self.value {
+      Some(Mimes::MimeGroup(group)) => {
+        f.write_str(group.as_str())?;
+        f.write_str("/*")?;
+      }
+      Some(Mimes::MimeType(mime)) => {
+        f.write_str(mime.as_str())?;
+      }
+      None => f.write_str("*/*")?,
+    }
+
+    if self.q.as_u16() != 1000 {
+      f.write_str(";q=")?;
+      f.write_str(self.q.as_str())?;
+    }
+    Ok(())
+  }
+}
+
+/// Mime types are split into groups denoted by whatever is before of the "/"
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[non_exhaustive]
+pub enum MimeGroup {
+  /// Fonts
+  Font,
+  /// Custom application specific things.
+  Application,
+  /// Images, anything that can be rendered onto a screen.
+  Image,
+  /// Video maybe with audio maybe without.
+  Video,
+  /// Audio
+  Audio,
+  /// Any human or pseudo human readable text.
+  Text,
+  /// Anything else.
+  Other(String),
+}
+
+const WELL_KNOWN_GROUPS: &[MimeGroup] = &[
+  MimeGroup::Font,
+  MimeGroup::Application,
+  MimeGroup::Image,
+  MimeGroup::Video,
+  MimeGroup::Audio,
+  MimeGroup::Text,
+];
+impl MimeGroup {
+  /// Parses a mime group from a str.
+  /// This str can be either the mime group directly such as "video"
+  /// or the full mime type such as "video/mp4"
+  /// or the accept mime such as "video/*"
+  /// both will yield Some(MimeGroup::Video)
+  ///
+  /// This fn returns none if the passed string contains "*" in the mime group.
+  /// in the group or other invalid values.
+  ///
+  pub fn parse<T: AsRef<str>>(value: T) -> Option<Self> {
+    let mut value = value.as_ref();
+    if let Some((group, _)) = value.split_once("/") {
+      value = group;
+    }
+
+    for char in value.bytes() {
+      if !check_header_byte(char) {
+        return None;
+      }
+    }
+
+    Some(match value {
+      "font" => MimeGroup::Font,
+      "application" => MimeGroup::Application,
+      "image" => MimeGroup::Image,
+      "video" => MimeGroup::Video,
+      "audio" => MimeGroup::Audio,
+      "text" => MimeGroup::Text,
+      _ => MimeGroup::Other(value.to_string()),
+    })
+  }
+
+  /// returns a static array over all well known mime groups.
+  #[must_use]
+  pub const fn well_known() -> &'static [MimeGroup] {
+    WELL_KNOWN_GROUPS
+  }
+
+  /// returns true if this is a well known http mime group.
+  #[must_use]
+  pub const fn is_well_known(&self) -> bool {
+    !matches!(self, Self::Other(_))
+  }
+
+  /// returns true if this is a custom http mime group.
+  #[must_use]
+  pub const fn is_custom(&self) -> bool {
+    matches!(self, Self::Other(_))
+  }
+
+  /// Returns a static str of the mime group or None if the mime type is heap allocated.
+  pub const fn well_known_str(&self) -> Option<&'static str> {
+    Some(match self {
+      MimeGroup::Font => "font",
+      MimeGroup::Application => "application",
+      MimeGroup::Image => "image",
+      MimeGroup::Video => "video",
+      MimeGroup::Audio => "audio",
+      MimeGroup::Text => "text",
+      MimeGroup::Other(_) => return None,
+    })
+  }
+
+  /// returns the str name of the mime group.
+  /// This name can be fed back into parse to get the equivalent enum of self.
+  pub fn as_str(&self) -> &str {
+    match self {
+      MimeGroup::Font => "font",
+      MimeGroup::Application => "application",
+      MimeGroup::Image => "image",
+      MimeGroup::Video => "video",
+      MimeGroup::Audio => "audio",
+      MimeGroup::Text => "text",
+      MimeGroup::Other(o) => o.as_str(),
+    }
+  }
+}
 
 /// Represents a MIME type as used in the `Content-Type` header.
 ///
@@ -249,10 +646,10 @@ pub enum MimeType {
   TextCalendar,
 
   ///Anything else
-  Other(String),
+  Other(MimeGroup, String),
 }
 
-static WELL_KNOWN: &[MimeType] = &[
+const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::FontTtf,
   MimeType::FontOtf,
   MimeType::FontWoff,
@@ -511,7 +908,94 @@ impl MimeType {
       MimeType::TextLua => "lua",
       MimeType::ApplicationLuaBytecode => "luac",
       MimeType::ApplicationXz => "xz",
-      MimeType::Other(_) => "bin",
+      MimeType::Other(_, _) => "bin",
+    }
+  }
+
+  /// returns the MimeGroup of this mime type.
+  pub const fn mime_group(&self) -> &MimeGroup {
+    match self {
+      MimeType::FontTtf => &MimeGroup::Font,
+      MimeType::FontOtf => &MimeGroup::Font,
+      MimeType::FontWoff => &MimeGroup::Font,
+      MimeType::FontWoff2 => &MimeGroup::Font,
+      MimeType::ApplicationAbiWord => &MimeGroup::Application,
+      MimeType::ApplicationFreeArc => &MimeGroup::Application,
+      MimeType::ApplicationAmazonEbook => &MimeGroup::Application,
+      MimeType::ApplicationBzip => &MimeGroup::Application,
+      MimeType::ApplicationBzip2 => &MimeGroup::Application,
+      MimeType::ApplicationCDAudio => &MimeGroup::Application,
+      MimeType::ApplicationCShell => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftWord => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftWordXml => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftFont => &MimeGroup::Application,
+      MimeType::ApplicationEpub => &MimeGroup::Application,
+      MimeType::ApplicationGzip => &MimeGroup::Application,
+      MimeType::ApplicationJar => &MimeGroup::Application,
+      MimeType::ApplicationJavaClass => &MimeGroup::Application,
+      MimeType::ApplicationOctetStream => &MimeGroup::Application,
+      MimeType::ApplicationJson => &MimeGroup::Application,
+      MimeType::ApplicationJsonLd => &MimeGroup::Application,
+      MimeType::ApplicationYaml => &MimeGroup::Application,
+      MimeType::TextLua => &MimeGroup::Application,
+      MimeType::ApplicationLuaBytecode => &MimeGroup::Application,
+      MimeType::ApplicationPdf => &MimeGroup::Application,
+      MimeType::ApplicationZip => &MimeGroup::Application,
+      MimeType::ApplicationAppleInstallerPackage => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentPresentation => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentSpreadsheet => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentText => &MimeGroup::Application,
+      MimeType::ApplicationOgg => &MimeGroup::Application,
+      MimeType::ApplicationPhp => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftPowerpoint => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftPowerpointXml => &MimeGroup::Application,
+      MimeType::ApplicationRar => &MimeGroup::Application,
+      MimeType::ApplicationRichText => &MimeGroup::Application,
+      MimeType::ApplicationBourneShell => &MimeGroup::Application,
+      MimeType::ApplicationTapeArchive => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftVisio => &MimeGroup::Application,
+      MimeType::ApplicationXHtml => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftExcel => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftExcelXml => &MimeGroup::Application,
+      MimeType::ApplicationXml => &MimeGroup::Application,
+      MimeType::ApplicationXul => &MimeGroup::Application,
+      MimeType::ApplicationDicom => &MimeGroup::Application,
+      MimeType::Application7Zip => &MimeGroup::Application,
+      MimeType::ApplicationXz => &MimeGroup::Application,
+      MimeType::ApplicationWasm => &MimeGroup::Application,
+      MimeType::VideoMp4 => &MimeGroup::Video,
+      MimeType::VideoOgg => &MimeGroup::Video,
+      MimeType::VideoWebm => &MimeGroup::Video,
+      MimeType::VideoAvi => &MimeGroup::Video,
+      MimeType::VideoMpeg => &MimeGroup::Video,
+      MimeType::VideoMpegTransportStream => &MimeGroup::Video,
+      MimeType::Video3gpp => &MimeGroup::Video,
+      MimeType::Video3gpp2 => &MimeGroup::Video,
+      MimeType::ImageBmp => &MimeGroup::Image,
+      MimeType::ImageGif => &MimeGroup::Image,
+      MimeType::ImageJpeg => &MimeGroup::Image,
+      MimeType::ImageAvif => &MimeGroup::Image,
+      MimeType::ImagePng => &MimeGroup::Image,
+      MimeType::ImageApng => &MimeGroup::Image,
+      MimeType::ImageWebp => &MimeGroup::Image,
+      MimeType::ImageSvg => &MimeGroup::Image,
+      MimeType::ImageIcon => &MimeGroup::Image,
+      MimeType::ImageTiff => &MimeGroup::Image,
+      MimeType::AudioAac => &MimeGroup::Audio,
+      MimeType::AudioMidi => &MimeGroup::Audio,
+      MimeType::AudioMpeg => &MimeGroup::Audio,
+      MimeType::AudioOgg => &MimeGroup::Audio,
+      MimeType::AudioWaveform => &MimeGroup::Audio,
+      MimeType::AudioWebm => &MimeGroup::Audio,
+      MimeType::Audio3gpp => &MimeGroup::Audio,
+      MimeType::Audio3gpp2 => &MimeGroup::Audio,
+      MimeType::TextCss => &MimeGroup::Text,
+      MimeType::TextHtml => &MimeGroup::Text,
+      MimeType::TextJavaScript => &MimeGroup::Text,
+      MimeType::TextPlain => &MimeGroup::Text,
+      MimeType::TextCsv => &MimeGroup::Text,
+      MimeType::TextCalendar => &MimeGroup::Text,
+      MimeType::Other(group, _) => group,
     }
   }
 
@@ -521,27 +1005,27 @@ impl MimeType {
     match self {
       MimeType::Video3gpp2 | MimeType::Audio3gpp2 => false, //3g2 is shared
       MimeType::Video3gpp | MimeType::Audio3gpp => false,   //3gp is shared
-      MimeType::Other(_) => false, //We don't know what the extension even is.
+      MimeType::Other(_, _) => false, //We don't know what the extension even is.
       _ => true,
     }
   }
 
   /// returns a static slice that contains all well known mime types.
   #[must_use]
-  pub fn well_known() -> &'static [MimeType] {
-    WELL_KNOWN
+  pub const fn well_known() -> &'static [MimeType] {
+    WELL_KNOWN_TYPES
   }
 
-  /// returns true if this is a well known http method.
+  /// returns true if this is a well known http mime type.
   #[must_use]
   pub const fn is_well_known(&self) -> bool {
-    !matches!(self, MimeType::Other(_))
+    !matches!(self, MimeType::Other(_, _))
   }
 
-  /// returns true if this is a custom http method.
+  /// returns true if this is a custom http mime type.
   #[must_use]
   pub const fn is_custom(&self) -> bool {
-    matches!(self, Self::Other(_))
+    matches!(self, Self::Other(_, _))
   }
 
   /// Returns a static str of the mime type or None if the mime type is heap allocated.
@@ -637,7 +1121,7 @@ impl MimeType {
       MimeType::TextLua => "text/x-lua",
       MimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
       MimeType::ApplicationXz => "application/x-xz",
-      MimeType::Other(_) => return None,
+      MimeType::Other(_, _) => return None,
     })
   }
 
@@ -734,7 +1218,7 @@ impl MimeType {
       MimeType::TextLua => "text/x-lua",
       MimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
       MimeType::ApplicationXz => "application/x-xz",
-      MimeType::Other(data) => data.as_str(),
+      MimeType::Other(_, data) => data.as_str(),
     }
   }
 
@@ -847,24 +1331,7 @@ impl MimeType {
             continue;
           }
 
-          if char <= 31 {
-            //Ascii control characters, not allowed here!
-            return None;
-          }
-
-          if char & 0b1000_0000 != 0 {
-            //Multibyte utf-8 not permitted, this must be ascii!
-            return None;
-          }
-
-          if char.is_ascii_uppercase() {
-            // Upper case not permitted. (TODO is this correct? In practice ive only ever seen them lower case.)
-            return None;
-          }
-
-          //TODO actually lookup the RFC and verify what exact printable characters are permitted here.
-          if char == b'*' {
-            // I know this one is not allowed.
+          if !check_header_byte(char) {
             return None;
           }
         }
@@ -873,7 +1340,12 @@ impl MimeType {
           return None;
         }
 
-        MimeType::Other(other.to_string())
+        if let Some(grp) = MimeGroup::parse(other) {
+          MimeType::Other(grp, other.to_string())
+        } else {
+          // We already do a superset of validations, this case is impossible.
+          crate::util::unreachable()
+        }
       }
     })
   }
@@ -882,5 +1354,64 @@ impl MimeType {
 impl Display for MimeType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
+  }
+}
+
+const fn check_header_byte(char: u8) -> bool {
+  if char <= 31 {
+    //Ascii control characters, not allowed here!
+    return false;
+  }
+
+  if char & 0b1000_0000 != 0 {
+    //Multibyte utf-8 not permitted, this must be ascii!
+    return false;
+  }
+
+  if char.is_ascii_uppercase() {
+    // Upper case not permitted. (TODO is this correct? In practice ive only ever seen them lower case.)
+    return false;
+  }
+
+  //TODO actually lookup the RFC and verify what exact printable characters are permitted here.
+  !matches!(
+    char,
+    b'*'
+      | b'('
+      | b')'
+      | b':'
+      | b'<'
+      | b'>'
+      | b'?'
+      | b'@'
+      | b'['
+      | b']'
+      | b'\\'
+      | b'{'
+      | b'}'
+      | 0x7F
+  )
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::http::mime::QValue;
+
+  #[macro_export]
+  macro_rules! test_qvalue {
+    ($input:expr, $expected:expr) => {
+      let q = QValue($input);
+      assert_eq!(q.as_str(), $expected);
+    };
+  }
+
+  #[test]
+  fn constutil() {
+    // Only covering/testing some edge cases as a sanity check. See the proc macro for the full generation.
+    test_qvalue!(0, "0.0");
+    test_qvalue!(1, "0.001");
+    test_qvalue!(10, "0.01");
+    test_qvalue!(999, "0.999");
+    test_qvalue!(1000, "1.0");
   }
 }
