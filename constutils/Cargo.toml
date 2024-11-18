@@ -1,0 +1,6 @@
+[package]
+name = "constutils"
+edition = "2021"
+
+[lib]
+proc-macro = true
