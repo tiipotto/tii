@@ -1,6 +1,5 @@
 //! Provides functionality for handling MIME types.
 
-use either::{Either, Left, Right};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
@@ -1112,13 +1111,19 @@ impl Default for QValue {
   }
 }
 
+#[derive(Clone, PartialEq, Debug, Eq)]
+enum Mimes {
+  MimeGroup(MimeGroup),
+  MimeType(MimeType),
+}
+
 ///
 /// Represents one part of an accept mime
 /// # See
 /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
 #[derive(Clone, PartialEq, Debug, Eq)]
 pub struct AcceptMime {
-  value: Option<Either<MimeGroup, MimeType>>,
+  value: Option<Mimes>,
   q: QValue,
 }
 
@@ -1165,11 +1170,11 @@ impl AcceptMime {
               if &mime[group.as_str().len()..] != "/*" {
                 return None;
               }
-              data.push(AcceptMime { value: Some(Either::Left(group)), q: qvalue })
+              data.push(AcceptMime { value: Some(Mimes::MimeGroup(group)), q: qvalue })
             }
             None => return None,
           },
-          Some(mime) => data.push(AcceptMime { value: Some(Either::Right(mime)), q: qvalue }),
+          Some(mime) => data.push(AcceptMime { value: Some(Mimes::MimeType(mime)), q: qvalue }),
         };
 
         continue;
@@ -1186,12 +1191,12 @@ impl AcceptMime {
             if &mime[group.as_str().len()..] != "/*" {
               return None;
             }
-            data.push(AcceptMime { value: Some(Either::Left(group)), q: QValue::default() })
+            data.push(AcceptMime { value: Some(Mimes::MimeGroup(group)), q: QValue::default() })
           }
           None => return None,
         },
         Some(mime) => {
-          data.push(AcceptMime { value: Some(Either::Right(mime)), q: QValue::default() })
+          data.push(AcceptMime { value: Some(Mimes::MimeType(mime)), q: QValue::default() })
         }
       };
     }
@@ -1226,18 +1231,18 @@ impl AcceptMime {
 
   /// Is this a group wildcard? i.e: `video/*` or `text/*`
   pub const fn is_group_wildcard(&self) -> bool {
-    matches!(self.value, Some(Left(_)))
+    matches!(self.value, Some(Mimes::MimeGroup(_)))
   }
 
   /// Is this a non wildcard mime? i.e: `video/mp4`
   pub const fn is_mime(&self) -> bool {
-    matches!(self.value, Some(Right(_)))
+    matches!(self.value, Some(Mimes::MimeType(_)))
   }
 
   /// Get the mime type. returns none if this is any type of wildcard mime
   pub const fn mime(&self) -> Option<&MimeType> {
     match &self.value {
-      Some(Right(mime)) => Some(mime),
+      Some(Mimes::MimeType(mime)) => Some(mime),
       _ => None,
     }
   }
@@ -1245,8 +1250,8 @@ impl AcceptMime {
   /// Get the mime type. returns none if this is the `*/*` mime.
   pub const fn group(&self) -> Option<&MimeGroup> {
     match &self.value {
-      Some(Right(mime)) => Some(mime.mime_group()),
-      Some(Left(group)) => Some(group),
+      Some(Mimes::MimeType(mime)) => Some(mime.mime_group()),
+      Some(Mimes::MimeGroup(group)) => Some(group),
       _ => None,
     }
   }
@@ -1258,12 +1263,12 @@ impl AcceptMime {
 
   /// Returns a AcceptMime equivalent to calling parse with `group/*` depending on MimeGroup.
   pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptMime {
-    AcceptMime { value: Some(Left(group)), q }
+    AcceptMime { value: Some(Mimes::MimeGroup(group)), q }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/type` depending on MimeType.
   pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptMime {
-    AcceptMime { value: Some(Right(mime)), q }
+    AcceptMime { value: Some(Mimes::MimeType(mime)), q }
   }
 }
 
@@ -1276,11 +1281,11 @@ impl Default for AcceptMime {
 impl Display for AcceptMime {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match &self.value {
-      Some(Left(group)) => {
+      Some(Mimes::MimeGroup(group)) => {
         f.write_str(group.as_str())?;
         f.write_str("/*")?;
       }
-      Some(Right(mime)) => {
+      Some(Mimes::MimeType(mime)) => {
         f.write_str(mime.as_str())?;
       }
       None => f.write_str("*/*")?,
