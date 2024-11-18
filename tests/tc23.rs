@@ -24,9 +24,10 @@ pub fn tc23() {
   server.handle_connection(con).expect("ERROR");
   let data = stream.copy_written_data_to_string();
   let id = *REQ_ID.lock().unwrap();
-  let len = id.to_string().len() + 504; //The decimal len of the id is not padded and has a variable len.
+  let len = id.to_string().len() + 559; //The decimal len of the id is not padded and has a variable len.
 
-  let expected_data = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Keep-Alive\r\nContent-Length: {len}\r\n\r\nRequestContext {{ id: {}, address: \"Box\", request: RequestHead {{ method: Get, version: Http11, status_line: \"GET /dummy HTTP/1.1\", path: \"/dummy\", query: \"\", headers: Headers([Header {{ name: Connection, value: \"Keep-Alive\" }}, Header {{ name: TransferEncoding, value: \"chunked\" }}]) }}, body: Some(RequestBody(Mutex {{ data: Chunked(RequestBodyChunked(eof=false remaining_chunk_length=0)), poisoned: false, .. }})), force_connection_close: false, stream_meta: None, routed_path: Some(\"/dummy\"), properties: None }}", id);
+  let raw = r#", address: "Box", request: RequestHead { method: Get, version: Http11, status_line: "GET /dummy HTTP/1.1", path: "/dummy", query: "", accept: [AcceptMime { value: None, q: QValue(1000) }], headers: Headers([Header { name: Connection, value: "Keep-Alive" }, Header { name: TransferEncoding, value: "chunked" }]) }, body: Some(RequestBody(Mutex { data: Chunked(RequestBodyChunked(eof=false remaining_chunk_length=0)), poisoned: false, .. })), force_connection_close: false, stream_meta: None, routed_path: Some("/dummy"), properties: None }"#;
+  let expected_data = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Keep-Alive\r\nContent-Length: {len}\r\n\r\nRequestContext {{ id: {id}{raw}");
   //Hint: this assert will obviously fail if we change the data structure of RequestContext or RequestHead. Just adjust the test in this case.
   assert_eq!(data, expected_data);
 }

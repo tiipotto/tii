@@ -13,6 +13,10 @@ fn do_abort() -> ! {
   unreachable!("A condition that should be unreachable was reached. Please enable the 'backtrace' feature on humpty for more information and then file a bug report!");
 }
 
+pub fn unreachable() -> ! {
+  do_abort()
+}
+
 pub fn unwrap_some<T>(some: Option<T>) -> T {
   if let Some(t) = some {
     return t;
@@ -141,6 +145,27 @@ macro_rules! info_log {
 #[macro_export]
 ///Calls info!
 macro_rules! info_log {
+
+  (target: $target:expr, $($arg:tt)+) => {
+      let _ = &($($arg)+);
+  };
+  ($($arg:tt)+) => {
+      let _ = &($($arg)+);
+  }
+}
+
+#[cfg(feature = "log")]
+#[macro_export]
+///Calls warn!
+macro_rules! warn_log {
+    (target: $target:expr, $($arg:tt)+) => (log::log!(target: $target, log::Level::Warn, $($arg)+));
+    ($($arg:tt)+) => (log::log!(log::Level::Warn, $($arg)+))
+}
+
+#[cfg(not(feature = "log"))]
+#[macro_export]
+///Calls warn!
+macro_rules! warn_log {
 
   (target: $target:expr, $($arg:tt)+) => {
       let _ = &($($arg)+);

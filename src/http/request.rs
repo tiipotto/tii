@@ -4,9 +4,11 @@ use crate::http::cookie::Cookie;
 use crate::http::headers::{HeaderName, Headers};
 use crate::http::method::Method;
 
+use crate::http::mime::{AcceptMime, MimeType, QValue};
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
+use crate::warn_log;
 use std::fmt::{Display, Formatter};
 
 /// Enum for http versions humpty supports.
@@ -98,6 +100,8 @@ pub struct RequestHead {
   /// The raw query string of the request.
   pub query: String,
 
+  accept: Vec<AcceptMime>,
+
   // Vec of query parameters, key=value in order of appearance.
   //TODO implement this
   //pub query_params: Vec<(String, String)>,
@@ -160,6 +164,7 @@ impl RequestHead {
         query,
         version,
         headers,
+        accept: vec![AcceptMime::from_mime(MimeType::TextHtml, QValue::default())], // Http 0.9 only accepts html.
         status_line: status_line.to_string(),
       });
     }
@@ -192,7 +197,28 @@ impl RequestHead {
       headers.add(HeaderName::from(name), value);
     }
 
-    Ok(Self { method, path: uri, query, version, headers, status_line: status_line.to_string() })
+    let accept_hdr = headers.get(HeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
+    let accept = AcceptMime::parse(accept_hdr);
+    if accept.is_none() {
+      // TODO should this be a hard error?
+      warn_log!(
+        "Request to '{}' has invalid Accept header '{}' will assume 'Accept: */*'",
+        uri.as_str(),
+        accept_hdr
+      );
+    }
+
+    let accept = accept.unwrap_or_else(|| vec![AcceptMime::default()]);
+
+    Ok(Self {
+      method,
+      path: uri,
+      query,
+      version,
+      headers,
+      accept,
+      status_line: status_line.to_string(),
+    })
   }
 
   /// Get the cookies from the request.
@@ -215,5 +241,18 @@ impl RequestHead {
   /// Attempts to get a specific cookie from the request.
   pub fn get_cookie(&self, name: impl AsRef<str>) -> Option<Cookie> {
     self.get_cookies().into_iter().find(|cookie| cookie.name == name.as_ref())
+  }
+
+  /// Manipulates the accept header values.
+  /// This also overwrites the actual accept header!
+  pub fn set_accept(&mut self, types: Vec<AcceptMime>) {
+    let hdr_value = AcceptMime::elements_to_header_value(&types);
+    self.headers.set(HeaderName::Accept, hdr_value);
+    self.accept = types;
+  }
+
+  /// Returns the acceptable mime types
+  pub fn get_accept(&self) -> &[AcceptMime] {
+    self.accept.as_slice()
   }
 }
