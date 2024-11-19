@@ -17,6 +17,7 @@ constutils = { path = "constutils" }
 getrandom = { version = "0.2", optional = true }
 log = { version = "^0.4.22", optional = true }
 unowned-buf = "0.1.0"
+urlencoding = "2.1.3"
 
 ## SSL
 rustls = { version = "0.23.16", optional = true }

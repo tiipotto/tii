@@ -131,7 +131,7 @@ impl HumptyRouter {
     if let Some(handler) = self
       .websocket_routes // Get the WebSocket routes of the sub-app
       .iter() // Iterate over the routes
-      .find(|route| route.route_matches(&request.request_head().path))
+      .find(|route| route.route_matches(request.request_head().path()))
     {
       handler.handler.serve(request.request_head().clone(), stream.new_ref());
       return Ok(true);
@@ -179,7 +179,7 @@ impl HumptyRouter {
     if let Some(handler) = self
       .routes // Get the routes of the sub-app
       .iter() // Iterate over the routes
-      .find(|route| route.route_matches(&request.request_head().path))
+      .find(|route| route.route_matches(request.request_head().path()))
     {
       request.set_routed_path(handler.route.as_str());
 

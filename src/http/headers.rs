@@ -1,5 +1,6 @@
 //! Provides functionality for handling HTTP headers.
 
+use crate::util::unwrap_some;
 use std::fmt::Display;
 
 /// Represents a collection of headers as part of a request or response.
@@ -11,7 +12,7 @@ use std::fmt::Display;
 /// Anywhere where you would specify the header type, e.g. `HeaderType::ContentType`, you can replace it
 ///   with the string name of the header, e.g. `Content-Type`, since both these types implement `HeaderLike`.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub struct Headers(Vec<Header>);
+pub(crate) struct Headers(Vec<Header>);
 
 /// Represents an individual header.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -31,11 +32,6 @@ impl Headers {
   /// Get the number of headers in the collection.
   pub fn len(&self) -> usize {
     self.0.len()
-  }
-
-  /// Returns `true` if the collection is empty.
-  pub fn is_empty(&self) -> bool {
-    self.0.is_empty()
   }
 
   /// Create and add a new header with the given name and value.
@@ -66,6 +62,27 @@ impl Headers {
     self.add(header, value);
   }
 
+  /// Will Set the header value if it is not already set.
+  /// Should the value already be set then the previous value is returned as Some().
+  /// Returns None if the value was set.
+  pub fn try_set(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> Option<&str> {
+    let header = name.to_header();
+    let mut found = None;
+    for (index, h) in &mut self.0.iter().enumerate() {
+      if h.name == header {
+        found = Some(index);
+        break;
+      }
+    }
+
+    if found.is_none() {
+      self.0.push(Header::new(header, value));
+      return None;
+    }
+
+    Some(self.0[unwrap_some(found)].value.as_str())
+  }
+
   /// Replaces all header values with a single header.
   /// The returned Vec contains the removed values. is len() == 0 if there were none.
   pub fn replace_all(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> Vec<Header> {
@@ -84,15 +101,6 @@ impl Headers {
 
     self.0.push(Header::new(header, value));
     hrem
-  }
-
-  /// Get a mutable reference to the value of the first header with the given name.
-  ///
-  /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
-  ///   a string, e.g. `Content-Type`.
-  pub fn get_mut(&mut self, name: impl HeaderLike) -> Option<&mut String> {
-    let header = name.to_header();
-    self.0.iter_mut().find(|h| h.name == header).map(|h| &mut h.value)
   }
 
   /// Get a list of all the values of the headers with the given name.
@@ -242,6 +250,11 @@ pub enum HeaderName {
   /// Indicates the encoding used in the transfer of the payload body.
   TransferEncoding,
 
+  /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/TE
+  TE,
+  /// Trailer encoding
+  Trailer,
+
   /// Indicates that a proxy server in the connection needs authentication.
   ProxyAuthenticate,
 
@@ -293,6 +306,8 @@ static WELL_KNOWN: &[HeaderName] = &[
   HeaderName::Server,
   HeaderName::SetCookie,
   HeaderName::TransferEncoding,
+  HeaderName::Trailer,
+  HeaderName::TE,
   HeaderName::ProxyAuthenticate,
 ];
 impl HeaderName {
@@ -362,6 +377,8 @@ impl HeaderName {
       HeaderName::SetCookie => "Set-Cookie",
       HeaderName::TransferEncoding => "Transfer-Encoding",
       HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HeaderName::TE => "TE",
+      HeaderName::Trailer => "Trailer",
       HeaderName::Custom(name) => name.as_str(),
     }
   }
@@ -414,6 +431,8 @@ impl HeaderName {
       HeaderName::SetCookie => "Set-Cookie",
       HeaderName::TransferEncoding => "Transfer-Encoding",
       HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HeaderName::Trailer => "Trailer",
+      HeaderName::TE => "TE",
       HeaderName::Custom(_) => return None,
     })
   }
@@ -477,6 +496,8 @@ impl From<&str> for HeaderName {
       "set-cookie" => Self::SetCookie,
       "transfer-encoding" => Self::TransferEncoding,
       "proxy-authenticate" => Self::ProxyAuthenticate,
+      "te" => Self::TE,
+      "trailer" => Self::Trailer,
       _ => Self::Custom(name.to_string()),
     }
   }
@@ -486,4 +507,33 @@ impl Display for HeaderName {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.to_str())
   }
+}
+
+#[test]
+fn test_header_replace_all() {
+  let mut n = Headers::new();
+  assert!(n.0.is_empty());
+  n.add("Some", "Header");
+  n.add("Another", "Value");
+  n.add("Another", "Meep");
+  n.add("Mop", "Dop");
+  let mut it = n.iter();
+  assert_eq!(Header::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Another", "Meep"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert!(it.next().is_none());
+  drop(it);
+
+  let rmoved = n.replace_all("Another", "Friend");
+  let mut it = n.iter();
+  assert_eq!(Header::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Another", "Friend"), it.next().unwrap().clone());
+  assert!(it.next().is_none());
+
+  let mut it = rmoved.iter();
+  assert_eq!(Header::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(Header::new("Another", "Meep"), it.next().unwrap().clone());
+  assert!(it.next().is_none());
 }

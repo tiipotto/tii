@@ -57,7 +57,7 @@ fn home(_: &RequestContext) -> HumptyResult<Response> {
 fn wildcard(request: &RequestContext) -> HumptyResult<Response> {
   let wildcard_path = request
     .request_head()
-    .path // get the URI of the request
+    .path() // get the URI of the request
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option
 

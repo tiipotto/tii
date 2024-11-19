@@ -1,11 +1,11 @@
 //! Provides functionality for handling HTTP requests.
 
 use crate::http::cookie::Cookie;
-use crate::http::headers::{HeaderName, Headers};
+use crate::http::headers::{Header, HeaderLike, HeaderName, Headers};
 use crate::http::method::Method;
 
 use crate::http::mime::{AcceptMime, MimeType, QValue};
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use crate::warn_log;
@@ -84,21 +84,21 @@ impl HttpVersion {
 #[derive(Clone, Debug)]
 pub struct RequestHead {
   /// The method used in making the request, e.g. "GET".
-  pub method: Method,
+  method: Method,
 
   /// The HTTP version of the request.
-  pub version: HttpVersion,
+  version: HttpVersion,
 
   /// The status line as is.
   /// For example "GET /index.html HTTP1.1"
   /// the crlf has been stripped already!
-  pub status_line: String,
+  status_line: String,
 
   /// The path to which the request was made.
-  pub path: String,
+  path: String,
 
   /// The raw query string of the request.
-  pub query: String,
+  query: String,
 
   accept: Vec<AcceptMime>,
 
@@ -106,7 +106,59 @@ pub struct RequestHead {
   //TODO implement this
   //pub query_params: Vec<(String, String)>,
   /// A list of headers included in the request.
-  pub headers: Headers,
+  headers: Headers,
+}
+
+fn parse_status_line(start_line_buf: &Vec<u8>) -> HumptyResult<&str> {
+  // TODO this must be US-ASCII not utf-8!
+  for n in start_line_buf {
+    // https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters
+    // plus space char which we check later...
+    match *n {
+      //RFC 3986 section 2.2 Reserved Characters
+      // TODO some of these chars are not valid for the status line... the status line is not the URI!
+      b'!' => {}
+      b'#' => {}
+      b'$' => {}
+      b'&' => {}
+      b'\'' => {}
+      b'(' => {}
+      b')' => {}
+      b'*' => {}
+      b'+' => {}
+      b',' => {}
+      b'/' => {}
+      b':' => {}
+      b';' => {}
+      b'=' => {}
+      b'?' => {}
+      b'@' => {}
+      b'[' => {}
+      b']' => {}
+      // RFC 3986 section 2.3 Unreserved Characters
+      b'-' => {}
+      b'.' => {}
+      b'_' => {}
+      b'~' => {}
+      //Other Stuff
+      b'%' => {}
+      b' ' => {}
+      b'\r' => {} // TODO we should check this later... this is only allowed as the second to last char...
+      b'\n' => {} // TODO we should check this later... this is only allowed as the last char...
+      other => {
+        if other.is_ascii_alphanumeric() {
+          continue;
+        }
+        return Err(RequestHeadParsingError::StatusLineContainsInvalidBytes.into());
+      }
+    }
+  }
+
+  // We could use the unsafe variant here without issue to prevent double validation our validation is stricter than str validation.
+  Ok(
+    std::str::from_utf8(start_line_buf)
+      .map_err(|_| RequestHeadParsingError::StatusLineContainsInvalidBytes)?,
+  )
 }
 
 impl RequestHead {
@@ -122,9 +174,7 @@ impl RequestHead {
       return Err(RequestHeadParsingError::EofBeforeReadingAnyBytes.into());
     }
 
-    let start_line_string =
-        // TODO this must be US-ASCII not utf-8!
-        std::str::from_utf8(&start_line_buf).map_err(|_| RequestHeadParsingError::StatusLineIsNotUsAscii)?;
+    let start_line_string = parse_status_line(&start_line_buf)?;
 
     let status_line =
       start_line_string.strip_suffix("\r\n").ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
@@ -146,7 +196,14 @@ impl RequestHead {
       return Err(HumptyError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
     }
 
-    let uri = uri_iter.next().unwrap().to_string();
+    let raw_path = uri_iter.next().unwrap();
+
+    let path = urlencoding::decode(raw_path)
+      .map_err(|_| {
+        HumptyError::from(RequestHeadParsingError::PathInvalidUrlEncoding(raw_path.to_string()))
+      })?
+      .to_string();
+
     let query = uri_iter.next().unwrap_or("").to_string();
 
     let mut headers = Headers::new();
@@ -160,7 +217,7 @@ impl RequestHead {
 
       return Ok(Self {
         method,
-        path: uri,
+        path,
         query,
         version,
         headers,
@@ -203,22 +260,52 @@ impl RequestHead {
       // TODO should this be a hard error?
       warn_log!(
         "Request to '{}' has invalid Accept header '{}' will assume 'Accept: */*'",
-        uri.as_str(),
+        path.as_str(),
         accept_hdr
       );
     }
 
     let accept = accept.unwrap_or_else(|| vec![AcceptMime::default()]);
 
-    Ok(Self {
-      method,
-      path: uri,
-      query,
-      version,
-      headers,
-      accept,
-      status_line: status_line.to_string(),
-    })
+    Ok(Self { method, path, query, version, headers, accept, status_line: status_line.to_string() })
+  }
+
+  /// get the http version this request was made in by the client.
+  pub fn version(&self) -> HttpVersion {
+    self.version
+  }
+
+  /// Returns the raw status line.
+  pub fn raw_status_line(&self) -> &str {
+    self.status_line.as_str()
+  }
+
+  /// Returns the path the request will be routed to
+  /// This should not contain any url encoding.
+  pub fn path(&self) -> &str {
+    self.path.as_str()
+  }
+
+  /// Sets the path the request will be routed to.
+  /// This should not contain any url encoding.
+  pub fn set_path(&mut self, path: impl ToString) {
+    self.path = path.to_string();
+  }
+
+  /// Gets the raw query string.
+  #[deprecated] // Will be replaced by parsed query parameters.
+  pub fn raw_query(&self) -> &str {
+    self.query.as_str()
+  }
+
+  /// gets the method of the request.
+  pub fn method(&self) -> &Method {
+    &self.method
+  }
+
+  /// Changes the method of the request
+  pub fn set_method(&mut self, method: Method) {
+    self.method = method;
   }
 
   /// Get the cookies from the request.
@@ -254,5 +341,108 @@ impl RequestHead {
   /// Returns the acceptable mime types
   pub fn get_accept(&self) -> &[AcceptMime] {
     self.accept.as_slice()
+  }
+
+  /// Returns an iterator over all headers.
+  pub fn get_all_headers(&self) -> impl Iterator<Item = &Header> {
+    self.headers.iter()
+  }
+
+  /// Returns the first header or None
+  pub fn get_header(&self, name: impl HeaderLike) -> Option<&str> {
+    self.headers.get(name)
+  }
+
+  /// Returns the all header values of empty Vec.
+  pub fn get_headers(&self, name: impl HeaderLike) -> Vec<&str> {
+    self.headers.get_all(name)
+  }
+
+  /// Removes all instances of a particular header.
+  pub fn remove_header(&mut self, name: impl HeaderLike) -> HumptyResult<()> {
+    let hdr = name.to_header();
+    match &hdr {
+      HeaderName::Accept => {
+        self.accept = vec![AcceptMime::default()];
+        self.headers.set(hdr, "*/*");
+        Ok(())
+      }
+      HeaderName::TransferEncoding => {
+        UserError::ImmutableRequestHeaderRemoved(HeaderName::TransferEncoding).into()
+      }
+      HeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderRemoved(HeaderName::ContentLength).into()
+      }
+      _ => {
+        self.headers.remove(hdr);
+        Ok(())
+      }
+    }
+  }
+
+  /// Sets the header value.
+  /// Some header values cannot be modified through this fn and attempting to change them are a noop.
+  pub fn set_header(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> HumptyResult<()> {
+    let hdr = name.to_header();
+    let hdr_value = value.as_ref();
+    match &hdr {
+      HeaderName::Accept => {
+        if let Some(accept) = AcceptMime::parse(hdr_value) {
+          self.accept = accept;
+          self.headers.set(hdr, value);
+          return Ok(());
+        }
+
+        UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+      }
+      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HeaderName::TransferEncoding,
+        hdr_value.to_string(),
+      )
+      .into(),
+      HeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
+          .into()
+      }
+      _ => {
+        self.headers.set(hdr, value);
+        Ok(())
+      }
+    }
+  }
+
+  /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
+  pub fn add_header(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> HumptyResult<()> {
+    let hdr = name.to_header();
+    let hdr_value = value.as_ref();
+    match &hdr {
+      HeaderName::Accept => {
+        if let Some(accept) = AcceptMime::parse(hdr_value) {
+          if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
+            return UserError::MultipleAcceptHeaderValuesSet(
+              old_value.to_string(),
+              hdr_value.to_string(),
+            )
+            .into();
+          }
+          self.accept = accept;
+          return Ok(());
+        }
+        UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+      }
+      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HeaderName::TransferEncoding,
+        hdr_value.to_string(),
+      )
+      .into(),
+      HeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
+          .into()
+      }
+      _ => {
+        self.headers.add(hdr, value);
+        Ok(())
+      }
+    }
   }
 }

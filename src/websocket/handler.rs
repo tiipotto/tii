@@ -55,7 +55,7 @@ fn handshake(
 ) -> Result<(), WebsocketError> {
   // Get the handshake key header
   let handshake_key =
-    request.headers.get("Sec-WebSocket-Key").ok_or(WebsocketError::HandshakeError)?;
+    request.get_header("Sec-WebSocket-Key").ok_or(WebsocketError::HandshakeError)?;
 
   // Calculate the handshake response
   let sec_websocket_accept = format!("{}{}", handshake_key, MAGIC_STRING).hash().encode();
@@ -63,12 +63,15 @@ fn handshake(
   // Serialise the handshake response
   let response = Response::new(StatusCode::SwitchingProtocols)
     .with_header(HeaderName::Upgrade, "websocket")
+    .map_err(|_| WebsocketError::HandshakeError)?
     .with_header(HeaderName::Connection, "Upgrade")
-    .with_header("Sec-WebSocket-Accept", sec_websocket_accept);
+    .map_err(|_| WebsocketError::HandshakeError)?
+    .with_header("Sec-WebSocket-Accept", sec_websocket_accept)
+    .map_err(|_| WebsocketError::HandshakeError)?;
 
   // Transmit the handshake response
   response
-    .write_to(request.version, stream.as_stream_write())
+    .write_to(request.version(), stream.as_stream_write())
     .map_err(|_| WebsocketError::WriteError)?;
 
   Ok(())
