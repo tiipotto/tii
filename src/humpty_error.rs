@@ -55,7 +55,7 @@ impl Error for RequestHeadParsingError {}
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
-pub enum UserCodeError {
+pub enum UserError {
   IllegalAcceptHeaderValueSet(String),
   MultipleAcceptHeaderValuesSet(String, String),
   ImmutableRequestHeaderModified(HeaderName, String),
@@ -63,19 +63,19 @@ pub enum UserCodeError {
   ImmutableResponseHeaderModified(HeaderName),
 }
 
-impl Display for UserCodeError {
+impl Display for UserError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     //TODO make this not shit
     Debug::fmt(self, f)
   }
 }
-impl Error for UserCodeError {}
+impl Error for UserError {}
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
-  UserCodeError(UserCodeError),
+  UserError(UserError),
   IO(io::Error),
   Other(Box<dyn Error + Send>),
 }
@@ -96,7 +96,7 @@ impl HumptyError {
     match self {
       HumptyError::IO(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::UserCodeError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -105,7 +105,7 @@ impl HumptyError {
     match self {
       HumptyError::IO(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::UserCodeError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
@@ -113,7 +113,7 @@ impl HumptyError {
     match self {
       HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::UserCodeError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::Other(other) => other,
     }
   }
@@ -124,7 +124,7 @@ impl Display for HumptyError {
     match self {
       HumptyError::IO(err) => Display::fmt(err, f),
       HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
-      HumptyError::UserCodeError(err) => Display::fmt(err, f),
+      HumptyError::UserError(err) => Display::fmt(err, f),
       HumptyError::Other(err) => Display::fmt(err, f),
     }
   }
@@ -155,8 +155,8 @@ impl From<HumptyError> for Box<dyn Error + Send> {
   }
 }
 
-impl<T> From<UserCodeError> for HumptyResult<T> {
-  fn from(value: UserCodeError) -> Self {
-    Err(HumptyError::UserCodeError(value))
+impl<T> From<UserError> for HumptyResult<T> {
+  fn from(value: UserError) -> Self {
+    Err(HumptyError::UserError(value))
   }
 }

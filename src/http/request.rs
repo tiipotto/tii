@@ -5,7 +5,7 @@ use crate::http::headers::{Header, HeaderLike, HeaderName, Headers};
 use crate::http::method::Method;
 
 use crate::http::mime::{AcceptMime, MimeType, QValue};
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserCodeError};
+use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use crate::warn_log;
@@ -368,10 +368,10 @@ impl RequestHead {
         Ok(())
       }
       HeaderName::TransferEncoding => {
-        UserCodeError::ImmutableRequestHeaderRemoved(HeaderName::TransferEncoding).into()
+        UserError::ImmutableRequestHeaderRemoved(HeaderName::TransferEncoding).into()
       }
       HeaderName::ContentLength => {
-        UserCodeError::ImmutableRequestHeaderRemoved(HeaderName::ContentLength).into()
+        UserError::ImmutableRequestHeaderRemoved(HeaderName::ContentLength).into()
       }
       _ => {
         self.headers.remove(hdr);
@@ -393,18 +393,17 @@ impl RequestHead {
           return Ok(());
         }
 
-        UserCodeError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+        UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      HeaderName::TransferEncoding => UserCodeError::ImmutableRequestHeaderModified(
+      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
         HeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      HeaderName::ContentLength => UserCodeError::ImmutableRequestHeaderModified(
-        HeaderName::ContentLength,
-        hdr_value.to_string(),
-      )
-      .into(),
+      HeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
+          .into()
+      }
       _ => {
         self.headers.set(hdr, value);
         Ok(())
@@ -420,7 +419,7 @@ impl RequestHead {
       HeaderName::Accept => {
         if let Some(accept) = AcceptMime::parse(hdr_value) {
           if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
-            return UserCodeError::MultipleAcceptHeaderValuesSet(
+            return UserError::MultipleAcceptHeaderValuesSet(
               old_value.to_string(),
               hdr_value.to_string(),
             )
@@ -429,18 +428,17 @@ impl RequestHead {
           self.accept = accept;
           return Ok(());
         }
-        UserCodeError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+        UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      HeaderName::TransferEncoding => UserCodeError::ImmutableRequestHeaderModified(
+      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
         HeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      HeaderName::ContentLength => UserCodeError::ImmutableRequestHeaderModified(
-        HeaderName::ContentLength,
-        hdr_value.to_string(),
-      )
-      .into(),
+      HeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
+          .into()
+      }
       _ => {
         self.headers.add(hdr, value);
         Ok(())

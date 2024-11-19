@@ -8,7 +8,7 @@ use crate::http::method::Method;
 use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::{ReadAndSeek, ResponseBody};
-use crate::humpty_error::{HumptyResult, UserCodeError};
+use crate::humpty_error::{HumptyResult, UserError};
 use crate::stream::ConnectionStreamWrite;
 use std::io;
 
@@ -429,14 +429,12 @@ impl Response {
     let hdr = header.to_header();
     match &hdr {
       HeaderName::ContentLength => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
+        UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
       }
       HeaderName::TransferEncoding => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
+        UserError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
       }
-      HeaderName::Trailer => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::Trailer).into()
-      }
+      HeaderName::Trailer => UserError::ImmutableResponseHeaderModified(HeaderName::Trailer).into(),
       hdr => {
         self.headers.add(hdr, value);
         Ok(())
@@ -453,14 +451,12 @@ impl Response {
     let hdr = header.to_header();
     match &hdr {
       HeaderName::ContentLength => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
+        UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
       }
       HeaderName::TransferEncoding => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
+        UserError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
       }
-      HeaderName::Trailer => {
-        UserCodeError::ImmutableResponseHeaderModified(HeaderName::Trailer).into()
-      }
+      HeaderName::Trailer => UserError::ImmutableResponseHeaderModified(HeaderName::Trailer).into(),
       hdr => {
         self.headers.set(hdr, value);
         Ok(())

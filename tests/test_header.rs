@@ -1,4 +1,4 @@
-use humpty::http::headers::{HeaderName};
+use humpty::http::headers::HeaderName;
 
 #[test]
 fn test_well_known_header_types() {
@@ -23,8 +23,6 @@ fn test_custom_header() {
   assert!(hdr2.is_custom());
   assert_eq!(&hdr2, &hdr);
 }
-
-
 
 #[test]
 fn test_header_sort_by_name() {

@@ -509,7 +509,6 @@ impl Display for HeaderName {
   }
 }
 
-
 #[test]
 fn test_header_replace_all() {
   let mut n = Headers::new();
