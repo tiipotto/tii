@@ -62,7 +62,7 @@ pub fn serve_as_file_path(
   move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
     let file_path =
-      request.request_head().path.strip_prefix('/').unwrap_or(&request.request_head().path);
+      request.request_head().path().strip_prefix('/').unwrap_or(request.request_head().path());
     let path = format!("{}/{}", directory_path, file_path);
 
     let path_buf = PathBuf::from(path);
@@ -84,7 +84,7 @@ pub fn serve_dir(
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
     let uri_without_route = request
       .request_head()
-      .path
+      .path()
       .strip_prefix(route_without_wildcard)
       .unwrap_or(request.routed_path());
 
@@ -94,7 +94,7 @@ pub fn serve_dir(
       match located {
         LocatedPath::Directory => Ok(
           Response::new(StatusCode::MovedPermanently)
-            .with_header(HeaderName::Location, format!("{}/", &request.request_head().path)),
+            .with_header(HeaderName::Location, format!("{}/", &request.request_head().path()))?,
         ),
         LocatedPath::File(path) => try_file_open(&path),
       }

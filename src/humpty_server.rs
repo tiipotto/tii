@@ -102,8 +102,8 @@ impl HumptyServer {
       count += 1;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
-      if context.request_head().version == HttpVersion::Http11
-        && context.request_head().headers.get(&HeaderName::Upgrade) == Some("websocket")
+      if context.request_head().version() == HttpVersion::Http11
+        && context.request_head().get_header(&HeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -121,11 +121,10 @@ impl HumptyServer {
       }
 
       // Is the keep alive header set?
-      let mut keep_alive = context.request_head().version == HttpVersion::Http11
+      let mut keep_alive = context.request_head().version() == HttpVersion::Http11
         && context
           .request_head()
-          .headers
-          .get(&HeaderName::Connection)
+          .get_header(&HeaderName::Connection)
           .map(|e| e.eq_ignore_ascii_case("keep-alive"))
           .unwrap_or_default();
 
@@ -149,7 +148,7 @@ impl HumptyServer {
 
       keep_alive &= !context.is_connection_close_forced();
 
-      if context.request_head().version == HttpVersion::Http11 {
+      if context.request_head().version() == HttpVersion::Http11 {
         let previous_headers = if keep_alive {
           response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
         } else {
@@ -167,7 +166,7 @@ impl HumptyServer {
 
       trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
 
-      response.write_to(context.request_head().version, stream.as_stream_write()).inspect_err(
+      response.write_to(context.request_head().version(), stream.as_stream_write()).inspect_err(
         |e| {
           trace_log!("response.write_to {}", e);
         },
@@ -195,8 +194,8 @@ impl HumptyServer {
 
     error_log!(
       "Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
-      &request.request_head().method,
-      request.request_head().path.as_str(),
+      &request.request_head().method(),
+      request.request_head().path(),
       error
     );
 

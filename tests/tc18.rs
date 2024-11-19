@@ -13,8 +13,8 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version);
-  assert_eq!(ctx.request_head().method.as_str(), "QUERY");
+  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(ctx.request_head().method().as_str(), "QUERY");
 
   let mut buf = Vec::new();
   let rt = ctx.request_body().unwrap().read_to_end(&mut buf).unwrap();

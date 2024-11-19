@@ -15,18 +15,14 @@ pub(crate) fn default_error_handler(
 ) -> HumptyResult<Response> {
   error_log!(
     "Internal Server Error {} {} {:?}",
-    &request.request_head().method,
-    request.request_head().path.as_str(),
+    &request.request_head().method(),
+    request.request_head().path(),
     error
   );
   Ok(Response::new(StatusCode::InternalServerError))
 }
 
 pub(crate) fn default_not_found_handler(request: &mut RequestContext) -> HumptyResult<Response> {
-  info_log!(
-    "Not found {} {}",
-    &request.request_head().method,
-    request.request_head().path.as_str()
-  );
+  info_log!("Not found {} {}", &request.request_head().method(), request.request_head().path());
   Ok(Response::new(StatusCode::NotFound))
 }

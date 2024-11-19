@@ -48,7 +48,7 @@ fn routing(req: &mut RequestContext) -> HumptyResult<Option<Response>> {
 
 fn resp(req: &mut RequestContext, mut resp: Response) -> HumptyResult<Response> {
   info!("resp {:?}", req);
-  resp.headers.add("X-Magic", "true magic");
+  resp.add_header("X-Magic", "true magic")?;
   Ok(resp)
 }
 
@@ -63,7 +63,7 @@ fn contact(_: &RequestContext) -> HumptyResult<Response> {
 fn generic(request: &RequestContext) -> HumptyResult<Response> {
   let html = format!(
     "<html><body><h1>You just requested {}.</h1></body></html>",
-    request.request_head().path
+    request.request_head().path()
   );
 
   Ok(Response::ok(html, MimeType::TextHtml))

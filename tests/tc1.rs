@@ -12,17 +12,18 @@ mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+#[allow(deprecated)]
 fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http09, ctx.request_head().version);
-  assert!(ctx.request_head().headers.is_empty());
+  assert_eq!(HttpVersion::Http09, ctx.request_head().version());
+  assert!(ctx.request_head().get_all_headers().next().is_none());
   let hdr_clone = ctx.request_head().clone();
-  assert!(hdr_clone.headers.is_empty());
-  assert_eq!(hdr_clone.status_line, "GET /dummy");
-  assert_eq!(hdr_clone.version, HttpVersion::Http09);
-  assert_eq!(hdr_clone.path, "/dummy");
-  assert_eq!(hdr_clone.method, Method::Get);
-  assert_eq!(hdr_clone.query, "");
+  assert!(hdr_clone.get_all_headers().next().is_none());
+  assert_eq!(hdr_clone.raw_status_line(), "GET /dummy");
+  assert_eq!(hdr_clone.version(), HttpVersion::Http09);
+  assert_eq!(hdr_clone.path(), "/dummy");
+  assert_eq!(hdr_clone.method(), &Method::Get);
+  assert_eq!(hdr_clone.raw_query(), "");
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
 

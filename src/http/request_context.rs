@@ -42,7 +42,7 @@ impl RequestContext {
     let address = stream.peer_addr()?;
     let req = RequestHead::new(stream)?;
 
-    if req.version == HttpVersion::Http09 {
+    if req.version() == HttpVersion::Http09 {
       return Ok(RequestContext {
         id,
         address,
@@ -55,8 +55,8 @@ impl RequestContext {
       });
     }
 
-    if req.version == HttpVersion::Http11 {
-      match req.headers.get(&HeaderName::TransferEncoding) {
+    if req.version() == HttpVersion::Http11 {
+      match req.get_header(&HeaderName::TransferEncoding) {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
@@ -79,12 +79,12 @@ impl RequestContext {
       }
     }
 
-    if let Some(content_length) = req.headers.get(&HeaderName::ContentLength) {
+    if let Some(content_length) = req.get_header(&HeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
         HumptyError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
-      let is_http_10 = req.version == HttpVersion::Http10;
+      let is_http_10 = req.version() == HttpVersion::Http10;
 
       if content_length == 0 {
         return Ok(RequestContext {

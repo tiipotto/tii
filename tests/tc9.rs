@@ -33,7 +33,7 @@ pub fn tc9() {
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-  assert_eq!(err.to_string(), "StatusLineIsNotUsAscii");
+  assert_eq!(err.to_string(), "StatusLineContainsInvalidBytes");
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");
 }
