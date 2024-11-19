@@ -43,6 +43,7 @@ pub enum RequestHeadParsingError {
   HttpVersionNotSupported(String),
   TransferEncodingNotSupported(String),
   InvalidContentLength(String),
+  InvalidQueryString(String),
 }
 
 impl Display for RequestHeadParsingError {

@@ -7,7 +7,7 @@ use crate::http::method::Method;
 use crate::http::mime::{AcceptMime, MimeType, QValue};
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
-use crate::util::unwrap_some;
+use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
 use std::fmt::{Display, Formatter};
 
@@ -80,7 +80,6 @@ impl HttpVersion {
 
 /// Represents a request to the server.
 /// Contains parsed information about the request's data.
-//TODO make it harder/impossible to put this struct into an illegal state.
 #[derive(Clone, Debug)]
 pub struct RequestHead {
   /// The method used in making the request, e.g. "GET".
@@ -97,20 +96,16 @@ pub struct RequestHead {
   /// The path to which the request was made.
   path: String,
 
-  /// The raw query string of the request.
-  query: String,
+  /// Vec of query parameters, key=value in order of appearance.
+  query: Vec<(String, String)>,
 
   accept: Vec<AcceptMime>,
 
-  // Vec of query parameters, key=value in order of appearance.
-  //TODO implement this
-  //pub query_params: Vec<(String, String)>,
   /// A list of headers included in the request.
   headers: Headers,
 }
 
 fn parse_status_line(start_line_buf: &Vec<u8>) -> HumptyResult<&str> {
-  // TODO this must be US-ASCII not utf-8!
   for n in start_line_buf {
     // https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters
     // plus space char which we check later...
@@ -161,6 +156,80 @@ fn parse_status_line(start_line_buf: &Vec<u8>) -> HumptyResult<&str> {
   )
 }
 
+fn parse_raw_query(raw_query: &str) -> HumptyResult<Vec<(String, String)>> {
+  if raw_query.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let mut query = Vec::new();
+  let mut current_key = Vec::new();
+  let mut current_value = Vec::new();
+  let mut matching_value = false;
+  for n in raw_query.as_bytes() {
+    match *n {
+      b'=' => {
+        if matching_value {
+          return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
+        }
+        matching_value = true;
+      }
+      b'&' => {
+        if !matching_value {
+          return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
+        }
+
+        let key = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_key.as_slice())))
+          .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
+          .to_string();
+
+        let value = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_value.as_slice())))
+          .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
+          .to_string();
+
+        query.push((key, value));
+
+        matching_value = false;
+        current_key = Vec::new();
+        current_value = Vec::new()
+      }
+      b'-' | b'.' | b'_' | b'~' | b'/' => {
+        if matching_value {
+          current_value.push(*n);
+        } else {
+          current_key.push(*n);
+        }
+      }
+      other => {
+        if !other.is_ascii_alphanumeric() {
+          return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
+        }
+
+        if matching_value {
+          current_value.push(*n);
+        } else {
+          current_key.push(*n);
+        }
+      }
+    }
+  }
+
+  if !matching_value {
+    return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
+  }
+
+  let key = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_key.as_slice())))
+    .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
+    .to_string();
+
+  let value = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_value.as_slice())))
+    .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
+    .to_string();
+
+  query.push((key, value));
+
+  Ok(query)
+}
+
 impl RequestHead {
   /// Attempts to read and parse one HTTP request from the given reader.
   pub fn new(stream: &dyn ConnectionStream) -> HumptyResult<Self> {
@@ -204,7 +273,8 @@ impl RequestHead {
       })?
       .to_string();
 
-    let query = uri_iter.next().unwrap_or("").to_string();
+    let raw_query = uri_iter.next().unwrap_or("");
+    let query = parse_raw_query(raw_query)?;
 
     let mut headers = Headers::new();
 
@@ -292,10 +362,45 @@ impl RequestHead {
     self.path = path.to_string();
   }
 
-  /// Gets the raw query string.
-  #[deprecated] // Will be replaced by parsed query parameters.
-  pub fn raw_query(&self) -> &str {
-    self.query.as_str()
+  /// Gets the query parameters.
+  pub fn query(&self) -> &[(String, String)] {
+    self.query.as_slice()
+  }
+
+  /// Gets the first query parameter with the given key.
+  pub fn get_query_param(&self, key: impl AsRef<str>) -> Option<&str> {
+    let key = key.as_ref();
+    for (k, v) in &self.query {
+      if k == key {
+        return Some(v.as_str());
+      }
+    }
+
+    None
+  }
+
+  /// Gets all query params in order of appearance that contain the given key.
+  /// Returns empty vec if the key doesn't exist.
+  pub fn get_query_params(&self, key: impl AsRef<str>) -> Vec<&str> {
+    let mut result = Vec::new();
+    let key = key.as_ref();
+    for (k, v) in &self.query {
+      if k == key {
+        result.push(v.as_str());
+      }
+    }
+
+    result
+  }
+
+  /// Gets the mutable Vec that contains the query parameters.
+  pub fn query_mut(&mut self) -> &mut Vec<(String, String)> {
+    &mut self.query
+  }
+
+  /// Set the query parameters
+  pub fn set_query(&mut self, query: Vec<(String, String)>) {
+    self.query = query;
   }
 
   /// gets the method of the request.

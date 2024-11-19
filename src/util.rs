@@ -25,6 +25,14 @@ pub fn unwrap_some<T>(some: Option<T>) -> T {
   do_abort();
 }
 
+pub fn unwrap_ok<T, E>(some: Result<T, E>) -> T {
+  if let Ok(t) = some {
+    return t;
+  }
+
+  do_abort();
+}
+
 pub fn unwrap_poison<T>(result: LockResult<T>) -> io::Result<T> {
   result.map_err(|_| io::Error::new(io::ErrorKind::Other, "Poisoned Mutex"))
 }

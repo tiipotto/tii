@@ -23,7 +23,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   assert_eq!(hdr_clone.version(), HttpVersion::Http09);
   assert_eq!(hdr_clone.path(), "/dummy");
   assert_eq!(hdr_clone.method(), &Method::Get);
-  assert_eq!(hdr_clone.raw_query(), "");
+  assert_eq!(hdr_clone.query().len(), 0);
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
 
