@@ -22,10 +22,9 @@ fn test_request_from_stream() {
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
-  let expected_query: String = "foo=bar".into();
   assert_eq!(request.method(), &Method::Get);
   assert_eq!(request.path(), expected_uri);
-  assert_eq!(request.raw_query(), expected_query);
+  assert_eq!(request.query(), &[("foo".to_string(), "bar".to_string())]);
   assert_eq!(request.version(), HttpVersion::Http11);
 
   let mut expected_headers = Vec::new();
