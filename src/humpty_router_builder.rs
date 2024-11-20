@@ -96,7 +96,7 @@ impl HumptyRouteBuilder {
 
   /// Add a mime type which the endpoint may produce.
   pub fn produces(mut self, mime: impl Into<AcceptMimeType>) -> Self {
-    self.consumes.insert(mime.into());
+    self.produces.insert(mime.into());
     self
   }
 
