@@ -1,3 +1,4 @@
+use humpty::http::method::Method;
 use humpty::http::mime::{AcceptMimeType, MimeType};
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
@@ -7,7 +8,6 @@ use log::info;
 use std::error::Error;
 use std::net::TcpListener;
 use std::{io, thread};
-use humpty::http::method::Method;
 
 fn main() -> Result<(), Box<dyn Error>> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .route_get("/only/get", echo_method)
         // Humpty also supports non-standard custom methods.
         .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)
-          // Begin is just a visual indent so you can group several other things together.
+        // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
         .begin(|router| {
           router
@@ -61,7 +61,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             .produces(MimeType::TextHtml)
             .endpoint(generic)
         })
-
         // There 3 are not endpoints, they are filters etc.
         .with_pre_routing_request_filter(pre_routing)
         .with_request_filter(routing)
