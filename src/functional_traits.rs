@@ -105,16 +105,15 @@ pub trait RequestFilter: Send + Sync {
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
 }
 
-impl<F, R> RequestFilter for F where
-    R: IntoRequestFilterResult,
-    F: Fn(&mut RequestContext) -> R + Send + Sync,
+impl<F, R> RequestFilter for F
+where
+  R: IntoRequestFilterResult,
+  F: Fn(&mut RequestContext) -> R + Send + Sync,
 {
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
     self(request).into()
   }
 }
-
-
 
 /// Trait for a filter that may alter a Response after an endpoint has been called or a filter has aborted the request.
 /// Use cases: (Non-Exhaustive)
@@ -129,10 +128,10 @@ pub trait ResponseFilter: Send + Sync {
   fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response>;
 }
 
-impl<F, R> ResponseFilter
-  for F where
-    R: Into<HumptyResult<Response>>,
-    F: Fn(&mut RequestContext, Response) -> R + Send + Sync
+impl<F, R> ResponseFilter for F
+where
+  R: Into<HumptyResult<Response>>,
+  F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
 {
   fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response> {
     self(request, response).into()
