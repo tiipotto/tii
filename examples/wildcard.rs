@@ -35,7 +35,7 @@ const HTML: &str = r##"
 
 fn main() -> Result<(), Box<dyn Error>> {
   let app = HumptyBuilder::default()
-    .router(|router| router.with_route("/", home).with_route("/wildcard/*", wildcard))
+    .router(|router| router.route_any("/", home).route_any("/wildcard/*", wildcard))
     .build_arc();
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;

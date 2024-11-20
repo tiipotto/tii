@@ -37,12 +37,13 @@ pub trait RequestHandler: Send + Sync {
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response>;
 }
 
-impl<F> RequestHandler for F
+impl<F, R> RequestHandler for F
 where
-  F: Fn(&RequestContext) -> HumptyResult<Response> + Send + Sync,
+  R: Into<HumptyResult<Response>>,
+  F: Fn(&RequestContext) -> R + Send + Sync,
 {
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
-    self(request)
+    self(request).into()
   }
 }
 

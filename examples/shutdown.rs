@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let (shutdown_app, app_rx) = mpsc::sync_channel(1);
 
   let app = HumptyBuilder::default()
-    .router(|router| router.with_route("/*", hello))
+    .router(|router| router.route_any("/*", hello))
     .with_connection_timeout(Some(Duration::from_secs(5)))
     .build_arc();
 

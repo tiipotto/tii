@@ -57,8 +57,10 @@ impl Error for RequestHeadParsingError {}
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum UserError {
+  IllegalContentTypeHeaderValueSet(String),
   IllegalAcceptHeaderValueSet(String),
   MultipleAcceptHeaderValuesSet(String, String),
+  MultipleContentTypeHeaderValuesSet(String, String),
   ImmutableRequestHeaderModified(HeaderName, String),
   ImmutableRequestHeaderRemoved(HeaderName),
   ImmutableResponseHeaderModified(HeaderName),

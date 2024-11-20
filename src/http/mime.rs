@@ -1,16 +1,23 @@
 //! Provides functionality for handling MIME types.
 
+use crate::util::unwrap_some;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
 /// QValue is defined as a fixed point number with up to 3 digits
 /// after comma. with a valid range from 0 to 1.
 /// We represent this as an u16 from 0 to 1000.
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
 #[repr(transparent)]
 pub struct QValue(u16);
 
 impl QValue {
+  /// q=1.0
+  pub const MAX: QValue = QValue(1000);
+
+  /// q=0.0
+  pub const MIN: QValue = QValue(0);
+
   /// Parses the QValue in http header representation.
   /// Note: this is without the "q=" prefix!
   /// Returns none if the value is either out of bounds or otherwise invalid.
@@ -104,11 +111,84 @@ impl Default for QValue {
   }
 }
 
-#[derive(Clone, PartialEq, Debug, Eq)]
-enum AcceptMimeType {
+/// Version of MimeType that can contain "*" symbols.
+#[derive(Clone, PartialEq, Debug, Eq, Hash)]
+pub enum AcceptMimeType {
+  /// video/* or text/* or ...
   GroupWildcard(MimeGroup),
+  /// text/html or application/json or ...
   Specific(MimeType),
+  /// */*
   Wildcard,
+}
+
+impl AcceptMimeType {
+  /// Parses an accept mime type.
+  pub fn parse(value: impl AsRef<str>) -> Option<AcceptMimeType> {
+    let mime = value.as_ref();
+    let mime = mime.split_once(";").map(|(mime, _)| mime).unwrap_or(mime);
+
+    if mime == "*/*" {
+      return Some(AcceptMimeType::Wildcard);
+    }
+    match MimeType::parse(mime) {
+      None => match MimeGroup::parse(mime) {
+        Some(group) => {
+          if &mime[group.as_str().len()..] != "/*" {
+            return None;
+          }
+
+          Some(AcceptMimeType::GroupWildcard(group))
+        }
+        None => None,
+      },
+      Some(mime) => Some(AcceptMimeType::Specific(mime)),
+    }
+  }
+
+  /// Returns true if this AcceptMimeType permits the given mime type.
+  pub fn permits_specific(&self, mime_type: &MimeType) -> bool {
+    match self {
+      AcceptMimeType::GroupWildcard(group) => group == mime_type.mime_group(),
+      AcceptMimeType::Specific(mime) => mime == mime_type,
+      AcceptMimeType::Wildcard => true,
+    }
+  }
+
+  /// Returns true if this AcceptMimeType will accept ANY mime from the given group.
+  pub fn permits_group(&self, mime_group: &MimeGroup) -> bool {
+    match self {
+      AcceptMimeType::GroupWildcard(group) => group == mime_group,
+      AcceptMimeType::Specific(_) => false,
+      AcceptMimeType::Wildcard => true,
+    }
+  }
+
+  /// Returns true if this AcceptMimeType will permit ANY mime type permitted by the other AcceptMimeType.
+  pub fn permits(&self, mime_type: &AcceptMimeType) -> bool {
+    match mime_type {
+      AcceptMimeType::GroupWildcard(group) => self.permits_group(group),
+      AcceptMimeType::Specific(mime) => self.permits_specific(mime),
+      AcceptMimeType::Wildcard => matches!(self, AcceptMimeType::Wildcard),
+    }
+  }
+}
+
+impl Display for AcceptMimeType {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      AcceptMimeType::GroupWildcard(group) => {
+        f.write_str(group.as_str())?;
+        f.write_str("/*")?;
+      }
+      AcceptMimeType::Specific(mime) => {
+        f.write_str(mime.as_str())?;
+      }
+      AcceptMimeType::Wildcard => f.write_str("*/*")?,
+    }
+
+    Ok(())
+  }
 }
 
 ///
@@ -116,24 +196,24 @@ enum AcceptMimeType {
 /// # See
 /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
 #[derive(Clone, PartialEq, Debug, Eq)]
-pub struct AcceptMime {
+pub struct AcceptQualityMimeType {
   value: AcceptMimeType,
   q: QValue,
 }
 
-impl PartialOrd<Self> for AcceptMime {
+impl PartialOrd<Self> for AcceptQualityMimeType {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for AcceptMime {
+impl Ord for AcceptQualityMimeType {
   fn cmp(&self, other: &Self) -> Ordering {
     other.q.cmp(&self.q)
   }
 }
 
-impl AcceptMime {
+impl AcceptQualityMimeType {
   /// This fn parses an Accept header value from a client http request.
   /// The returned Vec is sorted in descending order of quality value q.
   pub fn parse(value: impl AsRef<str>) -> Option<Vec<Self>> {
@@ -154,7 +234,7 @@ impl AcceptMime {
         };
 
         if mime == "*/*" {
-          data.push(AcceptMime { value: AcceptMimeType::Wildcard, q: qvalue });
+          data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: qvalue });
           continue;
         }
 
@@ -164,18 +244,23 @@ impl AcceptMime {
               if &mime[group.as_str().len()..] != "/*" {
                 return None;
               }
-              data.push(AcceptMime { value: AcceptMimeType::GroupWildcard(group), q: qvalue })
+              data.push(AcceptQualityMimeType {
+                value: AcceptMimeType::GroupWildcard(group),
+                q: qvalue,
+              })
             }
             None => return None,
           },
-          Some(mime) => data.push(AcceptMime { value: AcceptMimeType::Specific(mime), q: qvalue }),
+          Some(mime) => {
+            data.push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q: qvalue })
+          }
         };
 
         continue;
       }
 
       if mime == "*/*" {
-        data.push(AcceptMime { value: AcceptMimeType::Wildcard, q: QValue::default() });
+        data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: QValue::default() });
         continue;
       }
 
@@ -185,16 +270,17 @@ impl AcceptMime {
             if &mime[group.as_str().len()..] != "/*" {
               return None;
             }
-            data.push(AcceptMime {
+            data.push(AcceptQualityMimeType {
               value: AcceptMimeType::GroupWildcard(group),
               q: QValue::default(),
             })
           }
           None => return None,
         },
-        Some(mime) => {
-          data.push(AcceptMime { value: AcceptMimeType::Specific(mime), q: QValue::default() })
-        }
+        Some(mime) => data.push(AcceptQualityMimeType {
+          value: AcceptMimeType::Specific(mime),
+          q: QValue::default(),
+        }),
       };
     }
 
@@ -214,6 +300,11 @@ impl AcceptMime {
     }
 
     buffer
+  }
+
+  /// Gets the accept mime type without Q Value.
+  pub fn get_type(&self) -> &AcceptMimeType {
+    &self.value
   }
 
   /// Get the QValue of this accept mime.
@@ -254,40 +345,30 @@ impl AcceptMime {
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `*/*`
-  pub const fn wildcard(q: QValue) -> AcceptMime {
-    AcceptMime { value: AcceptMimeType::Wildcard, q }
+  pub const fn wildcard(q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/*` depending on MimeGroup.
-  pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptMime {
-    AcceptMime { value: AcceptMimeType::GroupWildcard(group), q }
+  pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::GroupWildcard(group), q }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/type` depending on MimeType.
-  pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptMime {
-    AcceptMime { value: AcceptMimeType::Specific(mime), q }
+  pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q }
   }
 }
 
-impl Default for AcceptMime {
+impl Default for AcceptQualityMimeType {
   fn default() -> Self {
-    AcceptMime::wildcard(QValue::default())
+    AcceptQualityMimeType::wildcard(QValue::default())
   }
 }
 
-impl Display for AcceptMime {
+impl Display for AcceptQualityMimeType {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    match &self.value {
-      AcceptMimeType::GroupWildcard(group) => {
-        f.write_str(group.as_str())?;
-        f.write_str("/*")?;
-      }
-      AcceptMimeType::Specific(mime) => {
-        f.write_str(mime.as_str())?;
-      }
-      AcceptMimeType::Wildcard => f.write_str("*/*")?,
-    }
-
+    std::fmt::Display::fmt(&self.value, f)?;
     if self.q.as_u16() != 1000 {
       f.write_str(";q=")?;
       f.write_str(self.q.as_str())?;
@@ -1226,6 +1307,11 @@ impl MimeType {
     }
   }
 
+  /// This fn parses the mime type and assumes that its in the format of a valid Content-Type header.
+  pub fn parse_from_content_type_header<T: AsRef<str>>(value: T) -> Option<Self> {
+    Self::parse(unwrap_some(value.as_ref().split(";").next())) //strips ; charset=utf-8 or ; boundry=..., which we don't care about here.
+  }
+
   /// Parses the string value and returns a mime type.
   /// Returns none for invalid mime types.
   pub fn parse<T: AsRef<str>>(value: T) -> Option<Self> {
@@ -1356,7 +1442,7 @@ impl MimeType {
 }
 
 impl Display for MimeType {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }
 }
@@ -1395,6 +1481,30 @@ const fn check_header_byte(char: u8) -> bool {
       | b'}'
       | 0x7F
   )
+}
+
+impl From<MimeType> for AcceptMimeType {
+  fn from(value: MimeType) -> Self {
+    AcceptMimeType::Specific(value)
+  }
+}
+
+impl From<MimeGroup> for AcceptMimeType {
+  fn from(value: MimeGroup) -> Self {
+    AcceptMimeType::GroupWildcard(value)
+  }
+}
+
+impl From<MimeType> for MimeGroup {
+  fn from(value: MimeType) -> Self {
+    value.mime_group().clone()
+  }
+}
+
+impl From<AcceptQualityMimeType> for AcceptMimeType {
+  fn from(value: AcceptQualityMimeType) -> Self {
+    value.value
+  }
 }
 
 #[cfg(test)]

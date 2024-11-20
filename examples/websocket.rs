@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let app = HumptyBuilder::default()
     .router(|router| {
       router
-        .with_route("/*", handlers::serve_dir("./examples/static/ws"))
+        .route_any("/*", handlers::serve_dir("./examples/static/ws"))
         .with_websocket_route("/ws", websocket_handler(echo_handler))
     })
     .build_arc();

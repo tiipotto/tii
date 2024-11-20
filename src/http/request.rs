@@ -4,7 +4,7 @@ use crate::http::cookie::Cookie;
 use crate::http::headers::{Header, HeaderLike, HeaderName, Headers};
 use crate::http::method::Method;
 
-use crate::http::mime::{AcceptMime, MimeType, QValue};
+use crate::http::mime::{AcceptQualityMimeType, MimeType, QValue};
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
 use crate::util::{unwrap_ok, unwrap_some};
@@ -99,7 +99,9 @@ pub struct RequestHead {
   /// Vec of query parameters, key=value in order of appearance.
   query: Vec<(String, String)>,
 
-  accept: Vec<AcceptMime>,
+  accept: Vec<AcceptQualityMimeType>,
+
+  content_type: Option<MimeType>,
 
   /// A list of headers included in the request.
   headers: Headers,
@@ -291,7 +293,8 @@ impl RequestHead {
         query,
         version,
         headers,
-        accept: vec![AcceptMime::from_mime(MimeType::TextHtml, QValue::default())], // Http 0.9 only accepts html.
+        content_type: None,
+        accept: vec![AcceptQualityMimeType::from_mime(MimeType::TextHtml, QValue::default())], // Http 0.9 only accepts html.
         status_line: status_line.to_string(),
       });
     }
@@ -325,7 +328,7 @@ impl RequestHead {
     }
 
     let accept_hdr = headers.get(HeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
-    let accept = AcceptMime::parse(accept_hdr);
+    let accept = AcceptQualityMimeType::parse(accept_hdr);
     if accept.is_none() {
       // TODO should this be a hard error?
       warn_log!(
@@ -335,9 +338,31 @@ impl RequestHead {
       );
     }
 
-    let accept = accept.unwrap_or_else(|| vec![AcceptMime::default()]);
+    let accept = accept.unwrap_or_else(|| vec![AcceptQualityMimeType::default()]);
 
-    Ok(Self { method, path, query, version, headers, accept, status_line: status_line.to_string() })
+    let content_type = headers.get(HeaderName::ContentType).map(|ctype_raw| {
+      let ctype = MimeType::parse_from_content_type_header(ctype_raw);
+      if ctype.is_none() {
+        warn_log!(
+         "Request to '{}' has invalid Content-Type header '{}' will assume 'Content-Type: application/octet-stream'",
+          path.as_str(),
+          ctype_raw
+        );
+      }
+
+      ctype.unwrap_or(MimeType::ApplicationOctetStream)
+    });
+
+    Ok(Self {
+      method,
+      path,
+      query,
+      version,
+      headers,
+      accept,
+      content_type,
+      status_line: status_line.to_string(),
+    })
   }
 
   /// get the http version this request was made in by the client.
@@ -437,14 +462,37 @@ impl RequestHead {
 
   /// Manipulates the accept header values.
   /// This also overwrites the actual accept header!
-  pub fn set_accept(&mut self, types: Vec<AcceptMime>) {
-    let hdr_value = AcceptMime::elements_to_header_value(&types);
+  pub fn set_accept(&mut self, types: Vec<AcceptQualityMimeType>) {
+    let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
     self.headers.set(HeaderName::Accept, hdr_value);
     self.accept = types;
   }
 
+  /// Returns the content type of the body if any.
+  /// This is usually equivalent to parsing the raw get_header() value of Content-Type.
+  /// The only case where this is different is if the request as received from the network had an invalid Content-Type value then
+  /// this value is ApplicationOctetStream even tho the raw header value is different.
+  /// This returns none if the Content-Type header was not present at all.
+  /// (For example ordinary GET requests do not have this header)
+  pub fn get_content_type(&self) -> Option<&MimeType> {
+    self.content_type.as_ref()
+  }
+
+  /// sets the content type header to given MimeType.
+  /// This will affect both the header and the return value of get_content_type.
+  pub fn set_content_type(&mut self, content_type: MimeType) {
+    self.headers.set(HeaderName::ContentType, content_type.as_str());
+    self.content_type = Some(content_type);
+  }
+
+  /// Removes the content type header. get_content_type will return None after this call.
+  pub fn remove_content_type(&mut self) {
+    self.content_type = None;
+    self.headers.remove(HeaderName::ContentType);
+  }
+
   /// Returns the acceptable mime types
-  pub fn get_accept(&self) -> &[AcceptMime] {
+  pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
     self.accept.as_slice()
   }
 
@@ -468,8 +516,13 @@ impl RequestHead {
     let hdr = name.to_header();
     match &hdr {
       HeaderName::Accept => {
-        self.accept = vec![AcceptMime::default()];
+        self.accept = vec![AcceptQualityMimeType::default()];
         self.headers.set(hdr, "*/*");
+        Ok(())
+      }
+      HeaderName::ContentType => {
+        self.headers.remove(hdr);
+        self.content_type = None;
         Ok(())
       }
       HeaderName::TransferEncoding => {
@@ -492,13 +545,20 @@ impl RequestHead {
     let hdr_value = value.as_ref();
     match &hdr {
       HeaderName::Accept => {
-        if let Some(accept) = AcceptMime::parse(hdr_value) {
+        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           self.accept = accept;
           self.headers.set(hdr, value);
           return Ok(());
         }
 
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+      }
+      HeaderName::ContentType => {
+        let mime = MimeType::parse(hdr_value)
+          .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
+        self.headers.set(HeaderName::ContentType, hdr_value);
+        self.content_type = Some(mime);
+        Ok(())
       }
       HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
         HeaderName::TransferEncoding,
@@ -522,7 +582,7 @@ impl RequestHead {
     let hdr_value = value.as_ref();
     match &hdr {
       HeaderName::Accept => {
-        if let Some(accept) = AcceptMime::parse(hdr_value) {
+        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
             return UserError::MultipleAcceptHeaderValuesSet(
               old_value.to_string(),
@@ -534,6 +594,19 @@ impl RequestHead {
           return Ok(());
         }
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
+      }
+      HeaderName::ContentType => {
+        let mime = MimeType::parse(hdr_value)
+          .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
+        if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
+          return UserError::MultipleContentTypeHeaderValuesSet(
+            old_value.to_string(),
+            hdr_value.to_string(),
+          )
+          .into();
+        }
+        self.content_type = Some(mime);
+        Ok(())
       }
       HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
         HeaderName::TransferEncoding,
