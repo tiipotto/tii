@@ -32,7 +32,7 @@ fn dummy_route_eof(ctx: &RequestContext) -> HumptyResult<Response> {
 #[test]
 pub fn tc21a() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\n\n\r\n");
   let con = stream.to_stream();
@@ -44,7 +44,7 @@ pub fn tc21a() {
 #[test]
 pub fn tc21b() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\r\r\n");
   let con = stream.to_stream();
@@ -56,7 +56,7 @@ pub fn tc21b() {
 #[test]
 pub fn tc21c() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\n\n");
   let con = stream.to_stream();
@@ -68,7 +68,7 @@ pub fn tc21c() {
 #[test]
 pub fn tc21d() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\r");
   let con = stream.to_stream();
@@ -80,7 +80,7 @@ pub fn tc21d() {
 #[test]
 pub fn tc21e() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\n\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -92,7 +92,7 @@ pub fn tc21e() {
 #[test]
 pub fn tc21f() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\r10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -104,7 +104,7 @@ pub fn tc21f() {
 #[test]
 pub fn tc21g() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame length
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -116,7 +116,7 @@ pub fn tc21g() {
 #[test]
 pub fn tc21h() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_eof)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_eof)).build();
   // INVALID Chunked frame EOF
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n");
   let con = stream.to_stream();
@@ -128,7 +128,7 @@ pub fn tc21h() {
 #[test]
 pub fn tc21i() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame length
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n0000000000000000005\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -140,7 +140,7 @@ pub fn tc21i() {
 #[test]
 pub fn tc21j() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame length
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\nzxi1\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -152,7 +152,7 @@ pub fn tc21j() {
 #[test]
 pub fn tc21k() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_eof)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_eof)).build();
   // INVALID Chunked frame length
   let stream = MockStream::with_str(
     "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n1234",
@@ -166,7 +166,7 @@ pub fn tc21k() {
 #[test]
 pub fn tc21l() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route_invalid_data)).build();
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route_invalid_data)).build();
   // INVALID Chunked frame length
   let n = "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5";
   let n2 = "\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n";

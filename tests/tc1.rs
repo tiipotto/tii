@@ -29,7 +29,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc1() {
-  let server = HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route)).build();
+  let server = HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).build();
 
   let stream = MockStream::with_str("GET /dummy\r\n");
   let con = stream.to_stream();

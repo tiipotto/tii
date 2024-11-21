@@ -237,7 +237,7 @@ impl Response {
 
   /// HTTP 402 Payment Required with body
   pub fn payment_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::PermanentRedirect)
+    Self::new(StatusCode::PaymentRequired)
       .with_body(body.into())
       .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
   }
@@ -362,6 +362,21 @@ impl Response {
   /// HTTP 413 Content Too Large without body
   pub fn content_too_large_no_body() -> Self {
     Self::new(StatusCode::ContentTooLarge)
+  }
+
+  /// HTTP 415 Unsupported Media Type with body
+  pub fn unsupported_media_type(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::UnsupportedMediaType)
+      .with_body(body.into())
+      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 415 Unsupported Media Type without body
+  pub fn unsupported_media_type_no_body() -> Response {
+    Self::new(StatusCode::UnsupportedMediaType)
   }
 
   ///Removes the body from the response

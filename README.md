@@ -113,9 +113,9 @@ Most single purpose applications will likely only have a single `Router`.
 `Router` itself is a Trait so you can fully customize what a `Router` might do,
 if you so desire. 
 
-Humpty provides one `Router` implementation which does path based
-endpoint matching. This means you can register endpoints by path to the `Router` and if
-the request matches the path then your endpoint gets called and can produce a `Response`.
+Humpty provides one `Router` implementation which does path, method and media type based
+endpoint matching. This means you can register endpoints by path, method and media type to the `Router` and if
+the request matches all desired criteria then your endpoint gets called and can produce a `Response`.
 
 In addition to doing path based request matching the Default Humpty Router also
 allows for you to provide custom handling for Paths that have no endpoint, 

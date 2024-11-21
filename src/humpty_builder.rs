@@ -13,10 +13,11 @@ pub struct HumptyBuilder {
   connection_timeout: Option<Duration>,
 }
 
-use crate::default_functions::{default_error_handler, default_not_found_handler};
+use crate::default_functions::{default_error_handler, default_fallback_not_found_handler};
 pub use crate::functional_traits::*;
 use crate::http::request_context::RequestContext;
 use crate::humpty_error::{HumptyError, HumptyResult};
+use crate::humpty_router::RouteHandler;
 use crate::humpty_router_builder::HumptyRouterBuilder;
 use crate::humpty_server::HumptyServer;
 
@@ -29,7 +30,10 @@ use crate::humpty_server::HumptyServer;
 ///
 pub type ErrorHandler = fn(&mut RequestContext, HumptyError) -> HumptyResult<Response>;
 
-/// Handler for request that didn't find anything
+/// Handler for request that couldn't route for some reason.
+pub type NotRouteableHandler = fn(&mut RequestContext, &[RouteHandler]) -> HumptyResult<Response>;
+
+/// Fallback handler if no router handled the request.
 pub type NotFoundHandler = fn(&mut RequestContext) -> HumptyResult<Response>;
 
 impl Default for HumptyBuilder {
@@ -38,7 +42,7 @@ impl Default for HumptyBuilder {
     Self {
       routers: Vec::new(),
       error_handler: default_error_handler,
-      not_found_handler: default_not_found_handler,
+      not_found_handler: default_fallback_not_found_handler,
       connection_timeout: None,
     }
   }

@@ -34,7 +34,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc22a() {
-  let server = HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route)).build();
+  let server = HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -45,7 +45,7 @@ pub fn tc22a() {
 
 #[test]
 pub fn tc22b() {
-  let server = HumptyBuilder::default().router(|rt| rt.with_route("/dummy", dummy_route)).build();
+  let server = HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nContent-Length: 21\r\n\r\n123451234567890123456");
   let con = stream.to_stream();

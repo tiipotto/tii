@@ -37,12 +37,13 @@ pub trait RequestHandler: Send + Sync {
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response>;
 }
 
-impl<F> RequestHandler for F
+impl<F, R> RequestHandler for F
 where
-  F: Fn(&RequestContext) -> HumptyResult<Response> + Send + Sync,
+  R: Into<HumptyResult<Response>>,
+  F: Fn(&RequestContext) -> R + Send + Sync,
 {
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
-    self(request)
+    self(request).into()
   }
 }
 
@@ -62,6 +63,33 @@ impl<F: Fn(&RequestContext) -> HumptyResult<bool> + Send + Sync> RouterFilter fo
   }
 }
 
+trait IntoRequestFilterResult {
+  fn into(self) -> HumptyResult<Option<Response>>;
+}
+
+impl IntoRequestFilterResult for Option<Response> {
+  fn into(self) -> HumptyResult<Option<Response>> {
+    Ok(self)
+  }
+}
+
+impl IntoRequestFilterResult for HumptyResult<Option<Response>> {
+  fn into(self) -> HumptyResult<Option<Response>> {
+    self
+  }
+}
+impl IntoRequestFilterResult for () {
+  fn into(self) -> HumptyResult<Option<Response>> {
+    Ok(None)
+  }
+}
+
+impl IntoRequestFilterResult for HumptyResult<()> {
+  fn into(self) -> HumptyResult<Option<Response>> {
+    self.map(|_| None)
+  }
+}
+
 /// Trait for a filter that may alter a request before its brought to an endpoint.
 /// It's also capable of aborting a request so that it's not processed further.
 /// Use cases: (Non-Exhaustive)
@@ -77,11 +105,13 @@ pub trait RequestFilter: Send + Sync {
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
 }
 
-impl<F: Fn(&mut RequestContext) -> HumptyResult<Option<Response>> + Send + Sync> RequestFilter
-  for F
+impl<F, R> RequestFilter for F
+where
+  R: IntoRequestFilterResult,
+  F: Fn(&mut RequestContext) -> R + Send + Sync,
 {
   fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
-    self(request)
+    self(request).into()
   }
 }
 
@@ -98,11 +128,13 @@ pub trait ResponseFilter: Send + Sync {
   fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response>;
 }
 
-impl<F: Fn(&mut RequestContext, Response) -> HumptyResult<Response> + Send + Sync> ResponseFilter
-  for F
+impl<F, R> ResponseFilter for F
+where
+  R: Into<HumptyResult<Response>>,
+  F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
 {
   fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response> {
-    self(request, response)
+    self(request, response).into()
   }
 }
 
