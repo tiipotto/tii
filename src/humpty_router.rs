@@ -12,7 +12,7 @@ use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use crate::{krauss, trace_log, util};
-use regex::Regex;
+use regex::{Error, Regex};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
@@ -65,8 +65,18 @@ impl PathPart {
       if part.starts_with("{") && part.ends_with("}") {
         let variable = &part[1..part.len() - 1];
         if let Some((name, regex)) = variable.split_once(":") {
-          let reg = Regex::new(regex).map_err(|e| {
-            InvalidPathError::InvalidRegex(full_path.to_string(), regex.to_string(), e)
+          let reg = Regex::new(regex).map_err(|e| match e {
+            Error::Syntax(syntax) => {
+              InvalidPathError::RegexSyntaxError(full_path.to_string(), regex.to_string(), syntax)
+            }
+            Error::CompiledTooBig(limit) => {
+              InvalidPathError::RegexTooBig(full_path.to_string(), regex.to_string(), limit)
+            }
+            _ => InvalidPathError::RegexSyntaxError(
+              full_path.to_string(),
+              regex.to_string(),
+              e.to_string(),
+            ),
           })?;
           if !path.is_empty() && path != "/" {
             parts.push(PathPart::RegexVariable(name.to_string(), reg));

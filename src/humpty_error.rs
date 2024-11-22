@@ -6,10 +6,9 @@ use crate::http::headers::HeaderName;
 use crate::http::method::Method;
 use crate::http::request::HttpVersion;
 use crate::http::Response;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::io;
 use std::io::ErrorKind;
 
@@ -76,81 +75,13 @@ impl Display for UserError {
 }
 impl Error for UserError {}
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum InvalidPathError {
   MorePartsAfterWildcard(String),
-  InvalidRegex(String, String, regex::Error),
+  RegexSyntaxError(String, String, String),
+  RegexTooBig(String, String, usize),
 }
-
-impl Hash for InvalidPathError {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    match self {
-      InvalidPathError::MorePartsAfterWildcard(path) => {
-        "MorePartsAfterWildcard".hash(state);
-        path.hash(state);
-      }
-      InvalidPathError::InvalidRegex(path, r, _) => {
-        "InvalidRegex".hash(state);
-        path.hash(state);
-        r.hash(state);
-      }
-    }
-  }
-}
-
-impl PartialEq<Self> for InvalidPathError {
-  fn eq(&self, other: &Self) -> bool {
-    match (self, other) {
-      (
-        InvalidPathError::MorePartsAfterWildcard(path),
-        InvalidPathError::MorePartsAfterWildcard(path2),
-      ) => path == path2,
-      (
-        InvalidPathError::InvalidRegex(path, reg, _),
-        InvalidPathError::InvalidRegex(path2, reg2, _),
-      ) => path == path2 && reg == reg2,
-      _ => false,
-    }
-  }
-}
-
-impl Eq for InvalidPathError {}
-
-impl PartialOrd<Self> for InvalidPathError {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(Self::cmp(self, other))
-  }
-}
-
-impl Ord for InvalidPathError {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (self, other) {
-      (
-        InvalidPathError::MorePartsAfterWildcard(path),
-        InvalidPathError::MorePartsAfterWildcard(path2),
-      ) => path.cmp(path2),
-      (InvalidPathError::MorePartsAfterWildcard(_), InvalidPathError::InvalidRegex(_, _, _)) => {
-        Ordering::Greater
-      }
-
-      (
-        InvalidPathError::InvalidRegex(path, reg, _),
-        InvalidPathError::InvalidRegex(path2, reg2, _),
-      ) => {
-        let ord = path.cmp(path2);
-        if matches!(ord, Ordering::Equal) {
-          return reg.cmp(reg2);
-        }
-        ord
-      }
-      (InvalidPathError::InvalidRegex(_, _, _), InvalidPathError::MorePartsAfterWildcard(_)) => {
-        Ordering::Less
-      }
-    }
-  }
-}
-
 impl Display for InvalidPathError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     //TODO make this not shit
