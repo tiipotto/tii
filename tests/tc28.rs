@@ -18,15 +18,15 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   }
   assert_eq!(ctx.get_path_param("regex2"), Some("hello/world"));
 
-
-
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from(format!("Okay! {}", regex1))))
 }
 
 #[test]
 pub fn tc28() {
   let server = HumptyBuilder::default()
-    .router(|rt| rt.route_any("/dummy/{param1}/{param2}/{regex1:^([1-9][0-9]*)|0$}/{regex2:.*}", dummy_route))
+    .router(|rt| {
+      rt.route_any("/dummy/{param1}/{param2}/{regex1:^([1-9][0-9]*)|0$}/{regex2:.*}", dummy_route)
+    })
     .expect("ERROR")
     .build();
 

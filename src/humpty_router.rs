@@ -89,7 +89,7 @@ impl PathPart {
     match self {
       PathPart::Wildcard => true,
       PathPart::RegexTailVariable(_, _) => true,
-      _=> false,
+      _ => false,
     }
   }
   fn matches(

@@ -242,7 +242,7 @@ impl RequestContext {
   /// get that path param key value pairs
   pub fn get_path_params(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_> {
     match self.path_params.as_ref() {
-      Some(props) => Box::new(props.iter().map(|(k,v)| (k.as_str(), v.as_str()))),
+      Some(props) => Box::new(props.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
       None => Box::new(std::iter::empty()),
     }
   }
