@@ -86,11 +86,7 @@ impl PathPart {
   }
 
   const fn is_tail(&self) -> bool {
-    match self {
-      PathPart::Wildcard => true,
-      PathPart::RegexTailVariable(_, _) => true,
-      _ => false,
-    }
+    matches!(self, PathPart::Wildcard | PathPart::RegexTailVariable(_, _))
   }
   fn matches(
     &self,
