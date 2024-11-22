@@ -8,6 +8,7 @@ use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::humpty_server::ConnectionStreamMetadata;
 use crate::stream::ConnectionStream;
 use crate::util;
+use crate::util::unwrap_some;
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
@@ -26,6 +27,8 @@ pub struct RequestContext {
   stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
 
   routed_path: Option<String>,
+
+  path_params: Option<HashMap<String, String>>,
 
   ///TODO the key may be a candidate for Rc<str> instead of "String"?
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
@@ -52,6 +55,7 @@ impl RequestContext {
         properties: None,
         routed_path: None,
         stream_meta,
+        path_params: None,
       });
     }
 
@@ -68,6 +72,7 @@ impl RequestContext {
             properties: None,
             routed_path: None,
             stream_meta,
+            path_params: None,
           });
         }
         Some(other) => {
@@ -96,6 +101,7 @@ impl RequestContext {
           properties: None,
           routed_path: None,
           stream_meta,
+          path_params: None,
         });
       }
 
@@ -109,6 +115,7 @@ impl RequestContext {
         properties: None,
         routed_path: None,
         stream_meta,
+        path_params: None,
       });
     }
 
@@ -121,6 +128,7 @@ impl RequestContext {
       properties: None,
       routed_path: None,
       stream_meta,
+      path_params: None,
     })
   }
 
@@ -221,6 +229,43 @@ impl RequestContext {
   /// Get the routed path, yields "" before routing.
   pub fn routed_path(&self) -> &str {
     self.routed_path.as_deref().unwrap_or("")
+  }
+
+  /// get the path param keys.
+  pub fn get_path_param_keys(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+    match self.path_params.as_ref() {
+      Some(props) => Box::new(props.iter().map(|(k, _)| k.as_str())),
+      None => Box::new(std::iter::empty()),
+    }
+  }
+
+  /// get that path param key value pairs
+  pub fn get_path_params(&self) -> Box<dyn Iterator<Item = (&str, &str)> + '_> {
+    match self.path_params.as_ref() {
+      Some(props) => Box::new(props.iter().map(|(k,v)| (k.as_str(), v.as_str()))),
+      None => Box::new(std::iter::empty()),
+    }
+  }
+
+  /// Gets a path param or None
+  pub fn get_path_param(&self, asr: impl AsRef<str>) -> Option<&str> {
+    if let Some(path) = self.path_params.as_ref() {
+      return path.get(asr.as_ref()).map(|e| e.as_str());
+    }
+
+    None
+  }
+
+  /// Sets a path param.
+  pub fn set_path_param(&mut self, key: impl ToString, value: impl ToString) -> Option<String> {
+    if let Some(path) = self.path_params.as_mut() {
+      return path.insert(key.to_string(), value.to_string());
+    }
+
+    self.path_params = Some(HashMap::new());
+    unwrap_some(self.path_params.as_mut()).insert(key.to_string(), value.to_string());
+
+    None
   }
 
   /// Sets the routed path, this is called after routing is performed.

@@ -8,38 +8,160 @@ use crate::http::mime::{AcceptMimeType, QValue};
 use crate::http::request_context::RequestContext;
 use crate::http::Response;
 use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
-use crate::humpty_error::{HumptyError, HumptyResult};
+use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError};
 use crate::stream::ConnectionStream;
+use crate::util::unwrap_some;
 use crate::{krauss, trace_log, util};
+use regex::Regex;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+
+enum PathPart {
+  Literal(String),
+  Variable(String),
+  Wildcard,
+  RegexVariable(String, Regex),
+  RegexTailVariable(String, Regex),
+}
+
+impl PathPart {
+  fn parse(path: impl AsRef<str>) -> HumptyResult<Vec<PathPart>> {
+    let mut path = path.as_ref();
+    let full_path = path;
+    if path == "/" || path.is_empty() {
+      return Ok(Vec::new());
+    }
+
+    if path.starts_with("/") {
+      path = &path[1..];
+    }
+
+    let mut parts = Vec::new();
+    loop {
+      if path.is_empty() || path == "/" {
+        return Ok(parts);
+      }
+
+      let part = if let Some(idx) = path.find("/") {
+        let part = &path[0..idx];
+        path = &path[idx + 1..];
+        part
+      } else {
+        let part = path;
+        path = "";
+        part
+      };
+
+      if part == "*" {
+        parts.push(PathPart::Wildcard);
+        if !path.is_empty() && path != "/" {
+          return Err(InvalidPathError::MorePartsAfterWildcard(full_path.to_string()).into());
+        }
+        return Ok(parts);
+      }
+
+      if part.starts_with("{") && part.ends_with("}") {
+        let variable = &part[1..part.len() - 1];
+        if let Some((name, regex)) = variable.split_once(":") {
+          let reg = Regex::new(regex).map_err(|e| {
+            InvalidPathError::InvalidRegex(full_path.to_string(), regex.to_string(), e)
+          })?;
+          if !path.is_empty() && path != "/" {
+            parts.push(PathPart::RegexVariable(name.to_string(), reg));
+            continue;
+          }
+
+          parts.push(PathPart::RegexTailVariable(name.to_string(), reg));
+          continue;
+        }
+
+        parts.push(PathPart::Variable(variable.to_string()));
+        continue;
+      }
+
+      parts.push(PathPart::Literal(part.to_string()));
+    }
+  }
+
+  const fn is_tail(&self) -> bool {
+    match self {
+      PathPart::Wildcard => true,
+      PathPart::RegexTailVariable(_, _) => true,
+      _=> false,
+    }
+  }
+  fn matches(
+    &self,
+    part: &str,
+    remaining: &str,
+    variables: &mut Option<HashMap<String, String>>,
+  ) -> bool {
+    match self {
+      PathPart::Literal(literal) => part == literal.as_str(),
+      PathPart::Variable(var_name) => {
+        if variables.is_none() {
+          variables.replace(HashMap::new());
+        }
+
+        unwrap_some(variables.as_mut()).insert(var_name.to_string(), part.to_string());
+        true
+      }
+      PathPart::Wildcard => true,
+      PathPart::RegexVariable(var_name, regex) => {
+        if regex.is_match(part) {
+          if variables.is_none() {
+            variables.replace(HashMap::new());
+          }
+
+          unwrap_some(variables.as_mut()).insert(var_name.to_string(), part.to_string());
+          return true;
+        }
+        false
+      }
+      PathPart::RegexTailVariable(var_name, regex) => {
+        if regex.is_match(remaining) {
+          if variables.is_none() {
+            variables.replace(HashMap::new());
+          }
+
+          unwrap_some(variables.as_mut()).insert(var_name.to_string(), remaining.to_string());
+          return true;
+        }
+        false
+      }
+    }
+  }
+}
 
 /// Encapsulates a route and its handler.
 pub struct RouteHandler {
   /// The route that this handler will match.
-  pub route: String,
+  path: String,
+
+  parts: Vec<PathPart>,
+
   /// The handler to run when the route is matched.
-  pub handler: Box<dyn RequestHandler>,
+  handler: Box<dyn RequestHandler>,
 
   /// The method this route will handle
-  pub method: Method,
+  method: Method,
 
   /// The mime types this route can consume
   /// EMPTY SET means this route does not expect a request body.
-  pub consumes: HashSet<AcceptMimeType>,
+  consumes: HashSet<AcceptMimeType>,
 
   /// The mime types this route can produce
   /// EMPTY SET means this route will produce a matching body type.
-  pub produces: HashSet<AcceptMimeType>,
+  produces: HashSet<AcceptMimeType>,
 }
 
 /// Enum that shows information on how a particular request could be routed on a route.
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum RoutingDecision {
-  /// Routing matches with the given quality.
-  Match(QValue),
+  /// Routing matches with the given quality and path params.
+  Match(QValue, Option<HashMap<String, String>>),
   /// Path doesnt match.
   PathMismatch,
   /// Path matches, but method doesn't.
@@ -59,31 +181,31 @@ impl PartialOrd for RoutingDecision {
 impl Ord for RoutingDecision {
   fn cmp(&self, other: &Self) -> Ordering {
     match (self, other) {
-      (RoutingDecision::Match(q1), RoutingDecision::Match(q2)) => q1.cmp(q2),
-      (RoutingDecision::Match(_), RoutingDecision::PathMismatch) => Ordering::Greater,
-      (RoutingDecision::Match(_), RoutingDecision::MethodMismatch) => Ordering::Greater,
-      (RoutingDecision::Match(_), RoutingDecision::MimeMismatch) => Ordering::Greater,
-      (RoutingDecision::Match(_), RoutingDecision::AcceptMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(q1, _), RoutingDecision::Match(q2, _)) => q1.cmp(q2),
+      (RoutingDecision::Match(_, _), RoutingDecision::PathMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::MethodMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::MimeMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::AcceptMismatch) => Ordering::Greater,
 
-      (RoutingDecision::PathMismatch, RoutingDecision::Match(_)) => Ordering::Less,
+      (RoutingDecision::PathMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
       (RoutingDecision::PathMismatch, RoutingDecision::PathMismatch) => Ordering::Equal,
       (RoutingDecision::PathMismatch, RoutingDecision::MethodMismatch) => Ordering::Less,
       (RoutingDecision::PathMismatch, RoutingDecision::MimeMismatch) => Ordering::Less,
       (RoutingDecision::PathMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (RoutingDecision::MethodMismatch, RoutingDecision::Match(_)) => Ordering::Less,
+      (RoutingDecision::MethodMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
       (RoutingDecision::MethodMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
       (RoutingDecision::MethodMismatch, RoutingDecision::MethodMismatch) => Ordering::Equal,
       (RoutingDecision::MethodMismatch, RoutingDecision::MimeMismatch) => Ordering::Less,
       (RoutingDecision::MethodMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (RoutingDecision::MimeMismatch, RoutingDecision::Match(_)) => Ordering::Less,
+      (RoutingDecision::MimeMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
       (RoutingDecision::MimeMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
       (RoutingDecision::MimeMismatch, RoutingDecision::MethodMismatch) => Ordering::Greater,
       (RoutingDecision::MimeMismatch, RoutingDecision::MimeMismatch) => Ordering::Equal,
       (RoutingDecision::MimeMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (RoutingDecision::AcceptMismatch, RoutingDecision::Match(_)) => Ordering::Less,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
       (RoutingDecision::AcceptMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
       (RoutingDecision::AcceptMismatch, RoutingDecision::MethodMismatch) => Ordering::Greater,
       (RoutingDecision::AcceptMismatch, RoutingDecision::MimeMismatch) => Ordering::Greater,
@@ -93,12 +215,111 @@ impl Ord for RoutingDecision {
 }
 
 impl RouteHandler {
+  pub(crate) fn new(
+    path: impl ToString,
+    method: impl Into<Method>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+    handler: impl RequestHandler + 'static,
+  ) -> HumptyResult<RouteHandler> {
+    let path = path.to_string();
+    Ok(RouteHandler {
+      parts: PathPart::parse(path.as_str())?,
+      path,
+      handler: Box::new(handler) as Box<dyn RequestHandler>,
+      method: method.into(),
+      consumes,
+      produces,
+    })
+  }
+
+  /// The path for this route
+  pub fn path(&self) -> &str {
+    self.path.as_str()
+  }
+
+  /// The handler for this route
+  pub fn handler(&self) -> &dyn RequestHandler {
+    self.handler.as_ref()
+  }
+
+  /// The method for this route
+  pub fn method(&self) -> &Method {
+    &self.method
+  }
+
+  /// The mime types this route can consume
+  pub fn consumes(&self) -> &HashSet<AcceptMimeType> {
+    &self.consumes
+  }
+
+  /// The mime types this route can produce
+  pub fn produces(&self) -> &HashSet<AcceptMimeType> {
+    &self.produces
+  }
+
+  fn matches_path(
+    &self,
+    route: &RequestContext,
+    path_params: &mut Option<HashMap<String, String>>,
+  ) -> bool {
+    let mut request_path = route.request_head().path();
+    if !request_path.starts_with("/") {
+      return false;
+    }
+
+    request_path = &request_path[1..];
+
+    if request_path.is_empty() && self.parts.is_empty() {
+      return true;
+    }
+
+    let mut parts = self.parts.iter();
+    loop {
+      if let Some((path_part, remaining)) = request_path.split_once("/") {
+        if let Some(part) = parts.next() {
+          if !part.matches(path_part, request_path, path_params) {
+            return false;
+          }
+          if part.is_tail() {
+            return true;
+          }
+
+          request_path = remaining;
+          continue;
+        }
+
+        return false;
+      }
+
+      if let Some(part) = parts.next() {
+        if !part.matches(request_path, request_path, path_params) {
+          return false;
+        }
+
+        if part.is_tail() {
+          return true;
+        }
+
+        request_path = "";
+        continue;
+      }
+
+      if request_path.is_empty() {
+        return true;
+      }
+
+      return false;
+    }
+  }
+
   /// Checks whether this route matches the given one, respecting its own wildcards only.
   /// For example, `/blog/*` will match `/blog/my-first-post` but not the other way around.
   pub fn matches(&self, route: &RequestContext) -> RoutingDecision {
     let head = route.request_head();
+    let mut path_params = None;
 
-    if !krauss::wildcard_match(self.route.as_str(), head.path()) {
+    if !self.matches_path(route, &mut path_params) {
       return RoutingDecision::PathMismatch;
     }
 
@@ -122,7 +343,7 @@ impl RouteHandler {
 
     if self.produces.is_empty() {
       //The endpoint either doesn't produce a body or declares that it will produce a matching body...
-      return RoutingDecision::Match(QValue::MAX);
+      return RoutingDecision::Match(QValue::MAX, path_params);
     }
 
     let acc = head.get_accept();
@@ -140,7 +361,7 @@ impl RouteHandler {
 
         let qvalue = accept.qvalue();
         if qvalue == QValue::MAX {
-          return RoutingDecision::Match(qvalue);
+          return RoutingDecision::Match(qvalue, path_params);
         }
 
         match &current_q {
@@ -157,7 +378,7 @@ impl RouteHandler {
     }
 
     if let Some(qval) = current_q {
-      return RoutingDecision::Match(qval);
+      return RoutingDecision::Match(qval, path_params);
     }
 
     RoutingDecision::AcceptMismatch
@@ -166,7 +387,7 @@ impl RouteHandler {
 
 impl Debug for RouteHandler {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("RouteHandler({})", self.route.as_str()))
+    f.write_fmt(format_args!("RouteHandler({})", self.path.as_str()))
   }
 }
 
@@ -336,16 +557,26 @@ impl HumptyRouter {
       }
 
       best_decision = decision;
-      if let RoutingDecision::Match(qv) = decision {
+      if let RoutingDecision::Match(qv, _) = &best_decision {
         best_handler = Some(handler);
-        if qv == QValue::MAX {
+        if qv == &QValue::MAX {
           break;
         }
       }
     }
 
     if let Some(handler) = best_handler {
-      request.set_routed_path(handler.route.as_str());
+      request.set_routed_path(handler.path.as_str());
+      match best_decision {
+        RoutingDecision::Match(_, path_params) => {
+          if let Some(path_params) = path_params {
+            for (key, value) in path_params {
+              request.set_path_param(key, value);
+            }
+          }
+        }
+        _ => util::unreachable(),
+      }
       for filter in self.routing_filters.iter() {
         if let Some(resp) = filter.filter(request)? {
           return Ok(resp);
@@ -361,7 +592,7 @@ impl HumptyRouter {
       RoutingDecision::MimeMismatch => (self.unsupported_media_type_handler)(request, &self.routes),
       RoutingDecision::AcceptMismatch => (self.not_acceptable_handler)(request, &self.routes),
       // We found a handler! Why are we here?
-      RoutingDecision::Match(_) => util::unreachable(),
+      RoutingDecision::Match(_, _) => util::unreachable(),
     }
   }
 }

@@ -41,12 +41,13 @@ pub fn tc25() {
       rt.post("/dummy")
         .consumes(MimeType::TextPlain)
         .produces(MimeType::TextPlain)
-        .endpoint(dummy_route)
+        .endpoint(dummy_route)?
         .post("/dummy")
         .consumes(MimeType::TextCsv)
         .produces(MimeType::TextPlain)
         .endpoint(dummy_route2)
     })
+    .expect("ERROR")
     .build();
 
   let stream = MockStream::with_str("POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF");

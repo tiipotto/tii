@@ -40,7 +40,9 @@ fn create_server_config() -> Arc<ServerConfig> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::default().router(|r| r.route_any("/ssl", ssl_route)).build_arc();
+  let app =
+    HumptyBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/ssl", ssl_route)))
+      .expect("ERROR");
   let config = create_server_config();
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;

@@ -13,19 +13,20 @@ use std::net::TcpListener;
 use std::thread;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::default()
-    .router(|router| {
+  let app = HumptyBuilder::builder_arc(|builder| {
+    builder.router(|router| {
       router
-        .route_any("/", handlers::serve_file("./examples/static/pages/index.html"))
+        .route_any("/", handlers::serve_file("./examples/static/pages/index.html"))?
         // Serve the "/img/*" route with files stored in the "./static/images" directory.
-        .route_any("/img/*", handlers::serve_dir("./examples/static/images"))
+        .route_any("/img/*", handlers::serve_dir("./examples/static/images"))?
         // Serve a regular file path in the current directory.
         // This means simply appending the request URI to the directory path and looking for a file there.
-        .route_any("/examples/*", handlers::serve_as_file_path("."))
+        .route_any("/examples/*", handlers::serve_as_file_path("."))?
         // Redirect requests to "/ferris" to "/img/ferris.png"
         .route_any("/ferris", handlers::redirect("/img/ferris.png"))
     })
-    .build_arc();
+  })
+  .expect("ERROR");
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;
   for stream in listen.incoming() {

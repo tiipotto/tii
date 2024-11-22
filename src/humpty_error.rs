@@ -6,8 +6,10 @@ use crate::http::headers::HeaderName;
 use crate::http::method::Method;
 use crate::http::request::HttpVersion;
 use crate::http::Response;
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::ErrorKind;
 
@@ -76,9 +78,93 @@ impl Error for UserError {}
 
 #[derive(Debug)]
 #[non_exhaustive]
+pub enum InvalidPathError {
+  MorePartsAfterWildcard(String),
+  InvalidRegex(String, String, regex::Error),
+}
+
+impl Hash for InvalidPathError {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    match self {
+      InvalidPathError::MorePartsAfterWildcard(path) => {
+        "MorePartsAfterWildcard".hash(state);
+        path.hash(state);
+      }
+      InvalidPathError::InvalidRegex(path, r, _) => {
+        "InvalidRegex".hash(state);
+        path.hash(state);
+        r.hash(state);
+      }
+    }
+  }
+}
+
+impl PartialEq<Self> for InvalidPathError {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (
+        InvalidPathError::MorePartsAfterWildcard(path),
+        InvalidPathError::MorePartsAfterWildcard(path2),
+      ) => path == path2,
+      (
+        InvalidPathError::InvalidRegex(path, reg, _),
+        InvalidPathError::InvalidRegex(path2, reg2, _),
+      ) => path == path2 && reg == reg2,
+      _ => false,
+    }
+  }
+}
+
+impl Eq for InvalidPathError {}
+
+impl PartialOrd<Self> for InvalidPathError {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(Self::cmp(self, other))
+  }
+}
+
+impl Ord for InvalidPathError {
+  fn cmp(&self, other: &Self) -> Ordering {
+    match (self, other) {
+      (
+        InvalidPathError::MorePartsAfterWildcard(path),
+        InvalidPathError::MorePartsAfterWildcard(path2),
+      ) => path.cmp(path2),
+      (InvalidPathError::MorePartsAfterWildcard(_), InvalidPathError::InvalidRegex(_, _, _)) => {
+        Ordering::Greater
+      }
+
+      (
+        InvalidPathError::InvalidRegex(path, reg, _),
+        InvalidPathError::InvalidRegex(path2, reg2, _),
+      ) => {
+        let ord = path.cmp(path2);
+        if matches!(ord, Ordering::Equal) {
+          return reg.cmp(reg2);
+        }
+        ord
+      }
+      (InvalidPathError::InvalidRegex(_, _, _), InvalidPathError::MorePartsAfterWildcard(_)) => {
+        Ordering::Less
+      }
+    }
+  }
+}
+
+impl Display for InvalidPathError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO make this not shit
+    Debug::fmt(self, f)
+  }
+}
+impl Error for InvalidPathError {}
+
+#[derive(Debug)]
+#[non_exhaustive]
 pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
   UserError(UserError),
+  InvalidPathError(InvalidPathError),
   IO(io::Error),
   Other(Box<dyn Error + Send>),
 }
@@ -100,6 +186,7 @@ impl HumptyError {
       HumptyError::IO(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      HumptyError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -109,6 +196,7 @@ impl HumptyError {
       HumptyError::IO(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      HumptyError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
@@ -117,6 +205,7 @@ impl HumptyError {
       HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::Other(other) => other,
     }
   }
@@ -128,6 +217,7 @@ impl Display for HumptyError {
       HumptyError::IO(err) => Display::fmt(err, f),
       HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
       HumptyError::UserError(err) => Display::fmt(err, f),
+      HumptyError::InvalidPathError(err) => Display::fmt(err, f),
       HumptyError::Other(err) => Display::fmt(err, f),
     }
   }

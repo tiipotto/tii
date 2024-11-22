@@ -25,16 +25,17 @@ fn dummy_route2(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc26() {
-  let server = HumptyBuilder::default()
-    .router(|rt| {
+  let server = HumptyBuilder::builder(|builder| {
+    builder.router(|rt| {
       rt.get("/dummy")
         .produces(MimeType::TextPlain)
-        .endpoint(dummy_route)
+        .endpoint(dummy_route)?
         .get("/dummy")
         .produces(MimeType::ApplicationJson)
         .endpoint(dummy_route2)
     })
-    .build();
+  })
+  .expect("ERROR");
 
   let stream = MockStream::with_str(
     "GET /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain;q=0.7, application/json;q=0.6\r\n\r\n",

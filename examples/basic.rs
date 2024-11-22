@@ -12,9 +12,9 @@ use std::{io, thread};
 fn main() -> Result<(), Box<dyn Error>> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-  let app = HumptyBuilder::default()
+  let app = HumptyBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.
-    .router(|router| {
+    builder.router(|router| {
       router
         // All these different ways of adding routes do the same thing, pick the one most "optically" pleasing for you.
         //
@@ -25,26 +25,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             .produces(MimeType::TextHtml)
             .produces(MimeType::TextPlain)
             .endpoint(home)
-        })
+        })?
         //
         //build endpoint directly without any indents.
         .get("/contact")
         .produces(MimeType::TextHtml)
-        .endpoint(contact)
+        .endpoint(contact)?
         // as you can see without this comment it would be hard to tell what belongs to which endpoint.
         .post("/ping")
         .consumes(AcceptMimeType::Wildcard)
         .produces(MimeType::ApplicationOctetStream)
-        .endpoint(pong)
+        .endpoint(pong)?
         //If you do not desire any media type handling you can also use the "route" type of methods.
         // This endpoint is called for any normal http method and any media type.
-        .route_any("/any/method", echo_method)
+        .route_any("/any/method", echo_method)?
         //Same but limited to http GET method
-        .route_get("/only/get", echo_method)
+        .route_get("/only/get", echo_method)?
         // Humpty also supports non-standard custom methods.
-        .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)
+        .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)?
         // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
+        .route_get("/path/param/{key1}/{key2}/{regex:.*}", path_param)?
         .begin(|router| {
           router
             //
@@ -56,17 +57,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 format!("This is a closure to {}!", ctx.request_head().path()),
                 MimeType::TextPlain,
               )
-            })
+            })?
             .get("/*")
             .produces(MimeType::TextHtml)
             .endpoint(generic)
-        })
+        })?
         // There 3 are not endpoints, they are filters etc.
-        .with_pre_routing_request_filter(pre_routing)
-        .with_request_filter(routing)
-        .with_response_filter(resp)
+        .with_pre_routing_request_filter(pre_routing)?
+        .with_request_filter(routing)?
+        .with_response_filter(resp)?
+        .ok()
     })
-    .build_arc();
+  })
+  .expect("ERROR");
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;
   for stream in listen.incoming() {
@@ -127,4 +130,12 @@ fn pong(request: &RequestContext) -> HumptyResult<Response> {
 
 fn echo_method(request: &RequestContext) -> Response {
   Response::ok(request.request_head().method().as_str(), MimeType::TextPlain)
+}
+
+fn path_param(request: &RequestContext) -> Response {
+  for (key, value) in request.get_path_params() {
+    info!("path_param {} {}", key, value);
+  }
+
+  Response::no_content()
 }

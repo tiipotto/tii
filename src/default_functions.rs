@@ -67,7 +67,7 @@ pub(crate) fn default_method_not_allowed_handler(
   let mut methods = HashSet::new();
   for route in routes {
     if matches!(route.matches(request), RoutingDecision::MethodMismatch) {
-      methods.insert(route.method.clone());
+      methods.insert(route.method().clone());
     }
   }
 

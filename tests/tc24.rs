@@ -24,14 +24,15 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc24() {
-  let server = HumptyBuilder::default()
-    .router(|rt| {
+  let server = HumptyBuilder::builder(|builder| {
+    builder.router(|rt| {
       rt.post("/dummy")
         .consumes(MimeType::TextPlain)
         .produces(MimeType::TextPlain)
         .endpoint(dummy_route)
     })
-    .build();
+  })
+  .expect("ERROR");
 
   let stream = MockStream::with_str("POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF");
   let con = stream.to_stream();
