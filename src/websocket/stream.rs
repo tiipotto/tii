@@ -5,7 +5,6 @@ use std::io;
 use crate::websocket::error::WebsocketError;
 use crate::websocket::frame::{Frame, Opcode};
 use crate::websocket::message::Message;
-use crate::websocket::restion::Restion;
 
 use crate::stream::ConnectionStream;
 use std::io::{Read, Write};
@@ -36,17 +35,6 @@ impl WebsocketStream {
     let message = Message::from_stream(self);
 
     if let Err(WebsocketError::ConnectionClosed) = message {
-      self.closed = true;
-    }
-
-    message
-  }
-
-  /// Attempts to receive a message from the stream without blocking.
-  pub fn recv_nonblocking(&mut self) -> Restion<Message, WebsocketError> {
-    let message = Message::from_stream_nonblocking(self);
-
-    if let Restion::Err(WebsocketError::ConnectionClosed) = message {
       self.closed = true;
     }
 

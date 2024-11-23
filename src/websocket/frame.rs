@@ -3,7 +3,6 @@
 use crate::websocket::error::WebsocketError;
 
 use crate::stream::ConnectionStreamRead;
-use crate::websocket::restion::Restion;
 use std::convert::TryFrom;
 
 /// Represents a frame of WebSocket data.
@@ -68,33 +67,6 @@ impl Frame {
     stream.read_exact(&mut buf).map_err(|_| WebsocketError::ReadError)?;
 
     Self::from_stream_inner(stream, buf)
-  }
-
-  /// Attempts to read a frame from the given stream, immediately returning instead of blocking if there is no frame to read.
-  #[allow(deprecated)]
-  pub fn from_stream_nonblocking<T: ConnectionStreamRead + ?Sized>(
-    stream: &T,
-  ) -> Restion<Self, WebsocketError> {
-    // Set the stream to nonblocking to read the header
-    if stream.set_read_non_block(true).is_err() {
-      return Restion::Err(WebsocketError::ReadError);
-    }
-
-    // Attempt to read the header
-    let mut buf: [u8; 2] = [0; 2];
-    let result = stream.read(&mut buf);
-
-    // Set the stream to blocking for further reads
-    if stream.set_read_non_block(false).is_err() {
-      return Restion::Err(WebsocketError::ReadError);
-    }
-
-    match result {
-      Ok(0) => Restion::None,
-      Ok(_) => Self::from_stream_inner(stream, buf).into(),
-      Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Restion::None,
-      Err(_) => Restion::Err(WebsocketError::ReadError),
-    }
   }
 
   fn from_stream_inner<T: ConnectionStreamRead + ?Sized>(
