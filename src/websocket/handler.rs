@@ -30,7 +30,7 @@ where
 }
 
 /// Performs the WebSocket handshake.
-pub(crate) fn handshake(
+fn handshake(
   request: RequestHead,
   stream: &mut Box<dyn ConnectionStream>,
 ) -> Result<(), WebsocketError> {
