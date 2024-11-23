@@ -31,7 +31,6 @@ pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
 }
 
 pub trait ConnectionStreamRead: Send + Debug + Read {
-
   ///De-mut of Read
   fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
 
@@ -130,7 +129,6 @@ mod tcp {
   }
 
   impl ConnectionStreamRead for TcpStreamOuter {
-
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
@@ -382,7 +380,6 @@ mod unix {
   }
 
   impl ConnectionStreamRead for UnixStreamOuter {
-
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
