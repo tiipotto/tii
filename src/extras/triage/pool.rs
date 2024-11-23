@@ -34,6 +34,7 @@ pub struct Message {
   /// ?
   pub task: Task,
 
+  /// ?
   #[cfg(feature = "log")]
   pub time: std::time::Instant,
 }
