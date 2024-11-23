@@ -29,6 +29,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 pub fn tc18() {
   let server = HumptyBuilder::default()
     .router(|rt| rt.route_method(Method::from("QUERY"), "/dummy", dummy_route))
+    .expect("ERR")
     .build();
 
   let stream = MockStream::with_str("QUERY /dummy HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");

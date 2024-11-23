@@ -32,10 +32,13 @@ where
 fn main() -> Result<(), Box<dyn Error>> {
   let (shutdown_app, app_rx) = mpsc::sync_channel(1);
 
-  let app = HumptyBuilder::default()
-    .router(|router| router.route_any("/*", hello))
-    .with_connection_timeout(Some(Duration::from_secs(5)))
-    .build_arc();
+  let app = HumptyBuilder::builder_arc(|builder| {
+    builder
+      .router(|router| router.route_any("/*", hello))?
+      .with_connection_timeout(Some(Duration::from_secs(5)))?
+      .ok()
+  })
+  .expect("ERROR");
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;
   let addr = listen.local_addr()?;

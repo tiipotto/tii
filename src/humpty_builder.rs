@@ -49,6 +49,20 @@ impl Default for HumptyBuilder {
 }
 
 impl HumptyBuilder {
+  /// Build HumptyServer using a closure or fn which receives the builder
+  pub fn builder<T: FnOnce(HumptyBuilder) -> HumptyResult<HumptyBuilder>>(
+    closure: T,
+  ) -> HumptyResult<HumptyServer> {
+    closure(HumptyBuilder::default()).map(|builder| builder.build())
+  }
+
+  /// Build Arc<HumptyServer> using a closure or fn which receives the builder
+  pub fn builder_arc<T: FnOnce(HumptyBuilder) -> HumptyResult<HumptyBuilder>>(
+    closure: T,
+  ) -> HumptyResult<Arc<HumptyServer>> {
+    closure(HumptyBuilder::default()).map(|builder| builder.build_arc())
+  }
+
   /// This method creates the HttpServer from the builder.
   pub fn build(self) -> HumptyServer {
     HumptyServer::new(
@@ -76,25 +90,33 @@ impl HumptyBuilder {
   }
 
   /// Adds a new router to the server and calls the closure with the new router so it can be configured.
-  pub fn router<T: FnOnce(HumptyRouterBuilder) -> HumptyRouterBuilder>(self, builder: T) -> Self {
-    self.with_router(builder(HumptyRouterBuilder::default()).build())
+  pub fn router<T: FnOnce(HumptyRouterBuilder) -> HumptyResult<HumptyRouterBuilder>>(
+    self,
+    builder: T,
+  ) -> HumptyResult<Self> {
+    Ok(self.with_router(builder(HumptyRouterBuilder::default())?.build()))
   }
 
   /// Sets the error handler for the server.
-  pub fn with_error_handler(mut self, handler: ErrorHandler) -> Self {
+  pub fn with_error_handler(mut self, handler: ErrorHandler) -> HumptyResult<Self> {
     self.error_handler = handler;
-    self
+    Ok(self)
   }
 
   /// Sets the not found handler for the server.
-  pub fn with_not_found_handler(mut self, handler: NotFoundHandler) -> Self {
+  pub fn with_not_found_handler(mut self, handler: NotFoundHandler) -> HumptyResult<Self> {
     self.not_found_handler = handler;
-    self
+    Ok(self)
   }
 
   /// Sets the connection timeout, the amount of time to wait between keep-alive requests.
-  pub fn with_connection_timeout(mut self, timeout: Option<Duration>) -> Self {
+  pub fn with_connection_timeout(mut self, timeout: Option<Duration>) -> HumptyResult<Self> {
     self.connection_timeout = timeout;
-    self
+    Ok(self)
+  }
+
+  /// Helper fn to make builder code look a bit cleaner
+  pub fn ok(self) -> HumptyResult<Self> {
+    Ok(self)
   }
 }

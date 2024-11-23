@@ -34,9 +34,10 @@ const HTML: &str = r##"
 </html>"##;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::default()
-    .router(|router| router.route_any("/", home).route_any("/wildcard/*", wildcard))
-    .build_arc();
+  let app = HumptyBuilder::builder_arc(|builder| {
+    builder.router(|router| router.route_any("/", home)?.route_any("/wildcard/*", wildcard))
+  })
+  .expect("ERROR");
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;
   for stream in listen.incoming() {

@@ -13,7 +13,8 @@ fn dummy_route(_ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc8() {
-  let server = HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).build();
+  let server =
+    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let mut combined = Vec::new();
   for b in "GET /dummy HTTP/1.1\r\nHdr: ".as_bytes() {

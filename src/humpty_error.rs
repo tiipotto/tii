@@ -8,6 +8,7 @@ use crate::http::request::HttpVersion;
 use crate::http::Response;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::io;
 use std::io::ErrorKind;
 
@@ -74,11 +75,27 @@ impl Display for UserError {
 }
 impl Error for UserError {}
 
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[non_exhaustive]
+pub enum InvalidPathError {
+  MorePartsAfterWildcard(String),
+  RegexSyntaxError(String, String, String),
+  RegexTooBig(String, String, usize),
+}
+impl Display for InvalidPathError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO make this not shit
+    Debug::fmt(self, f)
+  }
+}
+impl Error for InvalidPathError {}
+
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
   UserError(UserError),
+  InvalidPathError(InvalidPathError),
   IO(io::Error),
   Other(Box<dyn Error + Send>),
 }
@@ -100,6 +117,7 @@ impl HumptyError {
       HumptyError::IO(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      HumptyError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -109,6 +127,7 @@ impl HumptyError {
       HumptyError::IO(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      HumptyError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
@@ -117,6 +136,7 @@ impl HumptyError {
       HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::Other(other) => other,
     }
   }
@@ -128,6 +148,7 @@ impl Display for HumptyError {
       HumptyError::IO(err) => Display::fmt(err, f),
       HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
       HumptyError::UserError(err) => Display::fmt(err, f),
+      HumptyError::InvalidPathError(err) => Display::fmt(err, f),
       HumptyError::Other(err) => Display::fmt(err, f),
     }
   }

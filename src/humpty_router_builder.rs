@@ -101,15 +101,18 @@ impl HumptyRouteBuilder {
   }
 
   /// Finish building the route by proving the route.
-  pub fn endpoint<T: RequestHandler + 'static>(mut self, handler: T) -> HumptyRouterBuilder {
-    self.inner.routes.push(RouteHandler {
-      route: self.route,
-      handler: Box::new(handler),
-      method: self.method,
-      consumes: self.consumes,
-      produces: self.produces,
-    });
-    self.inner
+  pub fn endpoint<T: RequestHandler + 'static>(
+    mut self,
+    handler: T,
+  ) -> HumptyResult<HumptyRouterBuilder> {
+    self.inner.routes.push(RouteHandler::new(
+      self.route,
+      self.method,
+      self.consumes,
+      self.produces,
+      handler,
+    )?);
+    Ok(self.inner)
   }
 }
 
@@ -140,23 +143,23 @@ impl HumptyRouterBuilder {
   /// Adds a pre routing filter. This is called before any routing is done.
   /// The filter can modify the path in the request to change the outcome of routing.
   /// This filter gets called for every request, even those that later fail to find a handler.
-  pub fn with_pre_routing_request_filter<T>(mut self, filter: T) -> Self
+  pub fn with_pre_routing_request_filter<T>(mut self, filter: T) -> HumptyResult<Self>
   where
     T: RequestFilter + 'static,
   {
     self.pre_routing_filters.push(Box::new(filter));
-    self
+    Ok(self)
   }
 
   /// Adds a routing filter. This filter gets called once routing is done.
   /// This filter is called directly before a handler is called.
   /// This filter is only called on requests that actually do have a handler.
-  pub fn with_request_filter<T>(mut self, filter: T) -> Self
+  pub fn with_request_filter<T>(mut self, filter: T) -> HumptyResult<Self>
   where
     T: RequestFilter + 'static,
   {
     self.routing_filters.push(Box::new(filter));
-    self
+    Ok(self)
   }
 
   /// Adds a response filter. This filter gets called after the response is created.
@@ -172,12 +175,12 @@ impl HumptyRouterBuilder {
   /// even if the error handler was already called previously for the same request.
   /// However, each "request" will only trigger exactly 1 invocation of the response filter so it is not possible
   /// to create a loop between response filter and error handler.
-  pub fn with_response_filter<T>(mut self, filter: T) -> Self
+  pub fn with_response_filter<T>(mut self, filter: T) -> HumptyResult<Self>
   where
     T: ResponseFilter + 'static,
   {
     self.response_filters.push(Box::new(filter));
-    self
+    Ok(self)
   }
 
   /// Adds a route that will handle all well known reasonable http methods.
@@ -189,19 +192,24 @@ impl HumptyRouterBuilder {
   /// - OPTIONS
   ///
   /// The endpoint will be called for any media type.
-  pub fn route_any<T>(self, route: &str, handler: T) -> Self
+  pub fn route_any<T>(self, route: &str, handler: T) -> HumptyResult<Self>
   where
     T: RequestHandler + 'static,
   {
     let wrapped = RouteWrapper(Arc::new(handler));
 
     self
-      .route_get(route, wrapped.clone())
-      .route_put(route, wrapped.clone())
-      .route_post(route, wrapped.clone())
-      .route_patch(route, wrapped.clone())
-      .route_delete(route, wrapped.clone())
+      .route_get(route, wrapped.clone())?
+      .route_put(route, wrapped.clone())?
+      .route_post(route, wrapped.clone())?
+      .route_patch(route, wrapped.clone())?
+      .route_delete(route, wrapped.clone())?
       .route_options(route, wrapped)
+  }
+
+  /// Helper fn to make some builder code look a bit cleaner.
+  pub const fn ok(self) -> HumptyResult<Self> {
+    Ok(self)
   }
 
   /// Adds a route that will handle the given http method.
@@ -211,57 +219,81 @@ impl HumptyRouterBuilder {
     method: Method,
     route: &str,
     handler: T,
-  ) -> Self {
-    self.routes.push(RouteHandler {
-      route: route.to_string(),
-      handler: Box::new(handler),
+  ) -> HumptyResult<Self> {
+    self.routes.push(RouteHandler::new(
+      route,
       method,
-      consumes: HashSet::from([AcceptMimeType::Wildcard]),
-      produces: HashSet::new(),
-    });
-    self
+      HashSet::from([AcceptMimeType::Wildcard]),
+      HashSet::new(),
+      handler,
+    )?);
+    Ok(self)
   }
 
   /// Adds a route that will handle the GET http method.
   /// The endpoint will be called for any media type.
-  pub fn route_get<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_get<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Get, route, handler)
   }
 
   /// Adds a route that will handle the POST http method.
   /// The endpoint will be called for any media type.
-  pub fn route_post<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_post<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Post, route, handler)
   }
 
   /// Adds a route that will handle the PUT http method.
   /// The endpoint will be called for any media type.
-  pub fn route_put<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_put<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Put, route, handler)
   }
 
   /// Adds a route that will handle the PATCH http method.
   /// The endpoint will be called for any media type.
-  pub fn route_patch<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_patch<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Patch, route, handler)
   }
 
   /// Adds a route that will handle the DELETE http method.
   /// The endpoint will be called for any media type.
-  pub fn route_delete<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_delete<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Delete, route, handler)
   }
 
   /// Adds a route that will handle the OPTIONS http method.
   /// The endpoint will be called for any media type.
-  pub fn route_options<T: RequestHandler + 'static>(self, route: &str, handler: T) -> Self {
+  pub fn route_options<T: RequestHandler + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
     self.route_method(Method::Options, route, handler)
   }
 
   /// Helper fn that will just call the passed closure,
   /// this can be used to write the builder in an indenting way.
   /// This method is purely cosmetic.
-  pub fn begin<T: FnOnce(Self) -> Self>(self, section: T) -> Self {
+  pub fn begin<T: FnOnce(Self) -> HumptyResult<Self>>(self, section: T) -> HumptyResult<Self> {
     section(self)
   }
 
@@ -271,7 +303,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a GET http method.
-  pub fn begin_get<T: FnOnce(HumptyRouteBuilder) -> Self>(self, route: &str, closure: T) -> Self {
+  pub fn begin_get<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+    self,
+    route: &str,
+    closure: T,
+  ) -> HumptyResult<Self> {
     closure(self.get(route))
   }
 
@@ -281,7 +317,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a POST http method.
-  pub fn begin_post<T: FnOnce(HumptyRouteBuilder) -> Self>(self, route: &str, closure: T) -> Self {
+  pub fn begin_post<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+    self,
+    route: &str,
+    closure: T,
+  ) -> HumptyResult<Self> {
     closure(self.post(route))
   }
 
@@ -291,7 +331,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a PUT http method.
-  pub fn begin_put<T: FnOnce(HumptyRouteBuilder) -> Self>(self, route: &str, closure: T) -> Self {
+  pub fn begin_put<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+    self,
+    route: &str,
+    closure: T,
+  ) -> HumptyResult<Self> {
     closure(self.put(route))
   }
 
@@ -301,7 +345,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a PATCH http method.
-  pub fn begin_patch<T: FnOnce(HumptyRouteBuilder) -> Self>(self, route: &str, closure: T) -> Self {
+  pub fn begin_patch<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+    self,
+    route: &str,
+    closure: T,
+  ) -> HumptyResult<Self> {
     closure(self.patch(route))
   }
 
@@ -311,11 +359,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a DELETE http method.
-  pub fn begin_delete<T: FnOnce(HumptyRouteBuilder) -> Self>(
+  pub fn begin_delete<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> Self {
+  ) -> HumptyResult<Self> {
     closure(self.delete(route))
   }
 
@@ -325,11 +373,11 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a OPTIONS http method.
-  pub fn begin_options<T: FnOnce(HumptyRouteBuilder) -> Self>(
+  pub fn begin_options<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> Self {
+  ) -> HumptyResult<Self> {
     closure(self.delete(route))
   }
 
@@ -339,26 +387,26 @@ impl HumptyRouterBuilder {
   }
 
   /// Build an endpoint with a less commonly used or custom http method.
-  pub fn begin_method<T: FnOnce(HumptyRouteBuilder) -> Self>(
+  pub fn begin_method<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
     self,
     method: Method,
     route: &str,
     closure: T,
-  ) -> Self {
+  ) -> HumptyResult<Self> {
     closure(self.method(method, route))
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
   /// Routes can include wildcards, for example `/ws/*`.
   /// The handler is passed the stream and the request which triggered its calling.
-  pub fn with_websocket_route<T>(mut self, route: &str, handler: T) -> Self
+  pub fn with_websocket_route<T>(mut self, route: &str, handler: T) -> HumptyResult<Self>
   where
     T: WebsocketHandler + 'static,
   {
     self
       .websocket_routes
       .push(WebsocketRouteHandler { route: route.to_string(), handler: Box::new(handler) });
-    self
+    Ok(self)
   }
 
   /// Build the router

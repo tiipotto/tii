@@ -16,13 +16,14 @@ use std::thread;
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::default()
-    .router(|router| {
+  let app = HumptyBuilder::builder_arc(|builder| {
+    builder.router(|router| {
       router
-        .route_any("/*", handlers::serve_dir("./examples/static/ws"))
+        .route_any("/*", handlers::serve_dir("./examples/static/ws"))?
         .with_websocket_route("/ws", websocket_handler(echo_handler))
     })
-    .build_arc();
+  })
+  .expect("ERROR");
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;
   for stream in listen.incoming() {
