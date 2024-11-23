@@ -1,6 +1,6 @@
-use humpty::websocket::async_app::{AsyncSender, AsyncStream, AsyncWebsocketApp};
+use humpty::extras::triage::async_app::{AsyncSender, AsyncStream, AsyncWebsocketApp};
+use humpty::extras::triage::ping::Heartbeat;
 use humpty::websocket::message::Message;
-use humpty::websocket::ping::Heartbeat;
 
 use std::io::BufRead;
 use std::sync::atomic::{AtomicUsize, Ordering};

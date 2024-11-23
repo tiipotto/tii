@@ -1,5 +1,5 @@
 //! Provides thread pool functionality.
-use crate::thread::recovery::{PanicMarker, RecoveryThread};
+use crate::extras::triage::recovery::{PanicMarker, RecoveryThread};
 
 #[cfg(feature = "log")]
 use crate::trace_log;
@@ -31,6 +31,7 @@ pub struct Thread {
 
 /// Represents a message between threads.
 pub struct Message {
+  /// ?
   pub task: Task,
 
   #[cfg(feature = "log")]

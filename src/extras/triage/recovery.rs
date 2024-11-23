@@ -1,5 +1,5 @@
 //! Provides functionality for recovering from thread panics.
-use crate::thread::pool::{Message, Thread};
+use crate::extras::triage::pool::{Message, Thread};
 
 use crate::trace_log;
 use std::sync::mpsc::{Receiver, Sender};
