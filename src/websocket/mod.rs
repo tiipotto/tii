@@ -16,7 +16,5 @@ pub use handler::websocket_handler;
 pub use message::Message;
 pub use stream::WebsocketStream;
 
-pub use util::restion;
-
 mod frame;
 mod util;

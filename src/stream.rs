@@ -31,10 +31,6 @@ pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
 }
 
 pub trait ConnectionStreamRead: Send + Debug + Read {
-  #[deprecated(
-    note = "This is a bad idea, only async web sockets need this for now. This fn will be removed later"
-  )]
-  fn set_read_non_block(&self, on: bool) -> io::Result<()>;
 
   ///De-mut of Read
   fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
@@ -134,9 +130,6 @@ mod tcp {
   }
 
   impl ConnectionStreamRead for TcpStreamOuter {
-    fn set_read_non_block(&self, on: bool) -> io::Result<()> {
-      self.0.stream.set_nonblocking(on)
-    }
 
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
@@ -253,10 +246,6 @@ mod boxed {
   }
 
   impl ConnectionStreamRead for BoxStreamOuter {
-    fn set_read_non_block(&self, _: bool) -> io::Result<()> {
-      unimplemented!()
-    }
-
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(buf)
     }
@@ -393,9 +382,6 @@ mod unix {
   }
 
   impl ConnectionStreamRead for UnixStreamOuter {
-    fn set_read_non_block(&self, _: bool) -> io::Result<()> {
-      unimplemented!()
-    }
 
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)

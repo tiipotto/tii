@@ -173,9 +173,6 @@ impl Drop for HumptyTlsWrapperInner {
 }
 
 impl ConnectionStreamRead for HumptyTlsStream {
-  fn set_read_non_block(&self, on: bool) -> io::Result<()> {
-    self.0.tls.set_read_non_block(on)
-  }
 
   fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
