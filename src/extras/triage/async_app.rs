@@ -89,30 +89,12 @@ pub enum HumptyLink {
 /// Represents a function able to handle a WebSocket event (a connection or disconnection).
 /// It is passed the stream which triggered the event.
 ///
-/// ## Example
-/// A basic example of an event handler would be as follows:
-/// ```
-/// fn connection_handler(stream: &humpty::websocket::AsyncStream) {
-///     println!("A new client connected! {:?}", stream.peer_addr());
-///
-///     stream.send(humpty::websocket::Message::new("Hello, World!"));
-/// }
-/// ```
 pub trait EventHandler: Fn(AsyncStream) + Send + Sync + 'static {}
 impl<T> EventHandler for T where T: Fn(AsyncStream) + Send + Sync + 'static {}
 
 /// Represents a function able to handle a message event.
 /// It is passed the stream which sent the message.
 ///
-/// ## Example
-/// A basic example of a message handler would be as follows:
-/// ```
-/// fn message_handler(stream: &humpty::websocket::AsyncStream, message: humpty::websocket::Message) {
-///    println!("A message was received from {:?}: {}", stream.peer_addr(), message.text().unwrap());
-///
-///    stream.send(humpty::websocket::Message::new("Message received."));
-/// }
-/// ```
 pub trait MessageHandler: Fn(AsyncStream, Message) + Send + Sync + 'static {}
 impl<T> MessageHandler for T where T: Fn(AsyncStream, Message) + Send + Sync + 'static {}
 
