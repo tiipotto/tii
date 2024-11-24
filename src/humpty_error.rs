@@ -66,7 +66,6 @@ impl Display for WebsocketError {
 
 impl Error for WebsocketError {}
 
-
 impl Display for RequestHeadParsingError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     //TODO make this not shit

@@ -3,9 +3,9 @@
 use crate::websocket::frame::{Frame, Opcode};
 use crate::websocket::WebsocketStream;
 
+use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 use std::io::Write;
 use std::time::Instant;
-use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 
 /// Represents a WebSocket message.
 #[derive(Debug, Clone)]

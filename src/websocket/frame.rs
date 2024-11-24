@@ -1,8 +1,8 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
+use crate::humpty_error::{HumptyResult, WebsocketError};
 use crate::stream::ConnectionStreamRead;
 use std::convert::TryFrom;
-use crate::humpty_error::{HumptyResult, WebsocketError};
 
 /// Represents a frame of WebSocket data.
 /// Follows [Section 5.2 of RFC 6455](https://datatracker.ietf.org/doc/html/rfc6455#section-5.2)

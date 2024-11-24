@@ -1,9 +1,9 @@
 //! Provides a Humpty-compatible WebSocket handler for performing the handshake.
 
-use base64::Engine;
-use sha1::{Digest, Sha1};
 use crate::websocket::stream::WebsocketStream;
 use crate::websocket::MAGIC_STRING;
+use base64::Engine;
+use sha1::{Digest, Sha1};
 
 use crate::http::headers::HeaderName;
 use crate::http::{RequestHead, Response, StatusCode};
@@ -29,10 +29,7 @@ where
 }
 
 /// Performs the WebSocket handshake.
-fn handshake(
-  request: RequestHead,
-  stream: &mut Box<dyn ConnectionStream>,
-) -> HumptyResult<()> {
+fn handshake(request: RequestHead, stream: &mut Box<dyn ConnectionStream>) -> HumptyResult<()> {
   // Get the handshake key header
   let handshake_key =
     request.get_header("Sec-WebSocket-Key").ok_or(WebsocketError::HandshakeError)?;
@@ -53,8 +50,7 @@ fn handshake(
     .map_err(|_| WebsocketError::HandshakeError)?;
 
   // Transmit the handshake response
-  response
-    .write_to(request.version(), stream.as_stream_write())?;
+  response.write_to(request.version(), stream.as_stream_write())?;
 
   Ok(())
 }

@@ -5,10 +5,10 @@ use std::io;
 use crate::websocket::frame::{Frame, Opcode};
 use crate::websocket::message::Message;
 
+use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 use crate::stream::ConnectionStream;
 use std::io::{Read, Write};
 use std::time::Instant;
-use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 
 /// Represents a WebSocket stream.
 ///
@@ -33,7 +33,6 @@ impl WebsocketStream {
   /// Blocks until a message is received from the client.
   pub fn recv(&mut self) -> HumptyResult<Message> {
     let message = Message::from_stream(self);
-
 
     if let Err(HumptyError::WebsocketError(WebsocketError::ConnectionClosed)) = message {
       self.closed = true;
