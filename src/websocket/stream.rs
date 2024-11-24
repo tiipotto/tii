@@ -2,13 +2,13 @@
 
 use std::io;
 
-use crate::websocket::error::WebsocketError;
 use crate::websocket::frame::{Frame, Opcode};
 use crate::websocket::message::Message;
 
 use crate::stream::ConnectionStream;
 use std::io::{Read, Write};
 use std::time::Instant;
+use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 
 /// Represents a WebSocket stream.
 ///
@@ -31,10 +31,11 @@ impl WebsocketStream {
   }
 
   /// Blocks until a message is received from the client.
-  pub fn recv(&mut self) -> Result<Message, WebsocketError> {
+  pub fn recv(&mut self) -> HumptyResult<Message> {
     let message = Message::from_stream(self);
 
-    if let Err(WebsocketError::ConnectionClosed) = message {
+
+    if let Err(HumptyError::WebsocketError(WebsocketError::ConnectionClosed)) = message {
       self.closed = true;
     }
 
@@ -42,12 +43,12 @@ impl WebsocketStream {
   }
 
   /// Sends a message to the client.
-  pub fn send(&mut self, message: Message) -> Result<(), WebsocketError> {
+  pub fn send(&mut self, message: Message) -> HumptyResult<()> {
     self.send_raw(message.to_frame())
   }
 
   /// Sends a ping to the client.
-  pub fn ping(&mut self) -> Result<(), WebsocketError> {
+  pub fn ping(&mut self) -> HumptyResult<()> {
     let bytes: Vec<u8> = Frame::new(Opcode::Ping, Vec::new()).into();
     self.send_raw(bytes)
   }
@@ -56,9 +57,10 @@ impl WebsocketStream {
   ///
   /// ## Warning
   /// This function does not check that the frame is valid.
-  pub(crate) fn send_raw(&mut self, bytes: impl AsRef<[u8]>) -> Result<(), WebsocketError> {
-    self.stream.write_all(bytes.as_ref()).map_err(|_| WebsocketError::WriteError)?;
-    self.stream.flush().map_err(|_| WebsocketError::WriteError)
+  pub(crate) fn send_raw(&mut self, bytes: impl AsRef<[u8]>) -> HumptyResult<()> {
+    self.stream.write_all(bytes.as_ref())?;
+    self.stream.flush()?;
+    Ok(())
   }
 
   /// Attempts to get the peer address of this stream.

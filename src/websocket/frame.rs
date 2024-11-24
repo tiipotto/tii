@@ -1,9 +1,8 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
-use crate::websocket::error::WebsocketError;
-
 use crate::stream::ConnectionStreamRead;
 use std::convert::TryFrom;
+use crate::humpty_error::{HumptyResult, WebsocketError};
 
 /// Represents a frame of WebSocket data.
 /// Follows [Section 5.2 of RFC 6455](https://datatracker.ietf.org/doc/html/rfc6455#section-5.2)
@@ -62,9 +61,9 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
-  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> Result<Self, WebsocketError> {
+  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> HumptyResult<Self> {
     let mut buf: [u8; 2] = [0; 2];
-    stream.read_exact(&mut buf).map_err(|_| WebsocketError::ReadError)?;
+    stream.read_exact(&mut buf)?;
 
     Self::from_stream_inner(stream, buf)
   }
@@ -72,7 +71,7 @@ impl Frame {
   fn from_stream_inner<T: ConnectionStreamRead + ?Sized>(
     stream: &T,
     mut header: [u8; 2],
-  ) -> Result<Self, WebsocketError> {
+  ) -> HumptyResult<Self> {
     // Parse header information
     let fin = header[0] & 0x80 != 0;
     let rsv = [header[0] & 0x40 != 0, header[0] & 0x20 != 0, header[0] & 0x10 != 0];
@@ -81,25 +80,25 @@ impl Frame {
 
     let mut length: u64 = (header[1] & 0x7F) as u64;
     if length == 126 {
-      stream.read_exact(&mut header).map_err(|_| WebsocketError::ReadError)?;
+      stream.read_exact(&mut header)?;
       length = u16::from_be_bytes(header) as u64;
     } else if length == 127 {
       let mut buf: [u8; 8] = [0; 8];
-      stream.read_exact(&mut buf).map_err(|_| WebsocketError::ReadError)?;
+      stream.read_exact(&mut buf)?;
       length = u64::from_be_bytes(buf);
     }
 
     let masking_key = {
       let mut buf: [u8; 4] = [0; 4];
       if mask {
-        stream.read_exact(&mut buf).map_err(|_| WebsocketError::ReadError)?;
+        stream.read_exact(&mut buf)?;
       }
       buf
     };
 
     // Read the payload
     let mut payload: Vec<u8> = vec![0; length as usize];
-    stream.read_exact(&mut payload).map_err(|_| WebsocketError::ReadError)?;
+    stream.read_exact(&mut payload)?;
 
     // Unmask the payload
     payload.iter_mut().enumerate().for_each(|(i, tem)| *tem ^= masking_key[i % 4]);

@@ -1,14 +1,13 @@
 //! Provides a Humpty-compatible WebSocket handler for performing the handshake.
 
-use crate::websocket::error::WebsocketError;
+use base64::Engine;
+use sha1::{Digest, Sha1};
 use crate::websocket::stream::WebsocketStream;
-use crate::websocket::util::base64::Base64Encode;
-use crate::websocket::util::sha1::SHA1Hash;
 use crate::websocket::MAGIC_STRING;
 
 use crate::http::headers::HeaderName;
 use crate::http::{RequestHead, Response, StatusCode};
-
+use crate::humpty_error::{HumptyResult, WebsocketError};
 use crate::stream::ConnectionStream;
 
 /// Represents a function able to handle WebSocket streams.
@@ -33,13 +32,16 @@ where
 fn handshake(
   request: RequestHead,
   stream: &mut Box<dyn ConnectionStream>,
-) -> Result<(), WebsocketError> {
+) -> HumptyResult<()> {
   // Get the handshake key header
   let handshake_key =
     request.get_header("Sec-WebSocket-Key").ok_or(WebsocketError::HandshakeError)?;
 
   // Calculate the handshake response
-  let sec_websocket_accept = format!("{}{}", handshake_key, MAGIC_STRING).hash().encode();
+  let sha1 = Sha1::new().chain_update(format!("{}{}", handshake_key, MAGIC_STRING)).finalize();
+  let sec_websocket_accept = base64::prelude::BASE64_STANDARD.encode(sha1);
+
+  //let sec_websocket_accept = sha1.encode();
 
   // Serialise the handshake response
   let response = Response::new(StatusCode::SwitchingProtocols)
@@ -52,8 +54,7 @@ fn handshake(
 
   // Transmit the handshake response
   response
-    .write_to(request.version(), stream.as_stream_write())
-    .map_err(|_| WebsocketError::WriteError)?;
+    .write_to(request.version(), stream.as_stream_write())?;
 
   Ok(())
 }

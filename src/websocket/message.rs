@@ -1,11 +1,11 @@
 //! Provides an abstraction over WebSocket frames called `Message`.
 
-use crate::websocket::error::WebsocketError;
 use crate::websocket::frame::{Frame, Opcode};
 use crate::websocket::WebsocketStream;
 
 use std::io::Write;
 use std::time::Instant;
+use crate::humpty_error::{HumptyError, HumptyResult, WebsocketError};
 
 /// Represents a WebSocket message.
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ impl Message {
   /// Attempts to read a message from the given stream.
   ///
   /// Silently responds to pings with pongs, as specified in [RFC 6455 Section 5.5.2](https://datatracker.ietf.org/doc/html/rfc6455#section-5.5.2).
-  pub fn from_stream(stream: &mut WebsocketStream) -> Result<Self, WebsocketError> {
+  pub fn from_stream(stream: &mut WebsocketStream) -> HumptyResult<Self> {
     let mut frames: Vec<Frame> = Vec::new();
 
     // Keep reading frames until we get the finish frame
@@ -47,7 +47,7 @@ impl Message {
       // If this is a ping, respond with a pong
       if frame.opcode == Opcode::Ping {
         let pong = Frame::new(Opcode::Pong, frame.payload);
-        stream.stream.write_all(pong.as_ref()).map_err(|_| WebsocketError::WriteError)?;
+        stream.stream.write_all(pong.as_ref())?;
         continue;
       }
 
@@ -60,8 +60,10 @@ impl Message {
       // If this closes the connection, return the error
       if frame.opcode == Opcode::Close {
         let close = Frame::new(Opcode::Close, frame.payload);
-        stream.stream.write_all(close.as_ref()).map_err(|_| WebsocketError::WriteError)?;
-        return Err(WebsocketError::ConnectionClosed);
+        stream.stream.write_all(close.as_ref())?;
+
+        //TODO is this an error or an Option None case?
+        return Err(HumptyError::from(WebsocketError::ConnectionClosed));
       }
 
       frames.push(frame);

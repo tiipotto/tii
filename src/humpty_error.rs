@@ -47,6 +47,26 @@ pub enum RequestHeadParsingError {
   InvalidQueryString(String),
 }
 
+/// Represents a WebSocket error.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WebsocketError {
+  /// An error occurred during the WebSocket handshake.
+  HandshakeError,
+  /// The frame opcode was invalid.
+  InvalidOpcode,
+  /// The connection has been closed so the request could not be completed.
+  ConnectionClosed,
+}
+
+impl Display for WebsocketError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{:?}", self)
+  }
+}
+
+impl Error for WebsocketError {}
+
+
 impl Display for RequestHeadParsingError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     //TODO make this not shit
@@ -96,6 +116,7 @@ pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
   UserError(UserError),
   InvalidPathError(InvalidPathError),
+  WebsocketError(WebsocketError),
   IO(io::Error),
   Other(Box<dyn Error + Send>),
 }
@@ -118,6 +139,7 @@ impl HumptyError {
       HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      HumptyError::WebsocketError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -128,6 +150,7 @@ impl HumptyError {
       HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      HumptyError::WebsocketError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
@@ -137,6 +160,7 @@ impl HumptyError {
       HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::WebsocketError(err) => Box::new(err) as Box<dyn Error + Send>,
       HumptyError::Other(other) => other,
     }
   }
@@ -149,6 +173,7 @@ impl Display for HumptyError {
       HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
       HumptyError::UserError(err) => Display::fmt(err, f),
       HumptyError::InvalidPathError(err) => Display::fmt(err, f),
+      HumptyError::WebsocketError(err) => Display::fmt(err, f),
       HumptyError::Other(err) => Display::fmt(err, f),
     }
   }
