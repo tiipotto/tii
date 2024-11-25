@@ -194,7 +194,7 @@ impl Display for AcceptMimeType {
 ///
 /// Represents one part of an accept mime
 /// # See
-/// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
+/// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept>
 #[derive(Clone, PartialEq, Debug, Eq)]
 pub struct AcceptQualityMimeType {
   value: AcceptMimeType,

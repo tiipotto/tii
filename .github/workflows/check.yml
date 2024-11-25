@@ -183,3 +183,15 @@ jobs:
             toolchain: stable minus 2 releases
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
+
+  docs_check:
+      name: docs
+      runs-on: ubuntu-latest
+      env:
+        RUSTDOCFLAGS: -D warnings
+      steps:
+        - uses: actions/checkout@v4
+        - uses: dtolnay/rust-toolchain@stable
+          with:
+            toolchain: stable minus 2 releases
+        - run: cargo doc --all-features --no-deps

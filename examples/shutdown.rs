@@ -1,3 +1,4 @@
+use humpty::extras::network_utils::unspecified_socket_to_loopback;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
@@ -5,7 +6,7 @@ use humpty::humpty_builder::HumptyBuilder;
 use humpty::http::mime::MimeType;
 use humpty::humpty_error::HumptyResult;
 use std::error::Error;
-use std::net::{self, IpAddr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
@@ -13,20 +14,6 @@ use std::{io, thread};
 
 fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
-}
-
-fn unspecified_socket_to_loopback<S>(socket: S) -> SocketAddr
-where
-  S: ToSocketAddrs,
-{
-  let mut socket = socket.to_socket_addrs().unwrap().next().unwrap(); // This can't fail, because the server was able to start.
-  if socket.ip().is_unspecified() {
-    match socket.ip() {
-      IpAddr::V4(_) => socket.set_ip(IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1))),
-      IpAddr::V6(_) => socket.set_ip(IpAddr::V6(net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0x1))),
-    };
-  }
-  socket
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -48,7 +35,8 @@ fn main() -> Result<(), Box<dyn Error>> {
   let t = spawn(move || {
     sleep(Duration::from_secs(5));
     shutdown_app.send(()).unwrap();
-    TcpStream::connect(unspecified_socket_to_loopback(addr)).unwrap(); // wake up the TcpListener loop
+    // wake up the TcpListener loop
+    TcpStream::connect(unspecified_socket_to_loopback(addr).unwrap()).unwrap();
   });
 
   for stream in listen.incoming() {

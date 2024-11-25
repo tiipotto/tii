@@ -250,7 +250,7 @@ pub enum HeaderName {
   /// Indicates the encoding used in the transfer of the payload body.
   TransferEncoding,
 
-  /// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/TE
+  /// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/TE>
   TE,
   /// Trailer encoding
   Trailer,

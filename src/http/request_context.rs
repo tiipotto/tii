@@ -30,7 +30,7 @@ pub struct RequestContext {
 
   path_params: Option<HashMap<String, String>>,
 
-  ///TODO the key may be a candidate for Rc<str> instead of "String"?
+  ///TODO the key may be a candidate for `Rc<str>` instead of "String"?
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
 }
 
