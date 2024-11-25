@@ -56,7 +56,7 @@ impl HumptyBuilder {
     closure(HumptyBuilder::default()).map(|builder| builder.build())
   }
 
-  /// Build Arc<HumptyServer> using a closure or fn which receives the builder
+  /// Build `Arc<HumptyServer>` using a closure or fn which receives the builder
   pub fn builder_arc<T: FnOnce(HumptyBuilder) -> HumptyResult<HumptyBuilder>>(
     closure: T,
   ) -> HumptyResult<Arc<HumptyServer>> {
