@@ -2,14 +2,14 @@
 //! It also handles http keep alive and rudimentary (fallback) error handling.
 //! If no router wants to handle the request it also has a 404 handler.
 
-use crate::functional_traits::Router;
+use crate::functional_traits::{Router};
 use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
-use crate::humpty_builder::{ErrorHandler, NotFoundHandler};
+use crate::humpty_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
-use crate::stream::IntoConnectionStream;
+use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::Debug;
@@ -110,13 +110,27 @@ impl HumptyServer {
         trace_log!("WebsocketConnectionRequested");
 
         for router in self.routers.iter() {
-          if router.serve_websocket(stream.as_ref(), &mut context)? {
-            return Ok(());
+          //Note, it's not a good idea to further handle errors form web socket router as
+          //We have got no clue if we actually already switched protocols or not in error case.
+          //Best bail asap
+          match router.serve_websocket(stream.as_ref(), &mut context)? {
+            RouterWebSocketServingResponse::HandledWithProtocolSwitch => return Ok(()),
+            RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(response) => {
+              self.write_response(&stream, context, false, response)?;
+              return Ok(())
+            }
+            RouterWebSocketServingResponse::NotHandled => () // Next router please
           }
         }
 
-        // TODO how can I tell a websocket request gracefully that there is no one here for it? HTTP 404?, this just shuts the socket.
-        trace_log!("WebsocketConnectionClosed Not found");
+        //Respond with 404
+        let response = match (self.not_found_handler)(&mut context) {
+          Ok(res) => res,
+          Err(error) => (self.error_handler)(&mut context, error)
+              .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
+        };
+
+        self.write_response(&stream, context, false, response)?;
         return Ok(());
       }
 
@@ -140,7 +154,7 @@ impl HumptyServer {
         break;
       }
 
-      let mut response = response.unwrap_or_else(|| match (self.not_found_handler)(&mut context) {
+      let response = response.unwrap_or_else(|| match (self.not_found_handler)(&mut context) {
         Ok(res) => res,
         Err(error) => (self.error_handler)(&mut context, error)
           .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
@@ -148,33 +162,7 @@ impl HumptyServer {
 
       keep_alive &= !context.is_connection_close_forced();
 
-      if context.request_head().version() == HttpVersion::Http11 {
-        let previous_headers = if keep_alive {
-          response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
-        } else {
-          response.headers.replace_all(HeaderName::Connection, "Close")
-        };
-
-        if !previous_headers.is_empty() {
-          trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
-          return Err(HumptyError::new_io(
-            io::ErrorKind::InvalidInput,
-            "Endpoint has set banned header 'Connection'",
-          ));
-        }
-      }
-
-      trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
-
-      response.write_to(context.request_head().version(), stream.as_stream_write()).inspect_err(
-        |e| {
-          trace_log!("response.write_to {}", e);
-        },
-      )?;
-
-      trace_log!("RequestServedSuccess");
-
-      context.consume_request_body()?;
+      self.write_response(&stream, context, keep_alive, response)?;
 
       // If the request specified to keep the connection open, respect this
       if !keep_alive {
@@ -186,6 +174,37 @@ impl HumptyServer {
     }
 
     trace_log!("ConnectionClosed");
+    Ok(())
+  }
+
+  fn write_response(&self, stream: &Box<dyn ConnectionStream>, context: RequestContext, keep_alive: bool, mut response: Response) -> HumptyResult<()>{
+    if context.request_head().version() == HttpVersion::Http11 {
+      let previous_headers = if keep_alive {
+        response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
+      } else {
+        response.headers.replace_all(HeaderName::Connection, "Close")
+      };
+
+      if !previous_headers.is_empty() {
+        trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
+        return Err(HumptyError::new_io(
+          io::ErrorKind::InvalidInput,
+          "Endpoint has set banned header 'Connection'",
+        ));
+      }
+    }
+
+    trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
+
+    response.write_to(context.request_head().version(), stream.as_stream_write()).inspect_err(
+      |e| {
+        trace_log!("response.write_to {}", e);
+      },
+    )?;
+
+    trace_log!("RequestServedSuccess");
+
+    context.consume_request_body()?;
     Ok(())
   }
 

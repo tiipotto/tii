@@ -13,7 +13,7 @@ use crate::http::request_context::RequestContext;
 use crate::http::Response;
 use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
 use crate::humpty_error::HumptyResult;
-use crate::humpty_router::{HumptyRouter, RouteHandler, WebsocketRouteHandler};
+use crate::humpty_router::{HttpRoute, HumptyRouter, WebSocketRoute};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -33,10 +33,10 @@ pub struct HumptyRouterBuilder {
   response_filters: Vec<Box<dyn ResponseFilter>>,
 
   /// The routes to process requests for and their handlers.
-  routes: Vec<RouteHandler>,
+  routes: Vec<HttpRoute>,
 
   /// The routes to process WebSocket requests for and their handlers.
-  websocket_routes: Vec<WebsocketRouteHandler>,
+  websocket_routes: Vec<WebSocketRoute>,
 
   /// Called when no route has been found in the router.
   not_found_handler: NotRouteableHandler,
@@ -105,7 +105,7 @@ impl HumptyRouteBuilder {
     mut self,
     handler: T,
   ) -> HumptyResult<HumptyRouterBuilder> {
-    self.inner.routes.push(RouteHandler::new(
+    self.inner.routes.push(HttpRoute::new(
       self.route,
       self.method,
       self.consumes,
@@ -220,7 +220,7 @@ impl HumptyRouterBuilder {
     route: &str,
     handler: T,
   ) -> HumptyResult<Self> {
-    self.routes.push(RouteHandler::new(
+    self.routes.push(HttpRoute::new(
       route,
       method,
       HashSet::from([AcceptMimeType::Wildcard]),
@@ -403,9 +403,10 @@ impl HumptyRouterBuilder {
   where
     T: WebsocketHandler + 'static,
   {
+    //TODO other http methods than GET can be used to establish the connection?
     self
       .websocket_routes
-      .push(WebsocketRouteHandler { route: route.to_string(), handler: Box::new(handler) });
+      .push(WebSocketRoute::new(route, Method::Get, HashSet::new(), HashSet::new(), handler)?);
     Ok(self)
   }
 

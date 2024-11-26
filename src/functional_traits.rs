@@ -1,24 +1,27 @@
 //! Defines traits for handler and filter functions.
 
 use crate::http::request_context::RequestContext;
-use crate::http::{RequestHead, Response};
+use crate::http::{Response};
 use crate::humpty_error::HumptyResult;
 use crate::stream::ConnectionStream;
 use std::fmt::Debug;
+use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
 pub trait WebsocketHandler: Send + Sync {
   /// serve the web socket request.
-  fn serve(&self, request: RequestHead, stream: Box<dyn ConnectionStream>);
+  fn serve(&self, request: &RequestContext, sender: WebsocketSender, receiver: WebsocketReceiver);
 }
 impl<F> WebsocketHandler for F
 where
-  F: Fn(RequestHead, Box<dyn ConnectionStream>) + Send + Sync,
+  F: Fn(&RequestContext, WebsocketSender, WebsocketReceiver) + Send + Sync,
 {
-  fn serve(&self, request: RequestHead, stream: Box<dyn ConnectionStream>) {
-    self(request, stream)
+  fn serve(&self, request: &RequestContext, sender: WebsocketSender, receiver: WebsocketReceiver) {
+    self(request, sender, receiver)
   }
 }
+
+
 
 /// Represents a function able to handle a request.
 /// It is passed the request and must return a response.
@@ -138,6 +141,19 @@ where
   }
 }
 
+/// A router may respond to a web-socket request with a http response or indicate that the socket has been handled with a protocol switch
+/// Or it may indicate that it hasn't handled the socket and signal that the next router should do it.
+/// This enum represents those 3 states
+#[derive(Debug)]
+pub enum RouterWebSocketServingResponse {
+  /// Handled with protocol switch to WS
+  HandledWithProtocolSwitch,
+  /// Handled using HTTP protocol
+  HandledWithoutProtocolSwitch(Response),
+  /// Not handled, next router should do it.
+  NotHandled,
+}
+
 /// Trait for a router.
 pub trait Router: Debug + Send + Sync {
   /// Handle an ordinary http request
@@ -158,5 +174,5 @@ pub trait Router: Debug + Send + Sync {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<bool>;
+  ) -> HumptyResult<RouterWebSocketServingResponse>;
 }

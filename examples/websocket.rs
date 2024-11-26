@@ -1,16 +1,15 @@
+use humpty::extras::builtin_endpoints;
 use humpty::extras::tcp_app;
-use humpty::handlers;
-
-use humpty::websocket::message::Message;
-use humpty::websocket::stream::WebsocketStream;
-use humpty::websocket::websocket_handler;
 
 use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::{HumptyError, WebsocketError};
+use humpty::humpty_error::HumptyError;
 use std::error::Error;
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
+use humpty::http::request_context::RequestContext;
+use humpty::websocket::message::WebsocketMessage;
+use humpty::websocket::stream::{WebsocketReceiver, WebsocketSender};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -19,42 +18,55 @@ fn main() -> Result<(), Box<dyn Error>> {
     let humpty_server = HumptyBuilder::builder_arc(|builder| {
         builder.router(|router| {
             router
-                .route_any("/*", handlers::serve_dir("./examples/static/ws"))?
-                .with_websocket_route("/ws", websocket_handler(echo_handler))
+                .route_any("/*", builtin_endpoints::serve_dir("./examples/static/ws"))?
+                .with_websocket_route("/ws", echo_handler)
         })
     })
         .expect("ERROR");
 
     let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
 
+
     Ok(())
 }
 
 /// Handler for WebSocket connections.
 /// This is wrapped in `websocket_handler` to manage the handshake for us using the `humpty_ws` crate.
-fn echo_handler(mut stream: WebsocketStream) {
+fn echo_handler(request: &RequestContext, sender: WebsocketSender, mut receiver: WebsocketReceiver) {
     // Get the address of the client.
-    let addr = stream.inner().peer_addr().unwrap();
+    let addr = request.peer_address();
 
     println!("New connection from {}", addr);
 
     // Loop while the client is connected.
     loop {
         // Block while waiting to receive a message.
-        match stream.recv() {
+        match receiver.recv() {
             // If the message was received successfully, echo it back with an increasing number at the end.
-            Ok(message) => {
-                let message = message.text().unwrap();
-                let count = COUNTER.fetch_add(1, Ordering::SeqCst);
-                let response = format!("{} {}", message, count);
-
-                // Send the WebSocket response
-                stream.send(Message::new(response)).unwrap();
-
-                println!("Received message `{}` from {}, echoing with the number {}", message, addr, count)
+            Ok(Some(message)) => {
+                match message {
+                    WebsocketMessage::Text(text) => {
+                        let message = text;
+                        let count = COUNTER.fetch_add(1, Ordering::SeqCst);
+                        let response = format!("{} {}", message, count);
+                        sender.text(response).unwrap();
+                        println!("Received message `{}` from {}, echoing with the number {}", message, addr, count)
+                    }
+                    WebsocketMessage::Binary(binary) => {
+                        println!("Received binary data, echoing data back as is");
+                        sender.send(WebsocketMessage::Binary(binary)).unwrap();
+                    }
+                    WebsocketMessage::Ping => {
+                        println!("Received ping, responding with pong");
+                        sender.send(WebsocketMessage::Pong).unwrap();
+                    }
+                    WebsocketMessage::Pong => {
+                        println!("Received pong");
+                    }
+                }
             }
             // If the connection was closed, break out of the loop and clean up
-            Err(HumptyError::WebsocketError(WebsocketError::ConnectionClosed)) => {
+            Ok(None) => {
                 break;
             }
             // Ignore any other errors

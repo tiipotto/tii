@@ -1,13 +1,12 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
-use crate::humpty_error::{HumptyResult, WebsocketError};
-use crate::stream::ConnectionStreamRead;
-use std::convert::TryFrom;
+use crate::humpty_error::{HumptyResult, RequestHeadParsingError};
+use crate::stream::{ConnectionStreamRead, ConnectionStreamWrite};
 
 /// Represents a frame of WebSocket data.
 /// Follows [Section 5.2 of RFC 6455](https://datatracker.ietf.org/doc/html/rfc6455#section-5.2)
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Frame {
+pub(crate) struct Frame {
   pub(crate) fin: bool,
   pub(crate) rsv: [bool; 3],
   pub(crate) opcode: Opcode,
@@ -20,7 +19,7 @@ pub struct Frame {
 /// Represents the type of WebSocket frame.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Opcode {
+pub(crate) enum Opcode {
   Continuation = 0x0,
   Text = 0x1,
   Binary = 0x2,
@@ -29,19 +28,17 @@ pub enum Opcode {
   Pong = 0xA,
 }
 
-impl TryFrom<u8> for Opcode {
-  type Error = WebsocketError;
-
-  fn try_from(value: u8) -> Result<Self, Self::Error> {
-    match value {
-      0x0 => Ok(Self::Continuation),
-      0x1 => Ok(Self::Text),
-      0x2 => Ok(Self::Binary),
-      0x8 => Ok(Self::Close),
-      0x9 => Ok(Self::Ping),
-      0xA => Ok(Self::Pong),
-      _ => Err(WebsocketError::InvalidOpcode),
-    }
+impl Opcode {
+  pub fn parse(value: u8) -> Option<Self> {
+    Some(match value {
+      0x0 => Self::Continuation,
+      0x1 => Self::Text,
+      0x2 => Self::Binary,
+      0x8 => Self::Close,
+      0x9 => Self::Ping,
+      0xA => Self::Pong,
+      _=> return None,
+    })
   }
 }
 
@@ -61,21 +58,16 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
-  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> HumptyResult<Self> {
-    let mut buf: [u8; 2] = [0; 2];
-    stream.read_exact(&mut buf)?;
-
-    Self::from_stream_inner(stream, buf)
-  }
-
-  fn from_stream_inner<T: ConnectionStreamRead + ?Sized>(
+  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(
     stream: &T,
-    mut header: [u8; 2],
   ) -> HumptyResult<Self> {
+    let mut header: [u8; 2] = [0; 2];
+    stream.read_exact(&mut header)?;
+
     // Parse header information
     let fin = header[0] & 0x80 != 0;
     let rsv = [header[0] & 0x40 != 0, header[0] & 0x20 != 0, header[0] & 0x10 != 0];
-    let opcode = Opcode::try_from(header[0] & 0xF)?;
+    let opcode = Opcode::parse(header[0] & 0xF).ok_or(RequestHeadParsingError::InvalidWebSocketOpcode)?;
     let mask = header[1] & 0x80 != 0;
 
     let mut length: u64 = (header[1] & 0x7F) as u64;
@@ -105,39 +97,40 @@ impl Frame {
 
     Ok(Self { fin, rsv, opcode, mask, length, masking_key, payload })
   }
-}
 
-impl From<Frame> for Vec<u8> {
-  fn from(f: Frame) -> Self {
+  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> HumptyResult<()> {
     let mut buf: Vec<u8> = vec![0; 2];
 
     // Set the header bits
-    buf[0] = (f.fin as u8) << 7
-      | (f.rsv[0] as u8) << 6
-      | (f.rsv[1] as u8) << 5
-      | (f.rsv[2] as u8) << 4
-      | f.opcode as u8;
+    buf[0] = (self.fin as u8) << 7
+        | (self.rsv[0] as u8) << 6
+        | (self.rsv[1] as u8) << 5
+        | (self.rsv[2] as u8) << 4
+        | self.opcode as u8;
 
     // Set the length information
-    if f.length < 126 {
-      buf[1] = (f.mask as u8) << 7 | f.length as u8;
-    } else if f.length < 65536 {
-      buf[1] = (f.mask as u8) << 7 | 126;
-      buf.extend_from_slice(&(f.length as u16).to_be_bytes());
+    if self.length < 126 {
+      buf[1] = (self.mask as u8) << 7 | self.length as u8;
+    } else if self.length < 65536 {
+      buf[1] = (self.mask as u8) << 7 | 126;
+      buf.extend_from_slice(&(self.length as u16).to_be_bytes());
     } else {
-      buf[1] = (f.mask as u8) << 7 | 127;
-      buf.extend_from_slice(&(f.length).to_be_bytes());
+      buf[1] = (self.mask as u8) << 7 | 127;
+      buf.extend_from_slice(&(self.length).to_be_bytes());
     }
 
     // Add the masking key (if required)
-    if f.mask {
-      buf.extend_from_slice(&f.masking_key);
+    if self.mask {
+      buf.extend_from_slice(&self.masking_key);
     }
 
     // Add the payload and return
-    buf.extend_from_slice(&f.payload);
+    buf.extend_from_slice(&self.payload);
 
-    buf
+
+    write.write(buf.as_slice())?;
+    write.flush()?;
+    Ok(())
   }
 }
 

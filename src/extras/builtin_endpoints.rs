@@ -1,9 +1,4 @@
 //! Provides a number of useful handlers for Humpty apps.
-
-//TODO should we provide this as part of humpty?
-//It could be argued that this may be bloat for an app that just wants to serve json.
-//Its also reasonably trivial for any user of humpty to implement this himself.
-
 use crate::http::headers::HeaderName;
 use crate::http::response_body::ResponseBody;
 use crate::http::{Response, StatusCode};
@@ -11,7 +6,6 @@ use crate::http::{Response, StatusCode};
 use crate::http::mime::MimeType;
 use crate::http::request_context::RequestContext;
 use crate::humpty_error::HumptyResult;
-use crate::percent::PercentDecode;
 use std::fs::{metadata, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -107,12 +101,12 @@ pub fn serve_dir(
 /// Attempts to find a given path.
 /// If the path itself is not found, attempts to find index files within it.
 /// If these are not found, returns `None`.
-pub fn try_find_path(
+fn try_find_path(
   directory: &str,
   request_path: &str,
   index_files: &[&str],
 ) -> Option<LocatedPath> {
-  let request_path = String::from_utf8(request_path.percent_decode()?).ok()?;
+  let request_path = request_path;
 
   // Avoid path traversal exploits
   if request_path.contains("..") || request_path.contains(':') {

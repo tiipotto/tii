@@ -45,26 +45,14 @@ pub enum RequestHeadParsingError {
   TransferEncodingNotSupported(String),
   InvalidContentLength(String),
   InvalidQueryString(String),
-}
-
-/// Represents a WebSocket error.
-#[derive(Debug, PartialEq, Eq)]
-pub enum WebsocketError {
   /// An error occurred during the WebSocket handshake.
-  HandshakeError,
-  /// The frame opcode was invalid.
-  InvalidOpcode,
-  /// The connection has been closed so the request could not be completed.
-  ConnectionClosed,
+  MissingSecWebSocketKeyHeader,
+  /// The web socket frame opcode was invalid.
+  InvalidWebSocketOpcode,
+  UnexpectedWebSocketOpcode,
+  WebSocketClosedDuringPendingMessage,
+  WebSocketTextMessageIsNotUtf8(Vec<u8>)
 }
-
-impl Display for WebsocketError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{:?}", self)
-  }
-}
-
-impl Error for WebsocketError {}
 
 impl Display for RequestHeadParsingError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -115,9 +103,8 @@ pub enum HumptyError {
   RequestHeadParsing(RequestHeadParsingError),
   UserError(UserError),
   InvalidPathError(InvalidPathError),
-  WebsocketError(WebsocketError),
   IO(io::Error),
-  Other(Box<dyn Error + Send>),
+  Other(Box<dyn Error + Send + Sync>),
 }
 
 impl HumptyError {
@@ -138,7 +125,6 @@ impl HumptyError {
       HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::WebsocketError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       HumptyError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -149,17 +135,15 @@ impl HumptyError {
       HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::WebsocketError(err) => (err as &dyn Error).downcast_ref::<T>(),
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
-  pub fn into_inner(self) -> Box<dyn Error + Send> {
+  pub fn into_inner(self) -> Box<dyn Error + Send+Sync+'static> {
     match self {
-      HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::WebsocketError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       HumptyError::Other(other) => other,
     }
   }
@@ -172,7 +156,6 @@ impl Display for HumptyError {
       HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
       HumptyError::UserError(err) => Display::fmt(err, f),
       HumptyError::InvalidPathError(err) => Display::fmt(err, f),
-      HumptyError::WebsocketError(err) => Display::fmt(err, f),
       HumptyError::Other(err) => Display::fmt(err, f),
     }
   }
@@ -180,10 +163,10 @@ impl Display for HumptyError {
 
 impl<T> From<T> for HumptyError
 where
-  T: Error + Send + 'static,
+  T: Error + Send + Sync + 'static,
 {
   fn from(value: T) -> Self {
-    let mut dyn_box = Box::new(value) as Box<dyn Error + Send>;
+    let mut dyn_box = Box::new(value) as Box<dyn Error + Send + Sync>;
     dyn_box = match dyn_box.downcast::<io::Error>() {
       Ok(err) => return HumptyError::IO(*err),
       Err(err) => err,
@@ -206,5 +189,14 @@ impl From<HumptyError> for Box<dyn Error + Send> {
 impl<T> From<UserError> for HumptyResult<T> {
   fn from(value: UserError) -> Self {
     Err(HumptyError::UserError(value))
+  }
+}
+
+impl From<HumptyError> for io::Error {
+  fn from(value: HumptyError) -> Self {
+    match value {
+      HumptyError::IO(io) => io,
+      err => io::Error::new(err.kind(), err.into_inner()),
+    }
   }
 }
