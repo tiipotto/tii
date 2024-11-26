@@ -1,15 +1,12 @@
 use humpty::extras::builtin_endpoints;
 use humpty::extras::tcp_app;
 
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyError;
-use std::error::Error;
-use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread;
 use humpty::http::request_context::RequestContext;
+use humpty::humpty_builder::HumptyBuilder;
 use humpty::websocket::message::WebsocketMessage;
 use humpty::websocket::stream::{WebsocketReceiver, WebsocketSender};
+use std::error::Error;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
