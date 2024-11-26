@@ -1,3 +1,4 @@
+use humpty::extras::tcp_app;
 use humpty::handlers;
 
 use humpty::websocket::error::WebsocketError;
@@ -6,17 +7,14 @@ use humpty::websocket::stream::WebsocketStream;
 use humpty::websocket::websocket_handler;
 
 use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyError;
 use std::error::Error;
-use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::builder_arc(|builder| {
+  let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/*", handlers::serve_dir("./examples/static/ws"))?
@@ -25,14 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   })
   .expect("ERROR");
 
-  let listen = TcpListener::bind("0.0.0.0:8080")?;
-  for stream in listen.incoming() {
-    let app = app.clone();
-    thread::spawn(move || {
-      app.handle_connection(stream?)?;
-      Ok::<(), HumptyError>(())
-    });
-  }
+  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
 
   Ok(())
 }

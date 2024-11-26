@@ -91,6 +91,7 @@ jobs:
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --no-default-features
           cargo build --examples
+          cargo build --examples --all-features
 
   build_windows:
     name: Build Windows
@@ -126,6 +127,7 @@ jobs:
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --no-default-features
           cargo build --examples
+          cargo build --examples --all-features
 
   test_windows:
     name: Test Windows

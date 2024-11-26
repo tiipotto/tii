@@ -4,16 +4,14 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use humpty::handlers;
-
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyError;
 use std::error::Error;
-use std::net::TcpListener;
-use std::thread;
+
+use humpty::extras::tcp_app;
+use humpty::handlers;
+use humpty::humpty_builder::HumptyBuilder;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let app = HumptyBuilder::builder_arc(|builder| {
+  let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/", handlers::serve_file("./examples/static/pages/index.html"))?
@@ -28,14 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   })
   .expect("ERROR");
 
-  let listen = TcpListener::bind("0.0.0.0:8080")?;
-  for stream in listen.incoming() {
-    let app = app.clone();
-    thread::spawn(move || {
-      app.handle_connection(stream?)?;
-      Ok::<(), HumptyError>(())
-    });
-  }
+  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
 
   Ok(())
 }
