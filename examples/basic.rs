@@ -1,3 +1,6 @@
+use std::error::Error;
+
+use humpty::extras::tcp_app;
 use humpty::http::method::Method;
 use humpty::http::mime::{AcceptMimeType, MimeType};
 use humpty::http::request_context::RequestContext;
@@ -5,14 +8,11 @@ use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use log::info;
-use std::error::Error;
-use std::net::TcpListener;
-use std::{io, thread};
 
 fn main() -> Result<(), Box<dyn Error>> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-  let app = HumptyBuilder::builder_arc(|builder| {
+  let humpty_server = HumptyBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.
     builder.router(|router| {
       router
@@ -71,14 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   })
   .expect("ERROR");
 
-  let listen = TcpListener::bind("0.0.0.0:8080")?;
-  for stream in listen.incoming() {
-    let app = app.clone();
-    thread::spawn(move || {
-      app.handle_connection(stream?).expect("ERORR");
-      Ok::<(), io::Error>(())
-    });
-  }
+  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
 
   Ok(())
 }

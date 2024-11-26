@@ -2,28 +2,29 @@
 
 #![warn(missing_docs)]
 
+pub use humpty_error::HumptyError;
+
 pub mod handlers;
 pub mod http;
-pub mod websocket;
-
-mod default_functions;
-mod functional_traits;
 pub mod humpty_builder;
 pub mod humpty_error;
 pub mod humpty_router;
 pub mod humpty_router_builder;
 pub mod humpty_server;
-mod krauss;
-mod percent;
 pub mod stream;
+pub mod websocket;
 #[cfg(feature = "ssl")]
-mod tls_stream;
-mod util;
+pub use tls_stream::{HumptyTlsStream, TlsCapableStream};
 
 /// Extra utilities that can be useful for many projects but should not be part of humpty itself.
 /// This stuff might be moved to its own crate at some point.
 /// Nothing inside humpty can depend on something in extras!
 pub mod extras;
 
+mod default_functions;
+mod functional_traits;
+mod krauss;
+mod percent;
 #[cfg(feature = "ssl")]
-pub use tls_stream::{HumptyTlsStream, TlsCapableStream};
+mod tls_stream;
+mod util;
