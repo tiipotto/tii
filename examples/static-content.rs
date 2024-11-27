@@ -8,10 +8,7 @@ use humpty::extras::builtin_endpoints;
 use humpty::extras::tcp_app;
 
 use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyError;
 use std::error::Error;
-use std::net::TcpListener;
-use std::thread;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
