@@ -1,17 +1,17 @@
 //! Provides functionality for working with a WebSocket stream.
 
-use std::{io, mem};
-use std::collections::VecDeque;
 use crate::websocket::frame::{Frame, Opcode};
-use crate::websocket::message::{WebsocketMessage};
+use crate::websocket::message::WebsocketMessage;
+use std::collections::VecDeque;
+use std::{io, mem};
 
 use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
+use crate::util::unwrap_some;
 use std::io::{Cursor, Read, Write};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
-use crate::util::unwrap_some;
+use std::sync::Arc;
 
 /// Sending side of a web socket
 pub struct WebsocketSender {
@@ -23,10 +23,7 @@ pub struct WebsocketSender {
 pub fn new(connection: &dyn ConnectionStream) -> (WebsocketSender, WebsocketReceiver) {
   let closed = Arc::new(AtomicBool::new(false));
   let dup = connection.new_ref();
-  let sender = WebsocketSender {
-    closed: Arc::clone(&closed),
-    stream: dup,
-  };
+  let sender = WebsocketSender { closed: Arc::clone(&closed), stream: dup };
 
   let receiver = WebsocketReceiver {
     closed,
@@ -40,7 +37,6 @@ pub fn new(connection: &dyn ConnectionStream) -> (WebsocketSender, WebsocketRece
 }
 
 impl WebsocketSender {
-
   /// Sends a message to the client.
   pub fn send(&self, message: WebsocketMessage) -> HumptyResult<()> {
     match message {
@@ -58,7 +54,8 @@ impl WebsocketSender {
 
   /// Sends a text message to the client
   pub fn text(&self, message: impl ToString) -> HumptyResult<()> {
-    Frame::new(Opcode::Text, message.to_string().into_bytes()).write_to(self.stream.as_stream_write())
+    Frame::new(Opcode::Text, message.to_string().into_bytes())
+      .write_to(self.stream.as_stream_write())
   }
 
   /// Sends a ping to the client.
@@ -75,7 +72,6 @@ impl WebsocketSender {
   pub fn peer_addr(&self) -> HumptyResult<String> {
     Ok(self.stream.peer_addr()?)
   }
-
 }
 
 /// Receiving side of a web socket
@@ -87,10 +83,7 @@ pub struct WebsocketReceiver {
   unhandled_messages: VecDeque<WebsocketMessage>,
 }
 
-
 impl WebsocketReceiver {
-
-
   /// If the WebsocketReceiver is used with the "io::Read" trait then
   /// any ping/pong messages received are not handled. They are instead queued.
   /// This fn pop_front's the head of the queue.
@@ -111,7 +104,6 @@ impl WebsocketReceiver {
   ///
   /// Silently responds to pings with pongs, as specified in [RFC 6455 Section 5.5.2](https://datatracker.ietf.org/doc/html/rfc6455#section-5.5.2).
   fn read_next_frame(&mut self) -> HumptyResult<Option<WebsocketMessage>> {
-
     if self.closed.load(SeqCst) {
       return Ok(None);
     }
@@ -135,14 +127,15 @@ impl WebsocketReceiver {
           return Ok(None);
         }
 
-        return Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::WebSocketClosedDuringPendingMessage));
+        return Err(HumptyError::RequestHeadParsing(
+          RequestHeadParsingError::WebSocketClosedDuringPendingMessage,
+        ));
       }
 
       self.state.push(frame);
     }
 
-
-    let frames = mem::replace(&mut self.state, Vec::new());
+    let frames = mem::take(&mut self.state);
     let frame_type = unwrap_some(frames.first()).opcode;
 
     let size = frames.iter().map(|f| f.payload.len()).sum();
@@ -150,24 +143,25 @@ impl WebsocketReceiver {
 
     for (idx, frame) in frames.into_iter().enumerate() {
       if idx != 0 && frame.opcode != Opcode::Continuation {
-        return Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::UnexpectedWebSocketOpcode));
+        return Err(HumptyError::RequestHeadParsing(
+          RequestHeadParsingError::UnexpectedWebSocketOpcode,
+        ));
       }
       payload.extend_from_slice(frame.payload.as_slice());
     }
 
     match frame_type {
       Opcode::Text => {
-        let payload = String::from_utf8(payload)
-            .map_err(|e| {
-              self.closed.store(true, SeqCst);
-              HumptyError::RequestHeadParsing(RequestHeadParsingError::WebSocketTextMessageIsNotUtf8(e.into_bytes()))
-            })?;
+        let payload = String::from_utf8(payload).map_err(|e| {
+          self.closed.store(true, SeqCst);
+          HumptyError::RequestHeadParsing(RequestHeadParsingError::WebSocketTextMessageIsNotUtf8(
+            e.into_bytes(),
+          ))
+        })?;
 
         Ok(Some(WebsocketMessage::Text(payload)))
       }
-      Opcode::Binary => {
-        Ok(Some(WebsocketMessage::Binary(payload)))
-      }
+      Opcode::Binary => Ok(Some(WebsocketMessage::Binary(payload))),
       _ => {
         self.closed.store(true, SeqCst);
         Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::UnexpectedWebSocketOpcode))
@@ -200,13 +194,11 @@ impl Read for WebsocketReceiver {
             continue;
           }
         },
-        Ok(None) => {
-          Ok(0)
-        }
+        Ok(None) => Ok(0),
         Err(err) => {
           return Err(err.into());
         }
-      }
+      };
     }
   }
 }

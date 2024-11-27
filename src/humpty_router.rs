@@ -1,8 +1,13 @@
 //! Contains the impl of the router.
 
-use crate::functional_traits::{RequestFilter, RequestHandler, ResponseFilter, Router, RouterFilter, RouterWebSocketServingResponse, WebsocketHandler};
+use crate::functional_traits::{
+  RequestFilter, RequestHandler, ResponseFilter, Router, RouterFilter,
+  RouterWebSocketServingResponse, WebsocketHandler,
+};
+use crate::http::headers::HeaderName;
 use crate::http::method::Method;
 use crate::http::mime::{AcceptMimeType, QValue};
+use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
@@ -10,15 +15,13 @@ use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError, RequestHe
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use crate::{krauss, trace_log, util};
+use base64::Engine;
 use regex::{Error, Regex};
+use sha1::{Digest, Sha1};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use base64::Engine;
-use sha1::{Digest, Sha1};
-use crate::http::headers::HeaderName;
-use crate::http::request::HttpVersion;
 
 #[derive(Debug, Clone)]
 enum PathPart {
@@ -164,16 +167,14 @@ pub struct Routeable {
   produces: HashSet<AcceptMimeType>,
 }
 
-
 pub(crate) struct HttpRoute {
-
   pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
   pub(crate) handler: Box<dyn RequestHandler>,
 }
 
-pub (crate) struct WebSocketRoute {
+pub(crate) struct WebSocketRoute {
   pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
@@ -522,25 +523,30 @@ fn websocket_handshake(request: &RequestContext) -> HumptyResult<Response> {
   const HANDSHAKE_KEY_CONSTANT: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
   // Get the handshake key header
-  let handshake_key =
-      request.request_head().get_header("Sec-WebSocket-Key")
-          .ok_or(RequestHeadParsingError::MissingSecWebSocketKeyHeader)?;
+  let handshake_key = request
+    .request_head()
+    .get_header("Sec-WebSocket-Key")
+    .ok_or(RequestHeadParsingError::MissingSecWebSocketKeyHeader)?;
 
   // Calculate the handshake response
-  let sha1 = Sha1::new().chain_update(handshake_key).chain_update(HANDSHAKE_KEY_CONSTANT).finalize();
+  let sha1 =
+    Sha1::new().chain_update(handshake_key).chain_update(HANDSHAKE_KEY_CONSTANT).finalize();
   let sec_websocket_accept = base64::prelude::BASE64_STANDARD.encode(sha1);
 
   //let sec_websocket_accept = sha1.encode();
 
   // Serialise the handshake response
   let response = Response::new(StatusCode::SwitchingProtocols)
-      .with_header(HeaderName::Upgrade, "websocket")?
-      .with_header(HeaderName::Connection, "Upgrade")?
-      .with_header("Sec-WebSocket-Accept", sec_websocket_accept)?;
+    .with_header(HeaderName::Upgrade, "websocket")?
+    .with_header(HeaderName::Connection, "Upgrade")?
+    .with_header("Sec-WebSocket-Accept", sec_websocket_accept)?;
 
+  // Oddly enough I think you can establish a WS connection with a POST request that has data.
+  // This will consume that data if it has not already been used by a filter.
+  // Some beta versions of Web Sockets used the request body to convey the Sec-WebSocket-Key...
+  request.consume_request_body()?;
   Ok(response)
 }
-
 
 impl HumptyRouter {
   #[allow(clippy::too_many_arguments)] //Only called by the builder.
@@ -604,7 +610,6 @@ impl HumptyRouter {
       return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
     }
 
-
     let mut best_decision = RoutingDecision::PathMismatch;
     let mut best_handler = None;
 
@@ -656,7 +661,7 @@ impl HumptyRouter {
           handler.handler.serve(request, sender, receiver);
           Ok(RouterWebSocketServingResponse::HandledWithProtocolSwitch)
         }
-      }
+      };
     }
 
     trace_log!("WebsocketConnectionClosed Invoke fallback {}", &best_decision);
@@ -712,7 +717,11 @@ impl HumptyRouter {
     Ok(Some(resp))
   }
 
-  fn call_response_filters(&self, request: &mut RequestContext, mut resp: Response) -> HumptyResult<Response> {
+  fn call_response_filters(
+    &self,
+    request: &mut RequestContext,
+    mut resp: Response,
+  ) -> HumptyResult<Response> {
     for filter in self.response_filters.iter() {
       resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
     }
@@ -757,14 +766,22 @@ impl HumptyRouter {
       return handler.handler.serve(request);
     }
 
-    self.invoke_appropriate_fallback_handler(request, &mut best_decision)
+    self.invoke_appropriate_fallback_handler(request, &best_decision)
   }
 
-  fn invoke_appropriate_fallback_handler(&self, request: &mut RequestContext, best_decision: &RoutingDecision) -> HumptyResult<Response> {
+  fn invoke_appropriate_fallback_handler(
+    &self,
+    request: &mut RequestContext,
+    best_decision: &RoutingDecision,
+  ) -> HumptyResult<Response> {
     match best_decision {
       RoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routeables),
-      RoutingDecision::MethodMismatch => (self.method_not_allowed_handler)(request, &self.routeables),
-      RoutingDecision::MimeMismatch => (self.unsupported_media_type_handler)(request, &self.routeables),
+      RoutingDecision::MethodMismatch => {
+        (self.method_not_allowed_handler)(request, &self.routeables)
+      }
+      RoutingDecision::MimeMismatch => {
+        (self.unsupported_media_type_handler)(request, &self.routeables)
+      }
       RoutingDecision::AcceptMismatch => (self.not_acceptable_handler)(request, &self.routeables),
       // We found a handler! Why are we here?
       RoutingDecision::Match(_, _) => util::unreachable(),

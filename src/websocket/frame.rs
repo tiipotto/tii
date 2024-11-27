@@ -37,7 +37,7 @@ impl Opcode {
       0x8 => Self::Close,
       0x9 => Self::Ping,
       0xA => Self::Pong,
-      _=> return None,
+      _ => return None,
     })
   }
 }
@@ -58,16 +58,15 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
-  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(
-    stream: &T,
-  ) -> HumptyResult<Self> {
+  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> HumptyResult<Self> {
     let mut header: [u8; 2] = [0; 2];
     stream.read_exact(&mut header)?;
 
     // Parse header information
     let fin = header[0] & 0x80 != 0;
     let rsv = [header[0] & 0x40 != 0, header[0] & 0x20 != 0, header[0] & 0x10 != 0];
-    let opcode = Opcode::parse(header[0] & 0xF).ok_or(RequestHeadParsingError::InvalidWebSocketOpcode)?;
+    let opcode =
+      Opcode::parse(header[0] & 0xF).ok_or(RequestHeadParsingError::InvalidWebSocketOpcode)?;
     let mask = header[1] & 0x80 != 0;
 
     let mut length: u64 = (header[1] & 0x7F) as u64;
@@ -103,10 +102,10 @@ impl Frame {
 
     // Set the header bits
     buf[0] = (self.fin as u8) << 7
-        | (self.rsv[0] as u8) << 6
-        | (self.rsv[1] as u8) << 5
-        | (self.rsv[2] as u8) << 4
-        | self.opcode as u8;
+      | (self.rsv[0] as u8) << 6
+      | (self.rsv[1] as u8) << 5
+      | (self.rsv[2] as u8) << 4
+      | self.opcode as u8;
 
     // Set the length information
     if self.length < 126 {
@@ -126,7 +125,6 @@ impl Frame {
 
     // Add the payload and return
     buf.extend_from_slice(&self.payload);
-
 
     write.write(buf.as_slice())?;
     write.flush()?;
@@ -367,7 +365,10 @@ mod test {
       payload: b"hello world".to_vec(),
     };
 
-    let bytes: Vec<u8> = frame.into();
+    let ms = MockStream::with_data(Vec::new());
+    let stream = ms.clone().into_connection_stream();
+    frame.write_to(stream.as_stream_write()).unwrap();
+    let bytes: Vec<u8> = ms.copy_written_data();
 
     assert_eq!(bytes, UNMASKED_BYTES.to_vec());
   }

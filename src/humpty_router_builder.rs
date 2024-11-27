@@ -404,9 +404,13 @@ impl HumptyRouterBuilder {
     T: WebsocketHandler + 'static,
   {
     //TODO other http methods than GET can be used to establish the connection?
-    self
-      .websocket_routes
-      .push(WebSocketRoute::new(route, Method::Get, HashSet::new(), HashSet::new(), handler)?);
+    self.websocket_routes.push(WebSocketRoute::new(
+      route,
+      Method::Get,
+      HashSet::new(),
+      HashSet::new(),
+      handler,
+    )?);
     Ok(self)
   }
 

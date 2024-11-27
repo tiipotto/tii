@@ -51,7 +51,7 @@ pub enum RequestHeadParsingError {
   InvalidWebSocketOpcode,
   UnexpectedWebSocketOpcode,
   WebSocketClosedDuringPendingMessage,
-  WebSocketTextMessageIsNotUtf8(Vec<u8>)
+  WebSocketTextMessageIsNotUtf8(Vec<u8>),
 }
 
 impl Display for RequestHeadParsingError {
@@ -138,7 +138,7 @@ impl HumptyError {
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
-  pub fn into_inner(self) -> Box<dyn Error + Send+Sync+'static> {
+  pub fn into_inner(self) -> Box<dyn Error + Send + Sync + 'static> {
     match self {
       HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,

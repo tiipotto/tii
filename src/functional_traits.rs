@@ -1,11 +1,11 @@
 //! Defines traits for handler and filter functions.
 
 use crate::http::request_context::RequestContext;
-use crate::http::{Response};
+use crate::http::Response;
 use crate::humpty_error::HumptyResult;
 use crate::stream::ConnectionStream;
-use std::fmt::Debug;
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
+use std::fmt::Debug;
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
 pub trait WebsocketHandler: Send + Sync {
@@ -20,8 +20,6 @@ where
     self(request, sender, receiver)
   }
 }
-
-
 
 /// Represents a function able to handle a request.
 /// It is passed the request and must return a response.

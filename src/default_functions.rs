@@ -36,16 +36,16 @@ pub(crate) fn default_fallback_not_found_handler(
 }
 
 pub(crate) fn default_not_found_handler(
-    request: &mut RequestContext,
-    _: &[Routeable],
+  request: &mut RequestContext,
+  _: &[Routeable],
 ) -> HumptyResult<Response> {
   info_log!("Not found {} {}", &request.request_head().method(), request.request_head().path());
   Ok(Response::not_found_no_body())
 }
 
 pub(crate) fn default_not_acceptable_handler(
-    request: &mut RequestContext,
-    _: &[Routeable],
+  request: &mut RequestContext,
+  _: &[Routeable],
 ) -> HumptyResult<Response> {
   info_log!(
     "Not Acceptable {} {}",
@@ -56,8 +56,8 @@ pub(crate) fn default_not_acceptable_handler(
 }
 
 pub(crate) fn default_method_not_allowed_handler(
-    request: &mut RequestContext,
-    routes: &[Routeable],
+  request: &mut RequestContext,
+  routes: &[Routeable],
 ) -> HumptyResult<Response> {
   info_log!(
     "Method not allowed {} {}",
@@ -78,8 +78,8 @@ pub(crate) fn default_method_not_allowed_handler(
 }
 
 pub(crate) fn default_unsupported_media_type_handler(
-    request: &mut RequestContext,
-    _: &[Routeable],
+  request: &mut RequestContext,
+  _: &[Routeable],
 ) -> HumptyResult<Response> {
   info_log!(
     "Unsupported Media Type {} {} {:?}",

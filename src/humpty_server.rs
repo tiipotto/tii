@@ -2,7 +2,7 @@
 //! It also handles http keep alive and rudimentary (fallback) error handling.
 //! If no router wants to handle the request it also has a 404 handler.
 
-use crate::functional_traits::{Router};
+use crate::functional_traits::Router;
 use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
@@ -116,10 +116,10 @@ impl HumptyServer {
           match router.serve_websocket(stream.as_ref(), &mut context)? {
             RouterWebSocketServingResponse::HandledWithProtocolSwitch => return Ok(()),
             RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(response) => {
-              self.write_response(&stream, context, false, response)?;
-              return Ok(())
+              self.write_response(stream.as_ref(), context, false, response)?;
+              return Ok(());
             }
-            RouterWebSocketServingResponse::NotHandled => () // Next router please
+            RouterWebSocketServingResponse::NotHandled => (), // Next router please
           }
         }
 
@@ -127,10 +127,10 @@ impl HumptyServer {
         let response = match (self.not_found_handler)(&mut context) {
           Ok(res) => res,
           Err(error) => (self.error_handler)(&mut context, error)
-              .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
+            .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
         };
 
-        self.write_response(&stream, context, false, response)?;
+        self.write_response(stream.as_ref(), context, false, response)?;
         return Ok(());
       }
 
@@ -162,7 +162,7 @@ impl HumptyServer {
 
       keep_alive &= !context.is_connection_close_forced();
 
-      self.write_response(&stream, context, keep_alive, response)?;
+      self.write_response(stream.as_ref(), context, keep_alive, response)?;
 
       // If the request specified to keep the connection open, respect this
       if !keep_alive {
@@ -177,7 +177,13 @@ impl HumptyServer {
     Ok(())
   }
 
-  fn write_response(&self, stream: &Box<dyn ConnectionStream>, context: RequestContext, keep_alive: bool, mut response: Response) -> HumptyResult<()>{
+  fn write_response(
+    &self,
+    stream: &dyn ConnectionStream,
+    context: RequestContext,
+    keep_alive: bool,
+    mut response: Response,
+  ) -> HumptyResult<()> {
     if context.request_head().version() == HttpVersion::Http11 {
       let previous_headers = if keep_alive {
         response.headers.replace_all(HeaderName::Connection, "Keep-Alive")

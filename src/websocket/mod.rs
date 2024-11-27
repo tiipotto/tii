@@ -4,8 +4,6 @@
 
 #![warn(missing_docs)]
 
-
-
 pub mod message;
 pub mod stream;
 

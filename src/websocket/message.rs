@@ -37,7 +37,7 @@ impl WebsocketMessage {
     match self {
       WebsocketMessage::Text(txt) => Some(txt),
       WebsocketMessage::Binary(bin) => std::str::from_utf8(bin.as_slice()).ok(),
-      _=> None,
+      _ => None,
     }
   }
 
@@ -47,7 +47,7 @@ impl WebsocketMessage {
       WebsocketMessage::Text(txt) => Some(txt.as_bytes()),
       WebsocketMessage::Binary(bin) => Some(bin.as_slice()),
       WebsocketMessage::Ping => None,
-      WebsocketMessage::Pong => None
+      WebsocketMessage::Pong => None,
     }
   }
 }

@@ -101,11 +101,7 @@ pub fn serve_dir(
 /// Attempts to find a given path.
 /// If the path itself is not found, attempts to find index files within it.
 /// If these are not found, returns `None`.
-fn try_find_path(
-  directory: &str,
-  request_path: &str,
-  index_files: &[&str],
-) -> Option<LocatedPath> {
+fn try_find_path(directory: &str, request_path: &str, index_files: &[&str]) -> Option<LocatedPath> {
   let request_path = request_path;
 
   // Avoid path traversal exploits
