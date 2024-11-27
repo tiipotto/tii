@@ -1,8 +1,8 @@
 //! Contains the impl of the router.
 
 use crate::functional_traits::{
-  RequestFilter, RequestHandler, ResponseFilter, Router, RouterFilter,
-  RouterWebSocketServingResponse, WebsocketHandler,
+  HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
+  RouterWebSocketServingResponse, WebsocketEndpoint,
 };
 use crate::http::headers::HeaderName;
 use crate::http::method::Method;
@@ -14,7 +14,7 @@ use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
 use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
-use crate::{krauss, trace_log, util};
+use crate::{trace_log, util};
 use base64::Engine;
 use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
@@ -171,14 +171,14 @@ pub(crate) struct HttpRoute {
   pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
-  pub(crate) handler: Box<dyn RequestHandler>,
+  pub(crate) handler: Box<dyn HttpEndpoint>,
 }
 
 pub(crate) struct WebSocketRoute {
   pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
-  pub(crate) handler: Box<dyn WebsocketHandler>,
+  pub(crate) handler: Box<dyn WebsocketEndpoint>,
 }
 
 impl HttpRoute {
@@ -187,11 +187,11 @@ impl HttpRoute {
     method: impl Into<Method>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
-    route: impl RequestHandler + 'static,
+    route: impl HttpEndpoint + 'static,
   ) -> HumptyResult<Self> {
     Ok(HttpRoute {
       routeable: Routeable::new(path, method, consumes, produces)?,
-      handler: Box::new(route) as Box<dyn RequestHandler>,
+      handler: Box::new(route) as Box<dyn HttpEndpoint>,
     })
   }
 }
@@ -202,11 +202,11 @@ impl WebSocketRoute {
     method: impl Into<Method>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
-    route: impl WebsocketHandler + 'static,
+    route: impl WebsocketEndpoint + 'static,
   ) -> HumptyResult<Self> {
     Ok(WebSocketRoute {
       routeable: Routeable::new(path, method, consumes, produces)?,
-      handler: Box::new(route) as Box<dyn WebsocketHandler>,
+      handler: Box::new(route) as Box<dyn WebsocketEndpoint>,
     })
   }
 }
@@ -444,28 +444,6 @@ impl Debug for WebSocketRoute {
   }
 }
 
-/// Encapsulates a route and its WebSocket handler.
-pub struct WebsocketRouteHandler {
-  /// The route that this handler will match.
-  pub route: String,
-  /// The handler to run when the route is matched.
-  pub handler: Box<dyn WebsocketHandler>,
-}
-
-impl Debug for WebsocketRouteHandler {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("WebsocketRouteHandler({})", self.route.as_str()))
-  }
-}
-
-impl WebsocketRouteHandler {
-  /// Checks whether this route matches the given one, respecting its own wildcards only.
-  /// For example, `/blog/*` will match `/blog/my-first-post` but not the other way around.
-  pub fn route_matches(&self, route: &str) -> bool {
-    krauss::wildcard_match(self.route.as_str(), route)
-  }
-}
-
 /// Represents a sub-app to run for a specific host.
 pub struct HumptyRouter {
   /// This filter/predicate will decide if the router should even serve the request at all
@@ -658,7 +636,7 @@ impl HumptyRouter {
           resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal
 
           let (sender, receiver) = crate::websocket::stream::new(stream);
-          handler.handler.serve(request, sender, receiver);
+          handler.handler.serve(request, receiver, sender)?;
           Ok(RouterWebSocketServingResponse::HandledWithProtocolSwitch)
         }
       };

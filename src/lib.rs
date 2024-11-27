@@ -13,7 +13,6 @@ pub use humpty_error::HumptyError;
 pub mod humpty_router;
 pub mod humpty_router_builder;
 pub mod humpty_server;
-mod krauss;
 pub mod stream;
 #[cfg(feature = "ssl")]
 mod tls_stream;

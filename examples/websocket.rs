@@ -3,6 +3,7 @@ use humpty::extras::tcp_app;
 
 use humpty::http::request_context::RequestContext;
 use humpty::humpty_builder::HumptyBuilder;
+use humpty::humpty_error::HumptyResult;
 use humpty::websocket::message::WebsocketMessage;
 use humpty::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::error::Error;
@@ -16,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     builder.router(|router| {
       router
         .route_any("/*", builtin_endpoints::serve_dir("./examples/static/ws"))?
-        .with_websocket_route("/ws", echo_handler)
+        .ws_route_any("/ws", echo_handler)
     })
   })
   .expect("ERROR");
@@ -30,9 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// This is wrapped in `websocket_handler` to manage the handshake for us using the `humpty_ws` crate.
 fn echo_handler(
   request: &RequestContext,
-  sender: WebsocketSender,
   mut receiver: WebsocketReceiver,
-) {
+  sender: WebsocketSender,
+) -> HumptyResult<()> {
   // Get the address of the client.
   let addr = request.peer_address();
 
@@ -76,4 +77,5 @@ fn echo_handler(
   }
 
   println!("Connection closed by {}", addr);
+  Ok(())
 }

@@ -8,16 +8,44 @@ use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::fmt::Debug;
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
-pub trait WebsocketHandler: Send + Sync {
+pub trait WebsocketEndpoint: Send + Sync {
   /// serve the web socket request.
-  fn serve(&self, request: &RequestContext, sender: WebsocketSender, receiver: WebsocketReceiver);
+  fn serve(
+    &self,
+    request: &RequestContext,
+    receiver: WebsocketReceiver,
+    sender: WebsocketSender,
+  ) -> HumptyResult<()>;
 }
-impl<F> WebsocketHandler for F
+
+trait IntoWebsocketEndpointResponse {
+  fn into(self) -> HumptyResult<()>;
+}
+
+impl IntoWebsocketEndpointResponse for HumptyResult<()> {
+  fn into(self) -> HumptyResult<()> {
+    self
+  }
+}
+
+impl IntoWebsocketEndpointResponse for () {
+  fn into(self) -> HumptyResult<()> {
+    Ok(())
+  }
+}
+
+impl<F, R> WebsocketEndpoint for F
 where
-  F: Fn(&RequestContext, WebsocketSender, WebsocketReceiver) + Send + Sync,
+  R: IntoWebsocketEndpointResponse,
+  F: Fn(&RequestContext, WebsocketReceiver, WebsocketSender) -> R + Send + Sync,
 {
-  fn serve(&self, request: &RequestContext, sender: WebsocketSender, receiver: WebsocketReceiver) {
-    self(request, sender, receiver)
+  fn serve(
+    &self,
+    request: &RequestContext,
+    receiver: WebsocketReceiver,
+    sender: WebsocketSender,
+  ) -> HumptyResult<()> {
+    self(request, receiver, sender).into()
   }
 }
 
@@ -33,12 +61,12 @@ where
 ///     humpty::http::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```
-pub trait RequestHandler: Send + Sync {
+pub trait HttpEndpoint: Send + Sync {
   /// Serve an ordinary http request.
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response>;
 }
 
-impl<F, R> RequestHandler for F
+impl<F, R> HttpEndpoint for F
 where
   R: Into<HumptyResult<Response>>,
   F: Fn(&RequestContext) -> R + Send + Sync,
