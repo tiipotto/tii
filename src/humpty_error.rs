@@ -45,6 +45,13 @@ pub enum RequestHeadParsingError {
   TransferEncodingNotSupported(String),
   InvalidContentLength(String),
   InvalidQueryString(String),
+  /// An error occurred during the WebSocket handshake.
+  MissingSecWebSocketKeyHeader,
+  /// The web socket frame opcode was invalid.
+  InvalidWebSocketOpcode,
+  UnexpectedWebSocketOpcode,
+  WebSocketClosedDuringPendingMessage,
+  WebSocketTextMessageIsNotUtf8(Vec<u8>),
 }
 
 impl Display for RequestHeadParsingError {
@@ -97,7 +104,7 @@ pub enum HumptyError {
   UserError(UserError),
   InvalidPathError(InvalidPathError),
   IO(io::Error),
-  Other(Box<dyn Error + Send>),
+  Other(Box<dyn Error + Send + Sync>),
 }
 
 impl HumptyError {
@@ -131,12 +138,12 @@ impl HumptyError {
       HumptyError::Other(other) => other.downcast_ref::<T>(),
     }
   }
-  pub fn into_inner(self) -> Box<dyn Error + Send> {
+  pub fn into_inner(self) -> Box<dyn Error + Send + Sync + 'static> {
     match self {
-      HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send>,
-      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send>,
+      HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       HumptyError::Other(other) => other,
     }
   }
@@ -156,10 +163,10 @@ impl Display for HumptyError {
 
 impl<T> From<T> for HumptyError
 where
-  T: Error + Send + 'static,
+  T: Error + Send + Sync + 'static,
 {
   fn from(value: T) -> Self {
-    let mut dyn_box = Box::new(value) as Box<dyn Error + Send>;
+    let mut dyn_box = Box::new(value) as Box<dyn Error + Send + Sync>;
     dyn_box = match dyn_box.downcast::<io::Error>() {
       Ok(err) => return HumptyError::IO(*err),
       Err(err) => err,
@@ -182,5 +189,14 @@ impl From<HumptyError> for Box<dyn Error + Send> {
 impl<T> From<UserError> for HumptyResult<T> {
   fn from(value: UserError) -> Self {
     Err(HumptyError::UserError(value))
+  }
+}
+
+impl From<HumptyError> for io::Error {
+  fn from(value: HumptyError) -> Self {
+    match value {
+      HumptyError::IO(io) => io,
+      err => io::Error::new(err.kind(), err.into_inner()),
+    }
   }
 }

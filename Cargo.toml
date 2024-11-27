@@ -19,6 +19,9 @@ log = { version = "^0.4.22", optional = true }
 unowned-buf = "0.1.0"
 urlencoding = "2.1.3"
 regex = "1.11.1"
+sha1 = "0.10.6"
+base64 = "0.22.1"
+
 
 ## SSL
 rustls = { version = "0.23.16", optional = true }
@@ -33,6 +36,7 @@ colog = "1.3.0"
 default = []
 random_id = ["getrandom"]
 ssl = ["rust-tls-duplex-stream", "rustls"]
+extras = []
 
 [lints.rust]
 future-incompatible = "warn"
@@ -42,9 +46,29 @@ unsafe_code = "deny"
 [[example]]
 name = "basic"
 path = "examples/basic.rs"
-required-features = ["log"]
+required-features = ["log", "extras"]
+
+[[example]]
+name = "shutdown"
+path = "examples/shutdown.rs"
+required-features = ["extras"]
 
 [[example]]
 name = "ssl"
 path = "examples/ssl.rs"
 required-features = ["ssl"]
+
+[[example]]
+name = "static-content"
+path = "examples/static-content.rs"
+required-features = ["extras"]
+
+[[example]]
+name = "wildcard"
+path = "examples/wildcard.rs"
+required-features = ["extras"]
+
+[[example]]
+name = "websocket"
+path = "examples/websocket.rs"
+required-features = ["extras"]

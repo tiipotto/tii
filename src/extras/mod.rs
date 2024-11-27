@@ -1,3 +1,5 @@
+pub mod builtin_endpoints;
+
 /// Convenience functions related to networking
 pub mod network_utils;
 

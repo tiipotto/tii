@@ -1,23 +1,29 @@
 //! Contains the impl of the router.
 
 use crate::functional_traits::{
-  RequestFilter, RequestHandler, ResponseFilter, Router, RouterFilter, WebsocketHandler,
+  HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
+  RouterWebSocketServingResponse, WebsocketEndpoint,
 };
+use crate::http::headers::HeaderName;
 use crate::http::method::Method;
 use crate::http::mime::{AcceptMimeType, QValue};
+use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
-use crate::http::Response;
+use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
-use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError};
+use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
-use crate::{krauss, trace_log, util};
+use crate::{trace_log, util};
+use base64::Engine;
 use regex::{Error, Regex};
+use sha1::{Digest, Sha1};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 enum PathPart {
   Literal(String),
   Variable(String),
@@ -141,15 +147,13 @@ impl PathPart {
   }
 }
 
+#[derive(Debug, Clone)]
 /// Encapsulates a route and its handler.
-pub struct RouteHandler {
+pub struct Routeable {
   /// The route that this handler will match.
   path: String,
 
   parts: Vec<PathPart>,
-
-  /// The handler to run when the route is matched.
-  handler: Box<dyn RequestHandler>,
 
   /// The method this route will handle
   method: Method,
@@ -161,6 +165,50 @@ pub struct RouteHandler {
   /// The mime types this route can produce
   /// EMPTY SET means this route will produce a matching body type.
   produces: HashSet<AcceptMimeType>,
+}
+
+pub(crate) struct HttpRoute {
+  pub(crate) routeable: Routeable,
+
+  /// The handler to run when the route is matched.
+  pub(crate) handler: Box<dyn HttpEndpoint>,
+}
+
+pub(crate) struct WebSocketRoute {
+  pub(crate) routeable: Routeable,
+
+  /// The handler to run when the route is matched.
+  pub(crate) handler: Box<dyn WebsocketEndpoint>,
+}
+
+impl HttpRoute {
+  pub(crate) fn new(
+    path: impl ToString,
+    method: impl Into<Method>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+    route: impl HttpEndpoint + 'static,
+  ) -> HumptyResult<Self> {
+    Ok(HttpRoute {
+      routeable: Routeable::new(path, method, consumes, produces)?,
+      handler: Box::new(route) as Box<dyn HttpEndpoint>,
+    })
+  }
+}
+
+impl WebSocketRoute {
+  pub(crate) fn new(
+    path: impl ToString,
+    method: impl Into<Method>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+    route: impl WebsocketEndpoint + 'static,
+  ) -> HumptyResult<Self> {
+    Ok(WebSocketRoute {
+      routeable: Routeable::new(path, method, consumes, produces)?,
+      handler: Box::new(route) as Box<dyn WebsocketEndpoint>,
+    })
+  }
 }
 
 /// Enum that shows information on how a particular request could be routed on a route.
@@ -176,6 +224,13 @@ pub enum RoutingDecision {
   MimeMismatch,
   /// Path and method do match, the body can be processed but the response of the endpoint will not be processable by the client.
   AcceptMismatch,
+}
+
+impl Display for RoutingDecision {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO make this not shit
+    Debug::fmt(self, f)
+  }
 }
 
 impl PartialOrd for RoutingDecision {
@@ -220,19 +275,17 @@ impl Ord for RoutingDecision {
   }
 }
 
-impl RouteHandler {
+impl Routeable {
   pub(crate) fn new(
     path: impl ToString,
     method: impl Into<Method>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
-    handler: impl RequestHandler + 'static,
-  ) -> HumptyResult<RouteHandler> {
+  ) -> HumptyResult<Routeable> {
     let path = path.to_string();
-    Ok(RouteHandler {
+    Ok(Routeable {
       parts: PathPart::parse(path.as_str())?,
       path,
-      handler: Box::new(handler) as Box<dyn RequestHandler>,
       method: method.into(),
       consumes,
       produces,
@@ -242,11 +295,6 @@ impl RouteHandler {
   /// The path for this route
   pub fn path(&self) -> &str {
     self.path.as_str()
-  }
-
-  /// The handler for this route
-  pub fn handler(&self) -> &dyn RequestHandler {
-    self.handler.as_ref()
   }
 
   /// The method for this route
@@ -391,31 +439,15 @@ impl RouteHandler {
   }
 }
 
-impl Debug for RouteHandler {
+impl Debug for HttpRoute {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("RouteHandler({})", self.path.as_str()))
+    f.write_fmt(format_args!("HttpRoute({})", self.routeable.path.as_str()))
   }
 }
 
-/// Encapsulates a route and its WebSocket handler.
-pub struct WebsocketRouteHandler {
-  /// The route that this handler will match.
-  pub route: String,
-  /// The handler to run when the route is matched.
-  pub handler: Box<dyn WebsocketHandler>,
-}
-
-impl Debug for WebsocketRouteHandler {
+impl Debug for WebSocketRoute {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("WebsocketRouteHandler({})", self.route.as_str()))
-  }
-}
-
-impl WebsocketRouteHandler {
-  /// Checks whether this route matches the given one, respecting its own wildcards only.
-  /// For example, `/blog/*` will match `/blog/my-first-post` but not the other way around.
-  pub fn route_matches(&self, route: &str) -> bool {
-    krauss::wildcard_match(self.route.as_str(), route)
+    f.write_fmt(format_args!("HttpRoute({})", self.routeable.path.as_str()))
   }
 }
 
@@ -427,6 +459,7 @@ pub struct HumptyRouter {
   /// Filters that run before the route is matched.
   /// These filters may modify the path of the request to affect routing decision.
   pre_routing_filters: Vec<Box<dyn RequestFilter>>,
+
   /// Filters that run once the routing decision has been made.
   /// These filters only run if there is an actual endpoint.
   routing_filters: Vec<Box<dyn RequestFilter>>,
@@ -434,11 +467,15 @@ pub struct HumptyRouter {
   /// These filters run on the response after the actual endpoint (or the error handler) has been called.
   response_filters: Vec<Box<dyn ResponseFilter>>,
 
+  /// Contains all pathing information for websockets and normal http routes.
+  /// This is essentially a union of routes and websocket_routes without the handler
+  routeables: Vec<Routeable>,
+
   /// The routes to process requests for and their handlers.
-  routes: Vec<RouteHandler>,
+  routes: Vec<HttpRoute>,
 
   /// The routes to process WebSocket requests for and their handlers.
-  websocket_routes: Vec<WebsocketRouteHandler>,
+  websocket_routes: Vec<WebSocketRoute>,
 
   /// Called when no route has been found in the router.
   not_found_handler: NotRouteableHandler,
@@ -466,6 +503,36 @@ impl Debug for HumptyRouter {
   }
 }
 
+/// Performs the WebSocket handshake.
+fn websocket_handshake(request: &RequestContext) -> HumptyResult<Response> {
+  const HANDSHAKE_KEY_CONSTANT: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+  // Get the handshake key header
+  let handshake_key = request
+    .request_head()
+    .get_header("Sec-WebSocket-Key")
+    .ok_or(RequestHeadParsingError::MissingSecWebSocketKeyHeader)?;
+
+  // Calculate the handshake response
+  let sha1 =
+    Sha1::new().chain_update(handshake_key).chain_update(HANDSHAKE_KEY_CONSTANT).finalize();
+  let sec_websocket_accept = base64::prelude::BASE64_STANDARD.encode(sha1);
+
+  //let sec_websocket_accept = sha1.encode();
+
+  // Serialise the handshake response
+  let response = Response::new(StatusCode::SwitchingProtocols)
+    .with_header(HeaderName::Upgrade, "websocket")?
+    .with_header(HeaderName::Connection, "Upgrade")?
+    .with_header("Sec-WebSocket-Accept", sec_websocket_accept)?;
+
+  // Oddly enough I think you can establish a WS connection with a POST request that has data.
+  // This will consume that data if it has not already been used by a filter.
+  // Some beta versions of Web Sockets used the request body to convey the Sec-WebSocket-Key...
+  request.consume_request_body()?;
+  Ok(response)
+}
+
 impl HumptyRouter {
   #[allow(clippy::too_many_arguments)] //Only called by the builder.
   pub(crate) fn new(
@@ -473,19 +540,28 @@ impl HumptyRouter {
     pre_routing_filters: Vec<Box<dyn RequestFilter>>,
     routing_filters: Vec<Box<dyn RequestFilter>>,
     response_filters: Vec<Box<dyn ResponseFilter>>,
-    routes: Vec<RouteHandler>,
-    websocket_routes: Vec<WebsocketRouteHandler>,
+    routes: Vec<HttpRoute>,
+    websocket_routes: Vec<WebSocketRoute>,
     not_found_handler: NotRouteableHandler,
     not_acceptable_handler: NotRouteableHandler,
     method_not_allowed_handler: NotRouteableHandler,
     unsupported_media_type_handler: NotRouteableHandler,
     error_handler: ErrorHandler,
   ) -> Self {
+    let mut routeables = Vec::new();
+    for x in routes.iter() {
+      routeables.push(x.routeable.clone());
+    }
+    for x in websocket_routes.iter() {
+      routeables.push(x.routeable.clone());
+    }
+
     Self {
       router_filter,
       pre_routing_filters,
       routing_filters,
       response_filters,
+      routeables,
       routes,
       websocket_routes,
       not_found_handler,
@@ -500,23 +576,104 @@ impl HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<bool> {
+  ) -> HumptyResult<RouterWebSocketServingResponse> {
+    //TODO this fn is too long and has significant duplicate parts with normal http serving.
+    //TODO consolidate both impls and split it into smaller sub fn's
+
     if !self.router_filter.filter(request)? {
-      return Ok(false);
+      return Ok(RouterWebSocketServingResponse::NotHandled);
     }
 
-    if let Some(handler) = self
-      .websocket_routes // Get the WebSocket routes of the sub-app
-      .iter() // Iterate over the routes
-      .find(|route| route.route_matches(request.request_head().path()))
-    {
-      handler.handler.serve(request.request_head().clone(), stream.new_ref());
-      return Ok(true);
+    for filter in self.pre_routing_filters.iter() {
+      let resp = match filter.filter(request) {
+        Ok(Some(res)) => res,
+        Ok(None) => continue,
+        Err(err) => (self.error_handler)(request, err)?,
+      };
+
+      let resp = self.call_response_filters(request, resp)?;
+      return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
     }
 
-    // TODO how can I tell a websocket request gracefully that there is no one here for it? HTTP 404?, this just shuts the socket.
-    trace_log!("WebsocketConnectionClosed Not found");
-    Ok(true)
+    let mut best_decision = RoutingDecision::PathMismatch;
+    let mut best_handler = None;
+
+    for handler in &self.websocket_routes {
+      let decision = handler.routeable.matches(request);
+      if best_decision >= decision {
+        continue;
+      }
+
+      best_decision = decision;
+      if let RoutingDecision::Match(qv, _) = &best_decision {
+        best_handler = Some(handler);
+        if qv == &QValue::MAX {
+          break;
+        }
+      }
+    }
+
+    if let Some(handler) = best_handler {
+      request.set_routed_path(handler.routeable.path.as_str());
+      self.handle_path_parameters(request, &best_decision);
+
+      for filter in self.routing_filters.iter() {
+        let resp = match filter.filter(request) {
+          Ok(Some(res)) => res,
+          Ok(None) => continue,
+          Err(err) => (self.error_handler)(request, err)?,
+        };
+
+        let resp = self.call_response_filters(request, resp)?;
+        return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+      }
+
+      return match websocket_handshake(request) {
+        Err(err) => {
+          let resp = (self.error_handler)(request, err)?;
+          let resp = self.call_response_filters(request, resp)?;
+          Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp))
+        }
+        Ok(resp) => {
+          let resp = self.call_response_filters(request, resp)?;
+          if resp.status_code != StatusCode::SwitchingProtocols {
+            return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+          }
+
+          resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal
+
+          let (sender, receiver) = crate::websocket::stream::new(stream);
+          handler.handler.serve(request, receiver, sender)?;
+          Ok(RouterWebSocketServingResponse::HandledWithProtocolSwitch)
+        }
+      };
+    }
+
+    trace_log!("WebsocketConnectionClosed Invoke fallback {}", &best_decision);
+
+    let fallback = self.invoke_appropriate_fallback_handler(request, &best_decision);
+
+    let fallback_resp = match fallback {
+      Ok(resp) => self.call_response_filters(request, resp)?,
+      Err(err) => {
+        let resp = (self.error_handler)(request, err)?;
+        self.call_response_filters(request, resp)?
+      }
+    };
+    Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(fallback_resp))
+  }
+
+  fn handle_path_parameters(&self, request: &mut RequestContext, best_decision: &RoutingDecision) {
+    match best_decision {
+      RoutingDecision::Match(_, path_params) => {
+        if let Some(path_params) = path_params {
+          for (key, value) in path_params {
+            request.set_path_param(key, value);
+          }
+        }
+      }
+      _ => util::unreachable(),
+    }
   }
 
   fn call_error_handler(
@@ -540,12 +697,22 @@ impl HumptyRouter {
     }
 
     let mut resp = self.serve_inner(request).or_else(|e| self.call_error_handler(request, e))?;
-    for filter in self.response_filters.iter() {
-      resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
-    }
+    resp = self.call_response_filters(request, resp)?;
 
     Ok(Some(resp))
   }
+
+  fn call_response_filters(
+    &self,
+    request: &mut RequestContext,
+    mut resp: Response,
+  ) -> HumptyResult<Response> {
+    for filter in self.response_filters.iter() {
+      resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
+    }
+    Ok(resp)
+  }
+
   fn serve_inner(&self, request: &mut RequestContext) -> HumptyResult<Response> {
     for filter in self.pre_routing_filters.iter() {
       if let Some(resp) = filter.filter(request)? {
@@ -557,7 +724,7 @@ impl HumptyRouter {
     let mut best_handler = None;
 
     for handler in &self.routes {
-      let decision = handler.matches(request);
+      let decision = handler.routeable.matches(request);
       if best_decision >= decision {
         continue;
       }
@@ -572,17 +739,9 @@ impl HumptyRouter {
     }
 
     if let Some(handler) = best_handler {
-      request.set_routed_path(handler.path.as_str());
-      match best_decision {
-        RoutingDecision::Match(_, path_params) => {
-          if let Some(path_params) = path_params {
-            for (key, value) in path_params {
-              request.set_path_param(key, value);
-            }
-          }
-        }
-        _ => util::unreachable(),
-      }
+      request.set_routed_path(handler.routeable.path.as_str());
+      self.handle_path_parameters(request, &best_decision);
+
       for filter in self.routing_filters.iter() {
         if let Some(resp) = filter.filter(request)? {
           return Ok(resp);
@@ -592,11 +751,23 @@ impl HumptyRouter {
       return handler.handler.serve(request);
     }
 
+    self.invoke_appropriate_fallback_handler(request, &best_decision)
+  }
+
+  fn invoke_appropriate_fallback_handler(
+    &self,
+    request: &mut RequestContext,
+    best_decision: &RoutingDecision,
+  ) -> HumptyResult<Response> {
     match best_decision {
-      RoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routes),
-      RoutingDecision::MethodMismatch => (self.method_not_allowed_handler)(request, &self.routes),
-      RoutingDecision::MimeMismatch => (self.unsupported_media_type_handler)(request, &self.routes),
-      RoutingDecision::AcceptMismatch => (self.not_acceptable_handler)(request, &self.routes),
+      RoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routeables),
+      RoutingDecision::MethodMismatch => {
+        (self.method_not_allowed_handler)(request, &self.routeables)
+      }
+      RoutingDecision::MimeMismatch => {
+        (self.unsupported_media_type_handler)(request, &self.routeables)
+      }
+      RoutingDecision::AcceptMismatch => (self.not_acceptable_handler)(request, &self.routeables),
       // We found a handler! Why are we here?
       RoutingDecision::Match(_, _) => util::unreachable(),
     }
@@ -612,7 +783,7 @@ impl Router for HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<bool> {
+  ) -> HumptyResult<RouterWebSocketServingResponse> {
     self.serve_ws(stream, request)
   }
 }
@@ -626,7 +797,7 @@ impl Router for Arc<HumptyRouter> {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<bool> {
+  ) -> HumptyResult<RouterWebSocketServingResponse> {
     Arc::as_ref(self).serve_websocket(stream, request)
   }
 }

@@ -35,7 +35,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --target ${{ matrix.target }}
+          cargo run --example shutdown --features extras --target ${{ matrix.target }}
 
   valgrind_linux:
     name: Valgrind
@@ -54,7 +54,7 @@ jobs:
           toolchain: stable minus 2 releases
       - name: 64-bit Valgrind
         run: |
-          cargo build --example shutdown --target x86_64-unknown-linux-gnu
+          cargo build --example shutdown --target x86_64-unknown-linux-gnu --features extras
           valgrind --error-exitcode=1 --leak-check=full target/x86_64-unknown-linux-gnu/debug/examples/shutdown
 
   build_linux:
@@ -162,7 +162,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --target ${{ matrix.target }}
+          cargo run --example shutdown --features extras --target ${{ matrix.target }}
 
   fmt:
       runs-on: ubuntu-latest

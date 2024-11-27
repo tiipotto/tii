@@ -5,7 +5,7 @@ use crate::default_functions::{
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
 };
 use crate::functional_traits::{
-  RequestFilter, RequestHandler, ResponseFilter, RouterFilter, WebsocketHandler,
+  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
 };
 use crate::http::method::Method;
 use crate::http::mime::AcceptMimeType;
@@ -13,7 +13,8 @@ use crate::http::request_context::RequestContext;
 use crate::http::Response;
 use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
 use crate::humpty_error::HumptyResult;
-use crate::humpty_router::{HumptyRouter, RouteHandler, WebsocketRouteHandler};
+use crate::humpty_router::{HttpRoute, HumptyRouter, WebSocketRoute};
+use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -33,10 +34,10 @@ pub struct HumptyRouterBuilder {
   response_filters: Vec<Box<dyn ResponseFilter>>,
 
   /// The routes to process requests for and their handlers.
-  routes: Vec<RouteHandler>,
+  routes: Vec<HttpRoute>,
 
   /// The routes to process WebSocket requests for and their handlers.
-  websocket_routes: Vec<WebsocketRouteHandler>,
+  websocket_routes: Vec<WebSocketRoute>,
 
   /// Called when no route has been found in the router.
   not_found_handler: NotRouteableHandler,
@@ -51,14 +52,34 @@ pub struct HumptyRouterBuilder {
 
 /// For multi method routes!
 #[derive(Debug)]
-struct RouteWrapper<T: RequestHandler + 'static>(Arc<T>);
-impl<T: RequestHandler + 'static> RequestHandler for RouteWrapper<T> {
+struct RouteWrapper<T: HttpEndpoint + 'static>(Arc<T>);
+impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
   fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
     self.0.serve(request)
   }
 }
 
-impl<T: RequestHandler + 'static> Clone for RouteWrapper<T> {
+impl<T: HttpEndpoint + 'static> Clone for RouteWrapper<T> {
+  fn clone(&self) -> Self {
+    Self(Arc::clone(&self.0))
+  }
+}
+
+/// For multi method routes!
+#[derive(Debug)]
+struct WsRouteWrapper<T: WebsocketEndpoint + 'static>(Arc<T>);
+impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WsRouteWrapper<T> {
+  fn serve(
+    &self,
+    request: &RequestContext,
+    receiver: WebsocketReceiver,
+    sender: WebsocketSender,
+  ) -> HumptyResult<()> {
+    self.0.serve(request, receiver, sender)
+  }
+}
+
+impl<T: WebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
   fn clone(&self) -> Self {
     Self(Arc::clone(&self.0))
   }
@@ -101,11 +122,11 @@ impl HumptyRouteBuilder {
   }
 
   /// Finish building the route by proving the route.
-  pub fn endpoint<T: RequestHandler + 'static>(
+  pub fn endpoint<T: HttpEndpoint + 'static>(
     mut self,
     handler: T,
   ) -> HumptyResult<HumptyRouterBuilder> {
-    self.inner.routes.push(RouteHandler::new(
+    self.inner.routes.push(HttpRoute::new(
       self.route,
       self.method,
       self.consumes,
@@ -194,7 +215,7 @@ impl HumptyRouterBuilder {
   /// The endpoint will be called for any media type.
   pub fn route_any<T>(self, route: &str, handler: T) -> HumptyResult<Self>
   where
-    T: RequestHandler + 'static,
+    T: HttpEndpoint + 'static,
   {
     let wrapped = RouteWrapper(Arc::new(handler));
 
@@ -214,13 +235,13 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the given http method.
   /// The endpoint will be called for any media type.
-  pub fn route_method<T: RequestHandler + 'static>(
+  pub fn route_method<T: HttpEndpoint + 'static>(
     mut self,
     method: Method,
     route: &str,
     handler: T,
   ) -> HumptyResult<Self> {
-    self.routes.push(RouteHandler::new(
+    self.routes.push(HttpRoute::new(
       route,
       method,
       HashSet::from([AcceptMimeType::Wildcard]),
@@ -232,17 +253,13 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the GET http method.
   /// The endpoint will be called for any media type.
-  pub fn route_get<T: RequestHandler + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> HumptyResult<Self> {
+  pub fn route_get<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> HumptyResult<Self> {
     self.route_method(Method::Get, route, handler)
   }
 
   /// Adds a route that will handle the POST http method.
   /// The endpoint will be called for any media type.
-  pub fn route_post<T: RequestHandler + 'static>(
+  pub fn route_post<T: HttpEndpoint + 'static>(
     self,
     route: &str,
     handler: T,
@@ -252,17 +269,13 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the PUT http method.
   /// The endpoint will be called for any media type.
-  pub fn route_put<T: RequestHandler + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> HumptyResult<Self> {
+  pub fn route_put<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> HumptyResult<Self> {
     self.route_method(Method::Put, route, handler)
   }
 
   /// Adds a route that will handle the PATCH http method.
   /// The endpoint will be called for any media type.
-  pub fn route_patch<T: RequestHandler + 'static>(
+  pub fn route_patch<T: HttpEndpoint + 'static>(
     self,
     route: &str,
     handler: T,
@@ -272,7 +285,7 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the DELETE http method.
   /// The endpoint will be called for any media type.
-  pub fn route_delete<T: RequestHandler + 'static>(
+  pub fn route_delete<T: HttpEndpoint + 'static>(
     self,
     route: &str,
     handler: T,
@@ -282,7 +295,7 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the OPTIONS http method.
   /// The endpoint will be called for any media type.
-  pub fn route_options<T: RequestHandler + 'static>(
+  pub fn route_options<T: HttpEndpoint + 'static>(
     self,
     route: &str,
     handler: T,
@@ -398,15 +411,115 @@ impl HumptyRouterBuilder {
 
   /// Adds a WebSocket route and associated handler to the sub-app.
   /// Routes can include wildcards, for example `/ws/*`.
-  /// The handler is passed the stream and the request which triggered its calling.
-  pub fn with_websocket_route<T>(mut self, route: &str, handler: T) -> HumptyResult<Self>
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will be called for any commonly used HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method.
+  pub fn ws_route_any<T>(self, route: &str, handler: T) -> HumptyResult<Self>
   where
-    T: WebsocketHandler + 'static,
+    T: WebsocketEndpoint + 'static,
   {
+    let wrapped = WsRouteWrapper(Arc::new(handler));
+
     self
-      .websocket_routes
-      .push(WebsocketRouteHandler { route: route.to_string(), handler: Box::new(handler) });
+      .ws_route_get(route, wrapped.clone())?
+      .ws_route_put(route, wrapped.clone())?
+      .ws_route_post(route, wrapped.clone())?
+      .ws_route_patch(route, wrapped.clone())?
+      .ws_route_delete(route, wrapped.clone())?
+      .ws_route_options(route, wrapped)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the specified HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method.
+  pub fn ws_route_method<T: WebsocketEndpoint + 'static>(
+    mut self,
+    method: Method,
+    route: &str,
+    handler: T,
+  ) -> HumptyResult<Self> {
+    self.websocket_routes.push(WebSocketRoute::new(
+      route,
+      method,
+      HashSet::new(),
+      HashSet::new(),
+      handler,
+    )?);
     Ok(self)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the GET HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will call this endpoint.
+  pub fn ws_route_get<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Get, route, handler)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the POST HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
+  pub fn ws_route_post<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Post, route, handler)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the PUT HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
+  pub fn ws_route_put<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Put, route, handler)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the OPTIONS HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
+  pub fn ws_route_options<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Options, route, handler)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the PATCH HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
+  pub fn ws_route_patch<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Patch, route, handler)
+  }
+
+  /// Adds a WebSocket route and associated handler to the sub-app.
+  /// Routes can include wildcards, for example `/ws/*`.
+  /// The handler is passed a reading and writing end of the websocket.
+  /// The endpoint will only listen for HTTP upgrade requests that use the DELETE HTTP method.
+  /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
+  pub fn ws_route_delete<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  where
+    T: WebsocketEndpoint + 'static,
+  {
+    self.ws_route_method(Method::Delete, route, handler)
   }
 
   /// Build the router

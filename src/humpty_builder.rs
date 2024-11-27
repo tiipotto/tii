@@ -17,7 +17,7 @@ use crate::default_functions::{default_error_handler, default_fallback_not_found
 pub use crate::functional_traits::*;
 use crate::http::request_context::RequestContext;
 use crate::humpty_error::{HumptyError, HumptyResult};
-use crate::humpty_router::RouteHandler;
+use crate::humpty_router::Routeable;
 use crate::humpty_router_builder::HumptyRouterBuilder;
 use crate::humpty_server::HumptyServer;
 
@@ -31,7 +31,7 @@ use crate::humpty_server::HumptyServer;
 pub type ErrorHandler = fn(&mut RequestContext, HumptyError) -> HumptyResult<Response>;
 
 /// Handler for request that couldn't route for some reason.
-pub type NotRouteableHandler = fn(&mut RequestContext, &[RouteHandler]) -> HumptyResult<Response>;
+pub type NotRouteableHandler = fn(&mut RequestContext, &[Routeable]) -> HumptyResult<Response>;
 
 /// Fallback handler if no router handled the request.
 pub type NotFoundHandler = fn(&mut RequestContext) -> HumptyResult<Response>;
