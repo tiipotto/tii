@@ -57,6 +57,29 @@ impl Frame {
     }
   }
 
+  /// Directly writes a slice to an output connection without copying the buffer.
+  pub fn write_unowned_payload_frame<T: ConnectionStreamWrite + ?Sized>(
+    write: &T,
+    opcode: Opcode,
+    payload: impl AsRef<[u8]>,
+  ) -> HumptyResult<()> {
+    let payload = payload.as_ref();
+    let tmp_frame = Self {
+      fin: true,
+      rsv: [false; 3],
+      opcode,
+      mask: false,
+      length: payload.len() as u64,
+      masking_key: [0; 4],
+      payload: Vec::new(),
+    };
+
+    tmp_frame.write_to_no_flush(write)?;
+    write.write_all(payload)?;
+    write.flush()?;
+    Ok(())
+  }
+
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
   pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> HumptyResult<Self> {
     let mut header: [u8; 2] = [0; 2];
@@ -98,7 +121,13 @@ impl Frame {
   }
 
   pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> HumptyResult<()> {
-    let mut buf: Vec<u8> = vec![0; 2];
+    self.write_to_no_flush(write)?;
+    write.flush()?;
+    Ok(())
+  }
+
+  fn write_to_no_flush<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> HumptyResult<()> {
+    let mut buf = [0, 0];
 
     // Set the header bits
     buf[0] = (self.fin as u8) << 7
@@ -107,27 +136,27 @@ impl Frame {
       | (self.rsv[2] as u8) << 4
       | self.opcode as u8;
 
-    // Set the length information
+    // Write Header Bits + Length information
     if self.length < 126 {
       buf[1] = (self.mask as u8) << 7 | self.length as u8;
+      write.write_all(&buf)?;
     } else if self.length < 65536 {
       buf[1] = (self.mask as u8) << 7 | 126;
-      buf.extend_from_slice(&(self.length as u16).to_be_bytes());
+      write.write_all(&buf)?;
+      write.write_all(&(self.length as u16).to_be_bytes())?;
     } else {
       buf[1] = (self.mask as u8) << 7 | 127;
-      buf.extend_from_slice(&(self.length).to_be_bytes());
+      write.write_all(&buf)?;
+      write.write_all(&(self.length).to_be_bytes())?;
     }
 
-    // Add the masking key (if required)
+    // Write the masking key (if required)
     if self.mask {
-      buf.extend_from_slice(&self.masking_key);
+      write.write_all(&self.masking_key)?;
     }
 
-    // Add the payload and return
-    buf.extend_from_slice(&self.payload);
-
-    write.write(buf.as_slice())?;
-    write.flush()?;
+    // Write the payload and return
+    write.write_all(&self.payload)?;
     Ok(())
   }
 }

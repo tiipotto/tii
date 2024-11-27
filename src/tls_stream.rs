@@ -177,16 +177,24 @@ impl ConnectionStreamRead for HumptyTlsStream {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
   }
 
-  fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-    unwrap_poison(self.0.read.lock())?.read_until(&mut &self.0.tls, end, buf)
+  fn ensure_readable(&self) -> io::Result<bool> {
+    unwrap_poison(self.0.read.lock())?.ensure_readable(&mut &self.0.tls)
+  }
+
+  fn available(&self) -> usize {
+    unwrap_poison(self.0.read.lock()).map(|g| g.available()).unwrap_or_default()
+  }
+
+  fn read_until(&self, end: u8, limit: usize, buf: &mut Vec<u8>) -> io::Result<usize> {
+    unwrap_poison(self.0.read.lock())?.read_until_limit(&mut &self.0.tls, end, limit, buf)
   }
 
   fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
     unwrap_poison(self.0.read.lock())?.read_exact(&mut &self.0.tls, buf)
   }
 
-  fn new_ref_read(&self) -> Box<dyn Read + Send> {
-    Box::new(self.clone()) as Box<dyn Read + Send>
+  fn new_ref_read(&self) -> Box<dyn Read + Send + Sync> {
+    Box::new(self.clone()) as Box<dyn Read + Send + Sync>
   }
 
   fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
@@ -199,6 +207,10 @@ impl ConnectionStreamRead for HumptyTlsStream {
 
   fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
     self.0.tls.set_read_timeout(dur)
+  }
+
+  fn get_read_timeout(&self) -> io::Result<Option<Duration>> {
+    self.0.tls.read_timeout()
   }
 }
 
@@ -225,8 +237,12 @@ impl ConnectionStreamWrite for HumptyTlsStream {
     self.0.tls.set_write_timeout(dur)
   }
 
-  fn new_ref_write(&self) -> Box<dyn Write + Send> {
-    Box::new(self.clone()) as Box<dyn Write + Send>
+  fn get_write_timeout(&self) -> io::Result<Option<Duration>> {
+    self.0.tls.write_timeout()
+  }
+
+  fn new_ref_write(&self) -> Box<dyn Write + Send + Sync> {
+    Box::new(self.clone()) as Box<dyn Write + Send + Sync>
   }
 
   fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {

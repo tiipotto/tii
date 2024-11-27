@@ -10,6 +10,7 @@ use crate::stream::ConnectionStream;
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
 use std::fmt::{Display, Formatter};
+use std::io::ErrorKind;
 
 /// Enum for http versions humpty supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -234,15 +235,16 @@ fn parse_raw_query(raw_query: &str) -> HumptyResult<Vec<(String, String)>> {
 
 impl RequestHead {
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn new(stream: &dyn ConnectionStream) -> HumptyResult<Self> {
+  pub fn new(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> HumptyResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
-    //TODO fix ddos potential here, limit read to 64k or some other reasonable size.
-    //Possible attack on this is to just write ~Mem amount of data and then just keep
-    //drip feeding us 1 byte of data every so often to deny memory to actual requests.
-    let count = stream.read_until(0xA, &mut start_line_buf)?;
+    let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
     if count == 0 {
-      return Err(RequestHeadParsingError::EofBeforeReadingAnyBytes.into());
+      return Err(HumptyError::from_io_kind(ErrorKind::UnexpectedEof));
+    }
+
+    if count == max_head_buffer_size {
+      return Err(RequestHeadParsingError::StatusLineTooLong(start_line_buf).into());
     }
 
     let start_line_string = parse_status_line(&start_line_buf)?;
@@ -301,7 +303,12 @@ impl RequestHead {
 
     loop {
       let mut line_buf: Vec<u8> = Vec::with_capacity(256);
-      stream.read_until(0xA, &mut line_buf)?;
+      let count = stream.read_until(0xA, max_head_buffer_size, &mut line_buf)?;
+
+      if count == max_head_buffer_size {
+        return Err(RequestHeadParsingError::HeaderLineTooLong(line_buf).into());
+      }
+
       let line = std::str::from_utf8(&line_buf)
         .map_err(|_| RequestHeadParsingError::HeaderLineIsNotUsAscii)?;
 

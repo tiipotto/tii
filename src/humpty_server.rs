@@ -8,12 +8,13 @@ use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::humpty_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
+use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::Debug;
 use std::io;
+use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,7 +34,7 @@ struct PhantomStreamMetadata;
 impl ConnectionStreamMetadata for PhantomStreamMetadata {
   fn as_any(&self) -> &dyn Any {
     // This type is never instantiated. therefore this is unreachable.
-    unreachable!()
+    crate::util::unreachable()
   }
 }
 
@@ -41,19 +42,40 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 /// It does NOT own any OS resources like server sockets / file descriptors.
 #[derive(Debug)]
 pub struct HumptyServer {
+  routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
-  timeout: Option<Duration>,
-  routers: Vec<Box<dyn Router>>,
+  max_head_buffer_size: usize,
+  connection_timeout: Option<Duration>,
+  read_timeout: Option<Duration>,
+  keep_alive_timeout: Option<Duration>,
+  request_body_io_timeout: Option<Duration>,
+  write_timeout: Option<Duration>,
 }
 impl HumptyServer {
+  #[allow(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
-    sub_apps: Vec<Box<dyn Router>>,
+    routers: Vec<Box<dyn Router>>,
     error_handler: ErrorHandler,
     not_found_handler: NotFoundHandler,
-    timeout: Option<Duration>,
+    max_head_buffer_size: usize,
+    connection_timeout: Option<Duration>,
+    read_timeout: Option<Duration>,
+    keep_alive_timeout: Option<Duration>,
+    request_body_io_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
   ) -> Self {
-    HumptyServer { error_handler, not_found_handler, timeout, routers: sub_apps }
+    HumptyServer {
+      routers,
+      error_handler,
+      not_found_handler,
+      max_head_buffer_size,
+      read_timeout,
+      connection_timeout: connection_timeout.or(read_timeout),
+      keep_alive_timeout: keep_alive_timeout.or(read_timeout),
+      request_body_io_timeout: request_body_io_timeout.or(read_timeout),
+      write_timeout,
+    }
   }
 
   /// Handles a connection without any metadata
@@ -77,29 +99,35 @@ impl HumptyServer {
     meta: Option<M>,
   ) -> HumptyResult<()> {
     let stream = stream.into_connection_stream();
-    //TODO split this into 2 parameters? Or make multiple parameters for different stages.
-    //Use may desire timeout for request header but LOOOOONG/Infinite timeout for endpoints?
-    //I am not a fan of exposing this method to the endpoints... but this may be a good idea anyways...
-    stream.set_read_timeout(self.timeout)?;
-    stream.set_write_timeout(self.timeout)?;
+
+    stream.set_read_timeout(self.connection_timeout)?;
+    stream.set_write_timeout(self.write_timeout)?;
+    if !stream.ensure_readable()? {
+      return Err(HumptyError::from_io_kind(ErrorKind::UnexpectedEof));
+    }
 
     let meta = meta.map(|a| Arc::new(a) as Arc<dyn ConnectionStreamMetadata>);
 
     let mut count = 0u64;
 
     loop {
-      let mut context = match RequestContext::new(stream.as_ref(), meta.as_ref().cloned()) {
+      if count > 0 && !self.handle_keep_alive(stream.as_ref())? {
+        break;
+      }
+
+      stream.set_read_timeout(self.read_timeout)?;
+
+      let mut context = match RequestContext::new(
+        stream.as_ref(),
+        meta.as_ref().cloned(),
+        self.max_head_buffer_size,
+      ) {
         Ok(ctx) => ctx,
-        Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::EofBeforeReadingAnyBytes)) => {
-          if count == 0 {
-            return Err(RequestHeadParsingError::EofBeforeReadingAnyBytes.into());
-          }
-          trace_log!("EOF after successfully serving {count} requests");
-          return Ok(());
-        }
         Err(err) => return Err(err),
       };
       count += 1;
+
+      stream.set_read_timeout(self.request_body_io_timeout)?;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
       if context.request_head().version() == HttpVersion::Http11
@@ -134,13 +162,18 @@ impl HumptyServer {
         return Ok(());
       }
 
-      // Is the keep alive header set?
-      let mut keep_alive = context.request_head().version() == HttpVersion::Http11
-        && context
-          .request_head()
-          .get_header(&HeaderName::Connection)
-          .map(|e| e.eq_ignore_ascii_case("keep-alive"))
-          .unwrap_or_default();
+      // Will we do keep alive?
+      let mut keep_alive =
+          // is this http 1.1 because earlier does not support it.
+          context.request_head().version() == HttpVersion::Http11
+          // Do we have a keep alive timeout that is not zero?
+          && self.keep_alive_timeout.as_ref().map(|a| !a.is_zero()).unwrap_or(true)
+          // did the client tell us not to do keep alive?
+          && context
+            .request_head()
+            .get_header(&HeaderName::Connection)
+            .map(|e| e.eq_ignore_ascii_case("keep-alive"))
+            .unwrap_or_default();
 
       let mut response = None;
       for router in self.routers.iter() {
@@ -164,7 +197,7 @@ impl HumptyServer {
 
       self.write_response(stream.as_ref(), context, keep_alive, response)?;
 
-      // If the request specified to keep the connection open, respect this
+      // Can we do keep alive?
       if !keep_alive {
         trace_log!("NoKeepAlive");
         break;
@@ -175,6 +208,42 @@ impl HumptyServer {
 
     trace_log!("ConnectionClosed");
     Ok(())
+  }
+
+  fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> HumptyResult<bool> {
+    if stream.available() > 0 {
+      trace_log!("Keep-alive client sent data. Processing next request...");
+      return Ok(true);
+    }
+    stream.set_read_timeout(self.keep_alive_timeout)?;
+    match stream.ensure_readable() {
+      Ok(true) => {
+        trace_log!("Keep-alive client sent data. Processing next request...");
+        Ok(true)
+      }
+      Ok(false) => {
+        trace_log!("Keep-alive client disconnected before timeout expired.");
+        Ok(false)
+      }
+      Err(err) => match err.kind() {
+        ErrorKind::UnexpectedEof => {
+          trace_log!("Keep-alive client disconnected before timeout expired.");
+          Ok(false)
+        }
+        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::BrokenPipe => {
+          trace_log!("Keep-alive OS reset connection before timeout expired.");
+          Ok(false)
+        }
+        ErrorKind::TimedOut | ErrorKind::WouldBlock => {
+          trace_log!("Keep-alive time out closing connection.");
+          Ok(false)
+        }
+        _ => {
+          error_log!("Keep-alive unspecified error when waiting for data {}", &err);
+          Err(err.into())
+        }
+      },
+    }
   }
 
   fn write_response(

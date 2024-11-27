@@ -40,10 +40,11 @@ impl RequestContext {
   pub fn new(
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    max_head_buffer_size: usize,
   ) -> HumptyResult<RequestContext> {
     let id = util::next_id();
     let address = stream.peer_addr()?;
-    let req = RequestHead::new(stream)?;
+    let req = RequestHead::new(stream, max_head_buffer_size)?;
 
     if req.version() == HttpVersion::Http09 {
       return Ok(RequestContext {
