@@ -20,7 +20,7 @@ use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -224,6 +224,13 @@ pub enum RoutingDecision {
   MimeMismatch,
   /// Path and method do match, the body can be processed but the response of the endpoint will not be processable by the client.
   AcceptMismatch,
+}
+
+impl Display for RoutingDecision {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO make this not shit
+    Debug::fmt(self, f)
+  }
 }
 
 impl PartialOrd for RoutingDecision {
