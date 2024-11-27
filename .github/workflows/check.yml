@@ -35,7 +35,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --target ${{ matrix.target }}
+          cargo run --example shutdown --features extras --target ${{ matrix.target }}
 
   valgrind_linux:
     name: Valgrind
@@ -162,7 +162,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --target ${{ matrix.target }}
+          cargo run --example shutdown --features extras --target ${{ matrix.target }}
 
   fmt:
       runs-on: ubuntu-latest
