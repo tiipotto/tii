@@ -54,7 +54,7 @@ jobs:
           toolchain: stable minus 2 releases
       - name: 64-bit Valgrind
         run: |
-          cargo build --example shutdown --target x86_64-unknown-linux-gnu
+          cargo build --example shutdown --target x86_64-unknown-linux-gnu --features="extras"
           valgrind --error-exitcode=1 --leak-check=full target/x86_64-unknown-linux-gnu/debug/examples/shutdown
 
   build_linux:
