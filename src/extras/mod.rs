@@ -1,4 +1,3 @@
-#[cfg(feature = "builtin_endpoints")]
 pub mod builtin_endpoints;
 
 /// Convenience functions related to networking

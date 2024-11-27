@@ -21,6 +21,7 @@ mod util;
 /// Extra utilities that can be useful for many projects but should not be part of humpty itself.
 /// This stuff might be moved to its own crate at some point.
 /// Nothing inside humpty can depend on something in extras!
+#[cfg(feature = "extras")]
 pub mod extras;
 
 #[cfg(feature = "ssl")]
