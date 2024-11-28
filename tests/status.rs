@@ -11,7 +11,7 @@ mod test {
     ];
 
     for code in valid_codes {
-      assert!(StatusCode::from_well_known_code(code).is_some());
+      assert!(StatusCode::from_well_known_code(code).is_some(), "{}", code);
     }
 
     assert!(StatusCode::from_well_known_code(69).is_none());

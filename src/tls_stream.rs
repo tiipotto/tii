@@ -29,6 +29,9 @@ pub trait TlsCapableStream: Debug + Sync + Send {
 
   /// The address of the remote this stream.
   fn peer_addr(&self) -> io::Result<String>;
+
+  /// The address we are listening to for receiving connections.
+  fn local_addr(&self) -> io::Result<String>;
 }
 
 mod tcp {
@@ -54,7 +57,11 @@ mod tcp {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
-      self.peer_addr().map(|p| p.to_string())
+      Ok(format!("{}", TcpStream::peer_addr(self)?))
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
+      Ok(format!("{}", TcpStream::local_addr(self)?))
     }
   }
 }
@@ -84,9 +91,13 @@ mod unix {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
+      Ok("unix".to_string())
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
       self
-        .peer_addr()
-        .map(|p| p.as_pathname().map(|p| p.to_string_lossy().to_string()).unwrap_or_default())
+        .local_addr()
+        .map(|a| a.as_pathname().map(|a| a.to_string_lossy().to_string()).unwrap_or_default())
     }
   }
 }
@@ -143,6 +154,7 @@ impl HumptyTlsStream {
     spawner: T,
   ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
+    let local = stream.local_addr()?.to_string();
     let stream_wrapper = StreamWrapper(Arc::new(stream));
     let tls =
       RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), spawner)?;
@@ -153,6 +165,7 @@ impl HumptyTlsStream {
       read: Mutex::new(UnownedReadBuffer::new()),
       write: Mutex::new(UnownedWriteBuffer::new()),
       peer,
+      local,
     }))) as Box<dyn ConnectionStream>)
   }
 }
@@ -164,6 +177,7 @@ struct HumptyTlsWrapperInner {
   read: Mutex<UnownedReadBuffer<0x4000>>,
   write: Mutex<UnownedWriteBuffer<0x4000>>,
   peer: String,
+  local: String,
 }
 
 impl Drop for HumptyTlsWrapperInner {
@@ -271,5 +285,9 @@ impl ConnectionStream for HumptyTlsStream {
 
   fn peer_addr(&self) -> io::Result<String> {
     Ok(self.0.peer.clone())
+  }
+
+  fn local_addr(&self) -> io::Result<String> {
+    Ok(self.0.local.clone())
   }
 }

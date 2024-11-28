@@ -107,6 +107,10 @@ impl StatusCode {
   ///
   pub const fn from_custom(code: u16, status_line: &'static str) -> Self {
     //TODO verify status_line doesnt contain funny characters here?
+    if !status_line.is_ascii() || status_line.is_empty() {
+      return Self::InternalServerError;
+    }
+
     if code < 100 || code > 999 {
       return Self::InternalServerError;
     }
@@ -120,7 +124,12 @@ impl StatusCode {
   ///
   pub fn from_custom_string<T: ToString>(code: u16, status_line: &T) -> Option<Self> {
     let status_line = status_line.to_string();
+
     //TODO verify status_line doesnt contain funny characters here?
+    if !status_line.is_ascii() || status_line.is_empty() {
+      return None;
+    }
+
     if !(100..=999).contains(&code) {
       return None;
     }
@@ -185,13 +194,101 @@ impl StatusCode {
   /// # Returns
   /// None: the code was not well known.
   ///
-  pub fn from_well_known_code(code: u16) -> Option<Self> {
-    let well_known = Self::from_well_known_code_or_500(code);
-    if well_known.code() != code {
-      return None;
-    }
+  pub const fn from_well_known_code(code: u16) -> Option<Self> {
+    Some(match code {
+      100 => StatusCode::Continue,
+      101 => StatusCode::SwitchingProtocols,
+      200 => StatusCode::OK,
+      201 => StatusCode::Created,
+      202 => StatusCode::Accepted,
+      203 => StatusCode::NonAuthoritative,
+      204 => StatusCode::NoContent,
+      205 => StatusCode::ResetContent,
+      206 => StatusCode::PartialContent,
+      300 => StatusCode::MultipleChoices,
+      301 => StatusCode::MovedPermanently,
+      302 => StatusCode::Found,
+      303 => StatusCode::SeeOther,
+      304 => StatusCode::NotModified,
+      305 => StatusCode::UseProxy,
+      307 => StatusCode::TemporaryRedirect,
+      400 => StatusCode::BadRequest,
+      401 => StatusCode::Unauthorized,
+      403 => StatusCode::Forbidden,
+      404 => StatusCode::NotFound,
+      405 => StatusCode::MethodNotAllowed,
+      406 => StatusCode::NotAcceptable,
+      407 => StatusCode::ProxyAuthenticationRequired,
+      408 => StatusCode::RequestTimeout,
+      409 => StatusCode::Conflict,
+      410 => StatusCode::Gone,
+      411 => StatusCode::LengthRequired,
+      412 => StatusCode::PreconditionFailed,
+      413 => StatusCode::ContentTooLarge,
+      414 => StatusCode::RequestURITooLong,
+      415 => StatusCode::UnsupportedMediaType,
+      416 => StatusCode::RequestedRangeNotSatisfiable,
+      417 => StatusCode::ExpectationFailed,
+      500 => StatusCode::InternalServerError,
+      501 => StatusCode::NotImplemented,
+      502 => StatusCode::BadGateway,
+      503 => StatusCode::ServiceUnavailable,
+      504 => StatusCode::GatewayTimeout,
+      505 => StatusCode::VersionNotSupported,
+      _ => return None,
+    })
+  }
 
-    Some(well_known)
+  /// Returns the status line as an Option<&'static str>
+  /// This fn will return None for heap allocated status lines.
+  pub const fn status_line_static(&self) -> Option<&'static str> {
+    Some(match self {
+      StatusCode::Continue => "Continue",
+      StatusCode::SwitchingProtocols => "Switching Protocols",
+      StatusCode::OK => "OK",
+      StatusCode::Created => "Created",
+      StatusCode::Accepted => "Accepted",
+      StatusCode::NonAuthoritative => "Non-Authoritative Information",
+      StatusCode::NoContent => "No Content",
+      StatusCode::ResetContent => "Reset Content",
+      StatusCode::PartialContent => "Partial Content",
+      StatusCode::MultipleChoices => "Multiple Choices",
+      StatusCode::MovedPermanently => "Moved Permanently",
+      StatusCode::Found => "Found",
+      StatusCode::SeeOther => "See Other",
+      StatusCode::NotModified => "Not Modified",
+      StatusCode::UseProxy => "Use Proxy",
+      StatusCode::TemporaryRedirect => "Temporary Redirect",
+      StatusCode::BadRequest => "Bad Request",
+      StatusCode::Unauthorized => "Unauthorized",
+      StatusCode::Forbidden => "Forbidden",
+      StatusCode::NotFound => "Not Found",
+      StatusCode::MethodNotAllowed => "Method Not Allowed",
+      StatusCode::NotAcceptable => "Not Acceptable",
+      StatusCode::ProxyAuthenticationRequired => "Proxy Authentication Required",
+      StatusCode::RequestTimeout => "Request Timeout",
+      StatusCode::Conflict => "Conflict",
+      StatusCode::Gone => "Gone",
+      StatusCode::LengthRequired => "Length Required",
+      StatusCode::PreconditionFailed => "Precondition Failed",
+      #[allow(deprecated)]
+      StatusCode::RequestEntityTooLarge => "Request Entity Too Large",
+      StatusCode::ContentTooLarge => "Content Too Large",
+      StatusCode::RequestURITooLong => "Request-URI Too Long",
+      StatusCode::UnsupportedMediaType => "Unsupported Media Type",
+      StatusCode::RequestedRangeNotSatisfiable => "Requested Range Not Satisfiable",
+      StatusCode::ExpectationFailed => "Expectation Failed",
+      StatusCode::InternalServerError => "Internal Server Error",
+      StatusCode::NotImplemented => "Not Implemented",
+      StatusCode::BadGateway => "Bad Gateway",
+      StatusCode::ServiceUnavailable => "Service Unavailable",
+      StatusCode::GatewayTimeout => "Gateway Timeout",
+      StatusCode::VersionNotSupported => "HTTP Version Not Supported",
+      StatusCode::PermanentRedirect => "Permanent Redirect",
+      StatusCode::PaymentRequired => "Payment Required",
+      StatusCode::CustomStr(_, _, str) => str,
+      StatusCode::CustomString(_, _, _) => return None,
+    })
   }
 
   /// Returns the status line as a &str
