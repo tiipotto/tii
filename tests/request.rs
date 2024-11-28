@@ -18,7 +18,7 @@ fn test_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = RequestHead::new(raw_stream.as_ref());
+  let request = RequestHead::new(raw_stream.as_ref(), 8096);
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
@@ -39,7 +39,7 @@ fn test_cookie_request() {
   let test_data = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: foo=bar; baz=qux\r\n\r\n";
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
-  let request = RequestHead::new(raw_stream.as_ref()).unwrap();
+  let request = RequestHead::new(raw_stream.as_ref(), 8096).unwrap();
 
   let mut expected_cookies = vec![Cookie::new("foo", "bar"), Cookie::new("baz", "qux")];
 
@@ -57,7 +57,7 @@ fn test_proxied_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = RequestHead::new(raw_stream.as_ref());
+  let request = RequestHead::new(raw_stream.as_ref(), 8096);
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();

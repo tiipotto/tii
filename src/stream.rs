@@ -30,26 +30,47 @@ pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
   fn peer_addr(&self) -> io::Result<String>;
 }
 
-pub trait ConnectionStreamRead: Send + Debug + Read {
+pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
   ///De-mut of Read
   fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
 
+  /// This fn returns true if at least 1 byte can be read.
+  /// If the stream is EOF then false is returned.
+  ///
+  /// # Implementation Detail
+  /// Caller can assume the following about this fn:
+  /// This fn will call the underlying io::Read operation and buffer the output of read unless it already has buffered data previously.
+  /// The next call to any reading function is expected to return data from the internal buffer instead of calling the underlying io::Read operation.
+  ///
+  /// # Errors
+  /// TimedOut/WouldBlock indicates that a timeout would have occurred when reading 1 byte.
+  /// Other errors that would have occurred when calling the underlying io operation.
+  ///
+  fn ensure_readable(&self) -> io::Result<bool>;
+
+  /// Returns the amount of bytes available for reading without blocking or errors.
+  /// Caller can assume with high likelihood that a call read_exact with the returned number of bytes or less
+  /// will not error or block
+  fn available(&self) -> usize;
+
   ///De-mut of BufReader
-  fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize>;
+  fn read_until(&self, end: u8, limit: usize, buf: &mut Vec<u8>) -> io::Result<usize>;
 
   ///De-mut of Read
   fn read_exact(&self, buf: &mut [u8]) -> io::Result<()>;
 
-  fn new_ref_read(&self) -> Box<dyn Read + Send>;
+  fn new_ref_read(&self) -> Box<dyn Read + Send + Sync>;
 
   fn as_stream_read(&self) -> &dyn ConnectionStreamRead;
 
   fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead>;
 
   fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
+
+  fn get_read_timeout(&self) -> io::Result<Option<Duration>>;
 }
 
-pub trait ConnectionStreamWrite: Send + Debug + Write {
+pub trait ConnectionStreamWrite: Sync + Send + Debug + Write {
   ///De-mut of Write
   fn write(&self, buf: &[u8]) -> io::Result<usize>;
   ///De-mut of Write
@@ -60,7 +81,9 @@ pub trait ConnectionStreamWrite: Send + Debug + Write {
 
   fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 
-  fn new_ref_write(&self) -> Box<dyn Write + Send>;
+  fn get_write_timeout(&self) -> io::Result<Option<Duration>>;
+
+  fn new_ref_write(&self) -> Box<dyn Write + Send + Sync>;
 
   fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite>;
   fn as_stream_write(&self) -> &dyn ConnectionStreamWrite;
@@ -133,16 +156,30 @@ mod tcp {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
 
-    fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_until(&mut &self.0.stream, end, buf)
+    fn ensure_readable(&self) -> io::Result<bool> {
+      unwrap_poison(self.0.read_mutex.lock())?.ensure_readable(&mut &self.0.stream)
+    }
+
+    fn available(&self) -> usize {
+      // if we are poisoned, we for sure cant read anything!
+      unwrap_poison(self.0.read_mutex.lock()).map(|g| g.available()).unwrap_or_default()
+    }
+
+    fn read_until(&self, end: u8, limit: usize, buf: &mut Vec<u8>) -> io::Result<usize> {
+      unwrap_poison(self.0.read_mutex.lock())?.read_until_limit(
+        &mut &self.0.stream,
+        end,
+        limit,
+        buf,
+      )
     }
 
     fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
       unwrap_poison(self.0.read_mutex.lock())?.read_exact(&mut &self.0.stream, buf)
     }
 
-    fn new_ref_read(&self) -> Box<dyn Read + Send> {
-      Box::new(self.clone()) as Box<dyn Read + Send>
+    fn new_ref_read(&self) -> Box<dyn Read + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
     fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
@@ -155,6 +192,10 @@ mod tcp {
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
       self.0.stream.set_read_timeout(dur)
+    }
+
+    fn get_read_timeout(&self) -> io::Result<Option<Duration>> {
+      self.0.stream.read_timeout()
     }
   }
 
@@ -175,8 +216,12 @@ mod tcp {
       self.0.stream.set_write_timeout(dur)
     }
 
-    fn new_ref_write(&self) -> Box<dyn Write + Send> {
-      Box::new(self.clone()) as Box<dyn Write + Send>
+    fn get_write_timeout(&self) -> io::Result<Option<Duration>> {
+      self.0.stream.write_timeout()
+    }
+
+    fn new_ref_write(&self) -> Box<dyn Write + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
     fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
@@ -215,16 +260,18 @@ mod boxed {
   use crate::util::unwrap_poison;
   use std::fmt::{Debug, Formatter};
   use std::io;
-  use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+  use std::io::{BufWriter, Read, Write};
+  use std::ops::DerefMut;
   use std::sync::{Arc, Mutex};
   use std::time::Duration;
+  use unowned_buf::UnownedReadBuffer;
 
   pub fn new(
     read: Box<dyn Read + Send>,
     write: Box<dyn Write + Send>,
   ) -> Box<dyn ConnectionStream> {
     Box::new(BoxStreamOuter(Arc::new(BoxStreamInner {
-      read_mutex: Mutex::new(BufReader::new(read)),
+      read_mutex: Mutex::new((UnownedReadBuffer::default(), read)),
       write_mutex: Mutex::new(BufWriter::new(write)),
     }))) as Box<dyn ConnectionStream>
   }
@@ -233,7 +280,7 @@ mod boxed {
   struct BoxStreamOuter(Arc<BoxStreamInner>);
 
   struct BoxStreamInner {
-    read_mutex: Mutex<BufReader<Box<dyn Read + Send>>>,
+    read_mutex: Mutex<(UnownedReadBuffer<0x4000>, Box<dyn Read + Send>)>,
     write_mutex: Mutex<BufWriter<Box<dyn Write + Send>>>,
   }
 
@@ -245,19 +292,35 @@ mod boxed {
 
   impl ConnectionStreamRead for BoxStreamOuter {
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read(buf)
+      let mut guard = unwrap_poison(self.0.read_mutex.lock())?;
+      let (buffer, stream) = guard.deref_mut();
+      buffer.read(stream, buf)
     }
 
-    fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_until(end, buf)
+    fn ensure_readable(&self) -> io::Result<bool> {
+      let mut guard = unwrap_poison(self.0.read_mutex.lock())?;
+      let (buffer, stream) = guard.deref_mut();
+      buffer.ensure_readable(stream)
+    }
+
+    fn available(&self) -> usize {
+      unwrap_poison(self.0.read_mutex.lock()).map(|g| g.0.available()).unwrap_or_default()
+    }
+
+    fn read_until(&self, end: u8, limit: usize, buf: &mut Vec<u8>) -> io::Result<usize> {
+      let mut guard = unwrap_poison(self.0.read_mutex.lock())?;
+      let (buffer, stream) = guard.deref_mut();
+      buffer.read_until_limit(stream, end, limit, buf)
     }
 
     fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_exact(buf)
+      let mut guard = unwrap_poison(self.0.read_mutex.lock())?;
+      let (buffer, stream) = guard.deref_mut();
+      buffer.read_exact(stream, buf)
     }
 
-    fn new_ref_read(&self) -> Box<dyn Read + Send> {
-      Box::new(self.clone()) as Box<dyn Read + Send>
+    fn new_ref_read(&self) -> Box<dyn Read + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
     fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
@@ -270,6 +333,10 @@ mod boxed {
 
     fn set_read_timeout(&self, _dur: Option<Duration>) -> io::Result<()> {
       Ok(())
+    }
+
+    fn get_read_timeout(&self) -> io::Result<Option<Duration>> {
+      Ok(None)
     }
   }
 
@@ -296,8 +363,12 @@ mod boxed {
       Ok(())
     }
 
-    fn new_ref_write(&self) -> Box<dyn Write + Send> {
-      Box::new(self.clone()) as Box<dyn Write + Send>
+    fn get_write_timeout(&self) -> io::Result<Option<Duration>> {
+      Ok(None)
+    }
+
+    fn new_ref_write(&self) -> Box<dyn Write + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
     fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
@@ -384,16 +455,30 @@ mod unix {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
 
-    fn read_until(&self, end: u8, buf: &mut Vec<u8>) -> io::Result<usize> {
-      unwrap_poison(self.0.read_mutex.lock())?.read_until(&mut &self.0.stream, end, buf)
+    fn available(&self) -> usize {
+      // if we are poisoned, we for sure cant read anything!
+      unwrap_poison(self.0.read_mutex.lock()).map(|g| g.available()).unwrap_or_default()
+    }
+
+    fn ensure_readable(&self) -> io::Result<bool> {
+      unwrap_poison(self.0.read_mutex.lock())?.ensure_readable(&mut &self.0.stream)
+    }
+
+    fn read_until(&self, end: u8, limit: usize, buf: &mut Vec<u8>) -> io::Result<usize> {
+      unwrap_poison(self.0.read_mutex.lock())?.read_until_limit(
+        &mut &self.0.stream,
+        end,
+        limit,
+        buf,
+      )
     }
 
     fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
       unwrap_poison(self.0.read_mutex.lock())?.read_exact(&mut &self.0.stream, buf)
     }
 
-    fn new_ref_read(&self) -> Box<dyn Read + Send> {
-      Box::new(self.clone()) as Box<dyn Read + Send>
+    fn new_ref_read(&self) -> Box<dyn Read + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
     fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
@@ -406,6 +491,10 @@ mod unix {
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
       self.0.stream.set_read_timeout(dur)
+    }
+
+    fn get_read_timeout(&self) -> io::Result<Option<Duration>> {
+      self.0.stream.read_timeout()
     }
   }
 
@@ -426,8 +515,12 @@ mod unix {
       self.0.stream.set_write_timeout(dur)
     }
 
-    fn new_ref_write(&self) -> Box<dyn Write + Send> {
-      Box::new(self.clone()) as Box<dyn Write + Send>
+    fn get_write_timeout(&self) -> io::Result<Option<Duration>> {
+      self.0.stream.write_timeout()
+    }
+
+    fn new_ref_write(&self) -> Box<dyn Write + Send + Sync> {
+      Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
     fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {

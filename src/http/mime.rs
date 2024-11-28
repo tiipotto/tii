@@ -2,7 +2,7 @@
 
 use crate::util::unwrap_some;
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// QValue is defined as a fixed point number with up to 3 digits
 /// after comma. with a valid range from 0 to 1.
@@ -27,6 +27,9 @@ impl QValue {
       1 => {
         if qvalue == "1" {
           return Some(QValue(1000));
+        }
+        if qvalue == "0" {
+          return Some(QValue(0));
         }
 
         None
@@ -122,6 +125,12 @@ pub enum AcceptMimeType {
   Wildcard,
 }
 
+impl AsRef<AcceptMimeType> for AcceptMimeType {
+  fn as_ref(&self) -> &AcceptMimeType {
+    self
+  }
+}
+
 impl AcceptMimeType {
   /// Parses an accept mime type.
   pub fn parse(value: impl AsRef<str>) -> Option<AcceptMimeType> {
@@ -147,26 +156,26 @@ impl AcceptMimeType {
   }
 
   /// Returns true if this AcceptMimeType permits the given mime type.
-  pub fn permits_specific(&self, mime_type: &MimeType) -> bool {
+  pub fn permits_specific(&self, mime_type: impl AsRef<MimeType>) -> bool {
     match self {
-      AcceptMimeType::GroupWildcard(group) => group == mime_type.mime_group(),
-      AcceptMimeType::Specific(mime) => mime == mime_type,
+      AcceptMimeType::GroupWildcard(group) => group == mime_type.as_ref().mime_group(),
+      AcceptMimeType::Specific(mime) => mime == mime_type.as_ref(),
       AcceptMimeType::Wildcard => true,
     }
   }
 
   /// Returns true if this AcceptMimeType will accept ANY mime from the given group.
-  pub fn permits_group(&self, mime_group: &MimeGroup) -> bool {
+  pub fn permits_group(&self, mime_group: impl AsRef<MimeGroup>) -> bool {
     match self {
-      AcceptMimeType::GroupWildcard(group) => group == mime_group,
+      AcceptMimeType::GroupWildcard(group) => group == mime_group.as_ref(),
       AcceptMimeType::Specific(_) => false,
       AcceptMimeType::Wildcard => true,
     }
   }
 
   /// Returns true if this AcceptMimeType will permit ANY mime type permitted by the other AcceptMimeType.
-  pub fn permits(&self, mime_type: &AcceptMimeType) -> bool {
-    match mime_type {
+  pub fn permits(&self, mime_type: impl AsRef<AcceptMimeType>) -> bool {
+    match mime_type.as_ref() {
       AcceptMimeType::GroupWildcard(group) => self.permits_group(group),
       AcceptMimeType::Specific(mime) => self.permits_specific(mime),
       AcceptMimeType::Wildcard => matches!(self, AcceptMimeType::Wildcard),
@@ -391,10 +400,22 @@ pub enum MimeGroup {
   Video,
   /// Audio
   Audio,
-  /// Any human or pseudo human readable text.
+  /// Any human or pseudo human-readable text.
   Text,
   /// Anything else.
   Other(String),
+}
+
+impl AsRef<MimeGroup> for MimeGroup {
+  fn as_ref(&self) -> &MimeGroup {
+    self
+  }
+}
+
+impl Display for MimeGroup {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(self.as_str())
+  }
 }
 
 const WELL_KNOWN_GROUPS: &[MimeGroup] = &[
@@ -732,6 +753,12 @@ pub enum MimeType {
 
   ///Anything else
   Other(MimeGroup, String),
+}
+
+impl AsRef<MimeType> for MimeType {
+  fn as_ref(&self) -> &MimeType {
+    self
+  }
 }
 
 const WELL_KNOWN_TYPES: &[MimeType] = &[
@@ -1489,14 +1516,32 @@ impl From<MimeType> for AcceptMimeType {
   }
 }
 
+impl From<&MimeType> for AcceptMimeType {
+  fn from(value: &MimeType) -> Self {
+    AcceptMimeType::Specific(value.clone())
+  }
+}
+
 impl From<MimeGroup> for AcceptMimeType {
   fn from(value: MimeGroup) -> Self {
     AcceptMimeType::GroupWildcard(value)
   }
 }
 
+impl From<&MimeGroup> for AcceptMimeType {
+  fn from(value: &MimeGroup) -> Self {
+    AcceptMimeType::GroupWildcard(value.clone())
+  }
+}
+
 impl From<MimeType> for MimeGroup {
   fn from(value: MimeType) -> Self {
+    value.mime_group().clone()
+  }
+}
+
+impl From<&MimeType> for MimeGroup {
+  fn from(value: &MimeType) -> Self {
     value.mime_group().clone()
   }
 }
@@ -1511,7 +1556,6 @@ impl From<AcceptQualityMimeType> for AcceptMimeType {
 mod tests {
   use crate::http::mime::QValue;
 
-  /// shutup clippy
   #[macro_export]
   macro_rules! test_qvalue {
     ($input:expr, $expected:expr) => {

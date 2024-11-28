@@ -5,14 +5,21 @@ use humpty::http::request_context::RequestContext;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use humpty::websocket::message::WebsocketMessage;
-use humpty::websocket::stream::{WebsocketReceiver, WebsocketSender};
+use humpty::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
+use log::{info, LevelFilter};
 use std::error::Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> Result<(), Box<dyn Error>> {
+  //Install a simple "output" for the log crate, so we can see something in the console.
+  //Adjust level if it's too verbose for you.
+  colog::default_builder().filter_level(LevelFilter::Trace).init();
+
+  //Visit localhost:8080 in a web-browser like firefox or chrome to see this example.
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
@@ -37,45 +44,60 @@ fn echo_handler(
   // Get the address of the client.
   let addr = request.peer_address();
 
-  println!("New connection from {}", addr);
+  info!("New connection from {}", addr);
+
+  {
+    let sender = sender.clone();
+    info!("Starting ping handler thread to ping client every 30s");
+    std::thread::spawn(move || loop {
+      std::thread::sleep(Duration::from_millis(30_000));
+      if sender.is_closed() {
+        info!("WebsocketSender is closed, ping handler bailing out...");
+        return;
+      }
+      info!("30 seconds have elapsed, sending ping to client...");
+      sender.ping().expect("async ping handler failed");
+    });
+  }
 
   // Loop while the client is connected.
   loop {
-    // Block while waiting to receive a message.
-    match receiver.recv() {
+    // Block up to 5s to receive the next web socket message.
+    match receiver.read_message_timeout(Some(Duration::from_millis(5000))) {
       // If the message was received successfully, echo it back with an increasing number at the end.
-      Ok(Some(message)) => match message {
+      Ok(ReadMessageTimeoutResult::Message(message)) => match message {
         WebsocketMessage::Text(text) => {
           let message = text;
           let count = COUNTER.fetch_add(1, Ordering::SeqCst);
           let response = format!("{} {}", message, count);
-          sender.text(response).unwrap();
-          println!(
-            "Received message `{}` from {}, echoing with the number {}",
-            message, addr, count
-          )
+          sender.text(response)?;
+          info!("Received message `{}` from {}, echoing with the number {}", message, addr, count)
         }
         WebsocketMessage::Binary(binary) => {
-          println!("Received binary data, echoing data back as is");
-          sender.send(WebsocketMessage::Binary(binary)).unwrap();
+          info!("Received binary data, echoing data back as is");
+          sender.send(WebsocketMessage::Binary(binary))?;
         }
         WebsocketMessage::Ping => {
-          println!("Received ping, responding with pong");
-          sender.send(WebsocketMessage::Pong).unwrap();
+          info!("Received ping, responding with pong");
+          sender.send(WebsocketMessage::Pong)?;
         }
         WebsocketMessage::Pong => {
-          println!("Received pong");
+          info!("Received pong");
         }
       },
-      // If the connection was closed, break out of the loop and clean up
-      Ok(None) => {
-        break;
+      Ok(ReadMessageTimeoutResult::Timeout) => {
+        info!("No message received in 5s sending ping...");
+        sender.ping()?;
       }
-      // Ignore any other errors
-      _ => (),
+      // If the connection was closed, break out of the loop.
+      Ok(ReadMessageTimeoutResult::Closed) => {
+        info!("Connection closed by {}", addr);
+        return Ok(());
+      }
+      Err(e) => {
+        info!("Websocket Error: {}", e);
+        return Ok(());
+      }
     }
   }
-
-  println!("Connection closed by {}", addr);
-  Ok(())
 }

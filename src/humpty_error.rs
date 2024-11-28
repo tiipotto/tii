@@ -29,11 +29,11 @@ impl From<HumptyError> for HumptyResult<Response> {
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum RequestHeadParsingError {
-  EofBeforeReadingAnyBytes,
   StatusLineContainsInvalidBytes,
   StatusLineNoCRLF,
   StatusLineNoWhitespace,
   StatusLineTooManyWhitespaces,
+  StatusLineTooLong(Vec<u8>),
   PathInvalidUrlEncoding(String),
   MethodNotSupportedByHttpVersion(HttpVersion, Method),
   HeaderLineIsNotUsAscii,
@@ -41,6 +41,7 @@ pub enum RequestHeadParsingError {
   HeaderNameEmpty,
   HeaderValueMissing,
   HeaderValueEmpty,
+  HeaderLineTooLong(Vec<u8>),
   HttpVersionNotSupported(String),
   TransferEncodingNotSupported(String),
   InvalidContentLength(String),
@@ -72,6 +73,7 @@ pub enum UserError {
   ImmutableRequestHeaderModified(HeaderName, String),
   ImmutableRequestHeaderRemoved(HeaderName),
   ImmutableResponseHeaderModified(HeaderName),
+  RequestHeadBufferTooSmall(usize),
 }
 
 impl Display for UserError {
@@ -110,6 +112,10 @@ pub enum HumptyError {
 impl HumptyError {
   pub fn new_io<E: Into<Box<dyn Error + Send + Sync>>>(kind: ErrorKind, message: E) -> HumptyError {
     io::Error::new(kind, message).into()
+  }
+
+  pub fn from_io_kind(kind: ErrorKind) -> HumptyError {
+    io::Error::from(kind).into()
   }
 
   pub fn kind(&self) -> ErrorKind {
