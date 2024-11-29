@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
-/// Represents a handle to the simple TCP server app
+/// Represents a handle to the simple Unix Socket Server that accepts connections and pumps them into Humpty for handling.
 pub struct UnixConnector {
   inner: Arc<UnixConnectorInner>,
   shutdown_failed: AtomicBool,

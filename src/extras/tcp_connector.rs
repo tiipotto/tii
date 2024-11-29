@@ -201,7 +201,7 @@ impl TcpConnector {
 
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
-      error_log!("tcp_connector[{}]: shutdown failed: errno={errno}", self.inner.addr_string);
+      error_log!("tcp_connector[{}]: shutdown failed: errno={errno}", &self.inner.addr_string);
       self.shutdown_failed.store(true, Ordering::SeqCst);
     }
   }
@@ -250,13 +250,13 @@ impl TcpConnector {
       if let Ok(_) = TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
         info_log!(
           "tcp_connector[{}]: connection to wakeup for shutdown was successful",
-          self.inner.addr_string
+          &self.inner.addr_string
         );
         return;
       }
     }
 
-    warn_log!("tcp_connector[{}]: connection to wakeup for shutdown was not successful, join() will not be blocking.", self.inner.addr_string);
+    warn_log!("tcp_connector[{}]: connection to wakeup for shutdown was not successful, join() will not be blocking.", &self.inner.addr_string);
     self.shutdown_failed.store(true, Ordering::SeqCst);
   }
 
@@ -282,7 +282,7 @@ impl TcpConnector {
     if self.shutdown_failed.load(Ordering::SeqCst) && !self.main_thread.is_finished() {
       warn_log!(
         "tcp_connector[{}]: due to previous failure of libc::shutdown join will not block",
-        self.inner.addr_string
+        &self.inner.addr_string
       );
       return;
     }
@@ -291,13 +291,13 @@ impl TcpConnector {
       Ok(_) => {}
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
-          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", self.inner.addr_string);
+          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", &self.inner.addr_string);
         } else if let Some(msg) = err.downcast_ref::<String>() {
-          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", self.inner.addr_string);
+          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", &self.inner.addr_string);
         } else {
           error_log!(
             "tcp_connector[{}]: listener thread panicked: {:?}",
-            self.inner.addr_string,
+            &self.inner.addr_string,
             err
           );
         };
