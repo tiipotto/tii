@@ -10,12 +10,14 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 /// Represents a handle to the simple TCP server app
+#[derive(Debug)]
 pub struct TcpConnector {
   inner: Arc<TcpConnectorInner>,
   shutdown_failed: AtomicBool,
   main_thread: JoinHandle<()>,
 }
 
+#[derive(Debug)]
 struct TcpConnectorInner {
   addr_string: String,
   addr: Vec<SocketAddr>,

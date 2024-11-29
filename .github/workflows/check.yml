@@ -56,7 +56,7 @@ jobs:
         run: |
           cargo build --example shutdown --target x86_64-unknown-linux-gnu --features extras
           valgrind --error-exitcode=1 --leak-check=full target/x86_64-unknown-linux-gnu/debug/examples/shutdown
-          cargo build --example shutdown2 --target x86_64-unknown-linux-gnu --features extras
+          cargo build --example shutdown2 --target x86_64-unknown-linux-gnu --features extras,log
           valgrind --error-exitcode=1 --leak-check=full target/x86_64-unknown-linux-gnu/debug/examples/shutdown2
 
   build_linux:

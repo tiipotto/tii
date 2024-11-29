@@ -10,12 +10,14 @@ use std::thread;
 use std::thread::JoinHandle;
 
 /// Represents a handle to the simple Unix Socket Server that accepts connections and pumps them into Humpty for handling.
+#[derive(Debug)]
 pub struct UnixConnector {
   inner: Arc<UnixConnectorInner>,
   shutdown_failed: AtomicBool,
   main_thread: JoinHandle<()>,
 }
 
+#[derive(Debug)]
 struct UnixConnectorInner {
   path: PathBuf,
   listener: UnixListener,
