@@ -31,52 +31,58 @@ struct ActiveConnection {
 
 impl TcpConnectorInner {
   fn run(&self) {
-    let mut count = 0u128;
-
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("tcp_connector[{}]: listening...", self.addr_string);
-    for stream in self.listener.incoming() {
+    info_log!("tcp_connector[{}]: listening...", &self.addr_string);
+    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
       if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("tcp_connector[{}]: shutdown", self.addr_string);
+        info_log!("tcp_connector[{}]: shutdown", &self.addr_string);
         break;
       }
 
-      count += 1;
-      let this_connection = count;
-
-      info_log!("tcp_connector[{}]: connection {this_connection} accepted", self.addr_string);
+      info_log!("tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
       let path_clone = self.addr_string.clone();
       let server_clone = self.humpty_server.clone();
 
       match thread::Builder::new().spawn(move || {
-                match stream {
-                    Ok(stream) => match server_clone.handle_connection(stream) {
-                        Ok(_) => {
-                            info_log!("tcp_connector[{}]: connection {this_connection} processed successfully", path_clone);
-                        }
-                        Err(err) => {
-                            // User code errored, like return Err in an Error handler.
-                            error_log!("tcp_connector[{}]: connection {this_connection} humpty server returned err={err}", path_clone);
-                        }
-                    }
-                    Err(err) => {
-                        // This may just affect a single connection and is likely to recover on its own?
-                        error_log!("tcp_connector[{}]: connection {this_connection} failed to accept a unix socket connection err={err}", path_clone);
-                    }
-                }
-            }) {
-                Ok(handle) => {
-                    active_connection.push(ActiveConnection {
-                        id: this_connection,
-                        hdl: Some(handle),
-                    });
-                }
-                Err(err) => {
-                    //May recover on its own courtesy of the OS once load decreases.
-                    error_log!("tcp_connector[{}]: connection {this_connection} failed to spawn new thread to handle the connection err={err}, will drop connection.", self.addr_string);
-                }
+        match stream {
+          Ok(stream) => match server_clone.handle_connection(stream) {
+            Ok(_) => {
+              info_log!(
+                "tcp_connector[{}]: connection {} processed successfully",
+                path_clone,
+                this_connection
+              );
             }
+            Err(err) => {
+              // User code errored, like return Err in an Error handler.
+              error_log!(
+                "tcp_connector[{}]: connection {} humpty server returned err={}",
+                path_clone,
+                this_connection,
+                err
+              );
+            }
+          },
+          Err(err) => {
+            // This may just affect a single connection and is likely to recover on its own?
+            error_log!(
+              "tcp_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              path_clone,
+              this_connection,
+              err
+            );
+          }
+        }
+      }) {
+        Ok(handle) => {
+          active_connection.push(ActiveConnection { id: this_connection, hdl: Some(handle) });
+        }
+        Err(err) => {
+          //May recover on its own courtesy of the OS once load decreases.
+          error_log!("tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
+        }
+      }
 
       active_connection.retain_mut(|con| {
         match con.hdl.as_ref() {
@@ -93,28 +99,33 @@ impl TcpConnectorInner {
           let this_connection = con.id;
           if let Some(msg) = err.downcast_ref::<&'static str>() {
             error_log!(
-              "tcp_connector[{}]: connection {this_connection} thread panicked: {msg}",
-              self.addr_string
+              "tcp_connector[{}]: connection {} thread panicked: {}",
+              &self.addr_string,
+              this_connection,
+              msg
             );
           } else if let Some(msg) = err.downcast_ref::<String>() {
             error_log!(
-              "tcp_connector[{}]: connection {this_connection} thread panicked: {msg}",
-              self.addr_string
+              "tcp_connector[{}]: connection {} thread panicked: {}",
+              &self.addr_string,
+              this_connection,
+              msg
             );
           } else {
             error_log!(
-              "tcp_connector[{}]: connection {this_connection} thread panicked: {:?}",
-              self.addr_string,
+              "tcp_connector[{}]: connection {} thread panicked: {:?}",
+              &self.addr_string,
+              this_connection,
               err
             );
           };
         }
 
-        return false;
+        false
       });
     }
 
-    trace_log!("tcp_connector[{}]: waiting for shutdown to finish", self.addr_string);
+    trace_log!("tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
     //Wait for all threads to finish
     for mut con in active_connection {
       //Code for panic enjoyers
@@ -122,25 +133,30 @@ impl TcpConnectorInner {
         let this_connection = con.id;
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "tcp_connector[{}]: connection {this_connection} thread panicked: {msg}",
-            self.addr_string
+            "tcp_connector[{}]: connection {} thread panicked: {}",
+            &self.addr_string,
+            this_connection,
+            msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "tcp_connector[{}]: connection {this_connection} thread panicked: {msg}",
-            self.addr_string
+            "tcp_connector[{}]: connection {} thread panicked: {}",
+            &self.addr_string,
+            this_connection,
+            msg
           );
         } else {
           error_log!(
-            "tcp_connector[{}]: connection {this_connection} thread panicked: {:?}",
-            self.addr_string,
+            "tcp_connector[{}]: connection {} thread panicked: {:?}",
+            &self.addr_string,
+            this_connection,
             err
           );
         };
       }
     }
 
-    info_log!("tcp_connector[{}]: shutdown done", self.addr_string);
+    info_log!("tcp_connector[{}]: shutdown done", &self.addr_string);
   }
 }
 
@@ -195,13 +211,13 @@ impl TcpConnector {
     }
 
     unsafe {
-      if libc::shutdown(self.inner.listener.as_raw_fd().into(), libc::SHUT_RDWR) != -1 {
+      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         return;
       }
 
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
-      error_log!("tcp_connector[{}]: shutdown failed: errno={errno}", &self.inner.addr_string);
+      error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.inner.addr_string, errno);
       self.shutdown_failed.store(true, Ordering::SeqCst);
     }
   }
@@ -245,9 +261,9 @@ impl TcpConnector {
       if self.main_thread.is_finished() {
         return;
       }
-      let mut addr = addr.clone();
+      let mut addr = *addr;
       specify_socket_to_loopback(&mut addr);
-      if let Ok(_) = TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
+      if TcpStream::connect_timeout(&addr, Duration::from_millis(1000)).is_ok() {
         info_log!(
           "tcp_connector[{}]: connection to wakeup for shutdown was successful",
           &self.inner.addr_string
@@ -291,9 +307,17 @@ impl TcpConnector {
       Ok(_) => {}
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
-          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", &self.inner.addr_string);
+          error_log!(
+            "tcp_connector[{}]: listener thread panicked: {}",
+            &self.inner.addr_string,
+            msg
+          );
         } else if let Some(msg) = err.downcast_ref::<String>() {
-          error_log!("tcp_connector[{}]: listener thread panicked: {msg}", &self.inner.addr_string);
+          error_log!(
+            "tcp_connector[{}]: listener thread panicked: {}",
+            &self.inner.addr_string,
+            msg
+          );
         } else {
           error_log!(
             "tcp_connector[{}]: listener thread panicked: {:?}",

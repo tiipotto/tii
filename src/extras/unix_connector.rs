@@ -30,52 +30,57 @@ struct ActiveConnection {
 
 impl UnixConnectorInner {
   fn run(&self) {
-    let mut count = 0u128;
-
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
     info_log!("unix_connector[{}]: listening...", self.path.display());
-    for stream in self.listener.incoming() {
+    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
       if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("unix_connector[{}]: shutdown", self.path.display());
         break;
       }
-
-      count += 1;
-      let this_connection = count;
 
       info_log!("unix_connector[{}]: connection {this_connection} accepted", self.path.display());
       let path_clone = self.path.clone();
       let server_clone = self.humpty_server.clone();
 
       match thread::Builder::new().spawn(move || {
-                match stream {
-                    Ok(stream) => match server_clone.handle_connection(stream) {
-                        Ok(_) => {
-                            info_log!("unix_connector[{}]: connection {this_connection} processed successfully", path_clone.display());
-                        }
-                        Err(err) => {
-                            // User code errored, like return Err in an Error handler.
-                            error_log!("unix_connector[{}]: connection {this_connection} humpty server returned err={err}", path_clone.display());
-                        }
-                    }
-                    Err(err) => {
-                        // This may just affect a single connection and is likely to recover on its own?
-                        error_log!("unix_connector[{}]: connection {this_connection} failed to accept a unix socket connection err={err}", path_clone.display());
-                    }
-                }
-            }) {
-                Ok(handle) => {
-                    active_connection.push(ActiveConnection {
-                        id: this_connection,
-                        hdl: Some(handle),
-                    });
-                }
-                Err(err) => {
-                    //May recover on its own courtesy of the OS once load decreases.
-                    error_log!("unix_connector[{}]: connection {this_connection} failed to spawn new thread to handle the connection err={err}, will drop connection.", self.path.display());
-                }
+        match stream {
+          Ok(stream) => match server_clone.handle_connection(stream) {
+            Ok(_) => {
+              info_log!(
+                "unix_connector[{}]: connection {this_connection} processed successfully",
+                path_clone.display()
+              );
             }
+            Err(err) => {
+              // User code errored, like return Err in an Error handler.
+              error_log!(
+                "unix_connector[{}]: connection {} humpty server returned err={}",
+                path_clone.display(),
+                this_connection,
+                err
+              );
+            }
+          },
+          Err(err) => {
+            // This may just affect a single connection and is likely to recover on its own?
+            error_log!(
+              "unix_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              path_clone.display(),
+              this_connection,
+              err
+            );
+          }
+        }
+      }) {
+        Ok(handle) => {
+          active_connection.push(ActiveConnection { id: this_connection, hdl: Some(handle) });
+        }
+        Err(err) => {
+          //May recover on its own courtesy of the OS once load decreases.
+          error_log!("unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
+        }
+      }
 
       active_connection.retain_mut(|con| {
         match con.hdl.as_ref() {
@@ -92,24 +97,29 @@ impl UnixConnectorInner {
           let this_connection = con.id;
           if let Some(msg) = err.downcast_ref::<&'static str>() {
             error_log!(
-              "unix_connector[{}]: connection {this_connection} thread panicked: {msg}",
-              self.path.display()
+              "unix_connector[{}]: connection {} thread panicked: {}",
+              self.path.display(),
+              this_connection,
+              msg
             );
           } else if let Some(msg) = err.downcast_ref::<String>() {
             error_log!(
-              "unix_connector[{}]: connection {this_connection} thread panicked: {msg}",
-              self.path.display()
+              "unix_connector[{}]: connection {} thread panicked: {}",
+              self.path.display(),
+              this_connection,
+              msg
             );
           } else {
             error_log!(
-              "unix_connector[{}]: connection {this_connection} thread panicked: {:?}",
+              "unix_connector[{}]: connection {} thread panicked: {:?}",
               self.path.display(),
+              this_connection,
               err
             );
           };
         }
 
-        return false;
+        false
       });
     }
 
@@ -121,13 +131,17 @@ impl UnixConnectorInner {
         let this_connection = con.id;
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "unix_connector[{}]: connection {this_connection} thread panicked: {msg}",
-            self.path.display()
+            "unix_connector[{}]: connection {} thread panicked: {}",
+            self.path.display(),
+            this_connection,
+            msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "unix_connector[{}]: connection {this_connection} thread panicked: {msg}",
-            self.path.display()
+            "unix_connector[{}]: connection {} thread panicked: {}",
+            self.path.display(),
+            this_connection,
+            msg
           );
         } else {
           error_log!(
@@ -184,13 +198,13 @@ impl UnixConnector {
     }
 
     unsafe {
-      if libc::shutdown(self.inner.listener.as_raw_fd().into(), libc::SHUT_RDWR) != -1 {
+      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         return;
       }
 
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
-      error_log!("unix_connector[{}]: shutdown failed: errno={errno}", self.inner.path.display());
+      error_log!("unix_connector[{}]: shutdown failed: errno={}", self.inner.path.display(), errno);
       self.shutdown_failed.store(true, Ordering::SeqCst);
     }
   }
@@ -227,13 +241,15 @@ impl UnixConnector {
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "unix_connector[{}]: listener thread panicked: {msg}",
-            self.inner.path.display()
+            "unix_connector[{}]: listener thread panicked: {}",
+            self.inner.path.display(),
+            msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "unix_connector[{}]: listener thread panicked: {msg}",
-            self.inner.path.display()
+            "unix_connector[{}]: listener thread panicked: {}",
+            self.inner.path.display(),
+            msg
           );
         } else {
           error_log!(
