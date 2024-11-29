@@ -39,11 +39,9 @@ pub fn handle(ctx: &RequestContext) -> Response {
 #[cfg(unix)]
 mod unix {
   use crate::handle;
-  use humpty::extras::tcp_app;
+  use humpty::extras;
   use humpty::humpty_builder::HumptyBuilder;
   use humpty::humpty_error::HumptyResult;
-  use humpty::HumptyError;
-  use std::os::unix::net::UnixListener;
 
   pub fn work() -> HumptyResult<()> {
     colog::default_builder().filter_level(log::LevelFilter::Trace).init();
@@ -58,24 +56,15 @@ mod unix {
 
     //HANDLE TCP CONNECTIONS
     //curl -X GET http://127.0.0.1:8080/some/path
-    {
-      let humpty_server = humpty_server.clone();
-      std::thread::spawn(move || {
-        let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
-        Ok::<(), HumptyError>(())
-      });
-    }
+    let tcp = extras::TcpConnector::new("0.0.0.0:8080", humpty_server.clone())?;
 
     //HANDLE UNIX CONNECTIONS
     //curl -X GET --unix-socket /tmp/humpty.sock http://unix/some/path
-    let listener = UnixListener::bind("/tmp/humpty.sock")?;
-    for stream in listener.incoming() {
-      let humpty_server = humpty_server.clone();
-      std::thread::spawn(move || {
-        humpty_server.handle_connection(stream?)?;
-        Ok::<(), HumptyError>(())
-      });
-    }
+    let unix = extras::UnixConnector::new("/tmp/humpty.sock", humpty_server.clone())?;
+
+    //Both of this will block forever
+    unix.join();
+    tcp.join();
 
     Ok(())
   }
