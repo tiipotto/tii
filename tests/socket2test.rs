@@ -10,13 +10,12 @@ fn hello(_: &RequestContext) -> HumptyResult<Response> {
 #[cfg(feature = "socket2")]
 #[cfg(feature = "extras")]
 fn work() -> HumptyResult<()> {
-
+  use humpty::extras::Connector;
   use humpty::humpty_builder::HumptyBuilder;
   use std::io::{Read, Write};
   use std::net::{SocketAddr, TcpStream};
   use std::str::FromStr;
   use std::time::Duration;
-  use humpty::extras::Connector;
 
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder

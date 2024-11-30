@@ -370,6 +370,6 @@ impl HumptyServer {
 impl Drop for HumptyServer {
   fn drop(&mut self) {
     self.shutdown();
-    trace_log!("HumptyServer::drop")
+    trace_log!("HumptyServer::drop");
   }
 }

@@ -6,12 +6,12 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
+use log::info;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
-use log::info;
 
 fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
