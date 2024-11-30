@@ -1556,6 +1556,7 @@ impl From<AcceptQualityMimeType> for AcceptMimeType {
 mod tests {
   use crate::http::mime::QValue;
 
+  /// Shutup clippy.
   #[macro_export]
   macro_rules! test_qvalue {
     ($input:expr, $expected:expr) => {
