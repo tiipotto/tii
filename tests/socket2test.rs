@@ -1,19 +1,21 @@
 use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::str::FromStr;
-use std::time::Duration;
 
+#[allow(dead_code)]
 fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
 }
 #[cfg(feature = "socket2")]
 #[cfg(feature = "extras")]
 fn work() -> HumptyResult<()> {
+
+  use humpty::humpty_builder::HumptyBuilder;
+  use std::io::{Read, Write};
+  use std::net::{SocketAddr, TcpStream};
+  use std::str::FromStr;
+  use std::time::Duration;
   use humpty::extras::Connector;
 
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
