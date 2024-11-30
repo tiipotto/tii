@@ -40,6 +40,7 @@ pub fn handle(ctx: &RequestContext) -> Response {
 mod unix {
   use crate::handle;
   use humpty::extras;
+  use humpty::extras::Connector;
   use humpty::humpty_builder::HumptyBuilder;
   use humpty::humpty_error::HumptyResult;
 
@@ -56,15 +57,15 @@ mod unix {
 
     //HANDLE TCP CONNECTIONS
     //curl -X GET http://127.0.0.1:8080/some/path
-    let tcp = extras::TcpConnector::new("0.0.0.0:8080", humpty_server.clone())?;
+    let tcp = extras::TcpConnector::start("0.0.0.0:8080", humpty_server.clone())?;
 
     //HANDLE UNIX CONNECTIONS
     //curl -X GET --unix-socket /tmp/humpty.sock http://unix/some/path
-    let unix = extras::UnixConnector::new("/tmp/humpty.sock", humpty_server.clone())?;
+    let unix = extras::UnixConnector::start("/tmp/humpty.sock", humpty_server.clone())?;
 
     //Both of this will block forever
-    unix.join();
-    tcp.join();
+    unix.join(None);
+    tcp.join(None);
 
     Ok(())
   }

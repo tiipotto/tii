@@ -1,38 +1,47 @@
-use crate::extras::network_utils::specify_socket_to_loopback;
+use crate::extras::connector::{ActiveConnection, ConnWait};
+use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::humpty_error::HumptyResult;
 use crate::humpty_server::HumptyServer;
 use crate::{error_log, info_log, trace_log, warn_log};
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use defer_heavy::defer;
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
+use std::{net, thread};
+
+fn specify_socket_to_loopback(sock: &mut SocketAddr) {
+  if sock.ip().is_unspecified() {
+    match sock.ip() {
+      IpAddr::V4(_) => sock.set_ip(IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1))),
+      IpAddr::V6(_) => sock.set_ip(IpAddr::V6(net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0x1))),
+    };
+  }
+}
 
 /// Represents a handle to the simple TCP server app
 #[derive(Debug)]
 pub struct TcpConnector {
+  main_thread: Mutex<Option<JoinHandle<()>>>,
   inner: Arc<TcpConnectorInner>,
-  shutdown_failed: AtomicBool,
-  main_thread: JoinHandle<()>,
 }
 
 #[derive(Debug)]
 struct TcpConnectorInner {
   addr_string: String,
   addr: Vec<SocketAddr>,
+  waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
   humpty_server: Arc<HumptyServer>,
 }
 
-struct ActiveConnection {
-  id: u128,
-  hdl: Option<JoinHandle<()>>,
-}
-
 impl TcpConnectorInner {
   fn run(&self) {
+    defer! {
+      self.waiter.signal(2);
+    }
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
     info_log!("tcp_connector[{}]: listening...", &self.addr_string);
@@ -127,6 +136,8 @@ impl TcpConnectorInner {
       });
     }
 
+    self.waiter.signal(1);
+
     trace_log!("tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
     //Wait for all threads to finish
     for mut con in active_connection {
@@ -162,9 +173,111 @@ impl TcpConnectorInner {
   }
 }
 
+impl Connector for TcpConnector {
+  #[allow(unsafe_code)]
+  #[cfg(unix)]
+  fn shutdown(&self) {
+    use std::os::fd::AsRawFd;
+
+    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
+      return;
+    }
+
+    if self.inner.waiter.is_done(1) {
+      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
+      return;
+    }
+
+    unsafe {
+      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
+        if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+          error_log!(
+            "tcp_connector[{}]: shutdown failed to wake up the listener thread",
+            &self.inner.addr_string
+          );
+          return;
+        }
+
+        return;
+      }
+
+      //This is very unlikely, I have NEVER seen this happen.
+      let errno = *libc::__errno_location();
+      if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+        error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.inner.addr_string, errno);
+      }
+    }
+  }
+
+  #[cfg(not(unix))]
+  pub fn shutdown(&self) {
+    self.shutdown_by_connecting();
+  }
+
+  fn is_marked_for_shutdown(&self) -> bool {
+    self.inner.shutdown_flag.load(Ordering::SeqCst)
+  }
+
+  fn is_shutting_down(&self) -> bool {
+    self.inner.waiter.is_done(2)
+  }
+
+  fn is_shutdown(&self) -> bool {
+    self.inner.waiter.is_done(2)
+  }
+
+  fn shutdown_and_join(&self, timeout: Option<Duration>) -> bool {
+    self.shutdown();
+    self.join(timeout)
+  }
+
+  fn join(&self, timeout: Option<Duration>) -> bool {
+    if !self.inner.waiter.wait(2, timeout) {
+      return false;
+    }
+
+    let Ok(mut guard) = self.main_thread.lock() else {
+      return false;
+    };
+
+    let Some(join_handle) = guard.take() else {
+      return true;
+    };
+
+    match join_handle.join() {
+      Ok(_) => (),
+      Err(err) => {
+        if let Some(msg) = err.downcast_ref::<&'static str>() {
+          error_log!(
+            "tcp_connector[{}]: listener thread panicked: {}",
+            &self.inner.addr_string,
+            msg
+          );
+        } else if let Some(msg) = err.downcast_ref::<String>() {
+          error_log!(
+            "tcp_connector[{}]: listener thread panicked: {}",
+            &self.inner.addr_string,
+            msg
+          );
+        } else {
+          error_log!(
+            "tcp_connector[{}]: listener thread panicked: {:?}",
+            &self.inner.addr_string,
+            err
+          );
+        };
+      }
+    }
+
+    true
+  }
+}
+
 impl TcpConnector {
-  /// Create a new App. Returns an io::Error if it was unable to bind to the socket.
-  pub fn new(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  /// Creates a new tcp connector that is listening on the given addr.
+  /// Return Err on error.
+  /// The TCP listener will listen immediately in a background thread.
+  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
     let mut addr_string = String::new();
     let addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
@@ -181,6 +294,7 @@ impl TcpConnector {
       addr_string,
       humpty_server,
       addr: addr_in_vec,
+      waiter: ConnWait::default(),
     });
 
     let main_thread = {
@@ -190,43 +304,8 @@ impl TcpConnector {
       })?
     };
 
-    let connector =
-      Self { inner: inner.clone(), shutdown_failed: AtomicBool::new(false), main_thread };
+    let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
     Ok(connector)
-  }
-
-  /// Request a shutdown. This will not exit until all connections have finished, which can be up to
-  /// the duration of your `with_connection_timeout` for the HumptyServer.
-  ///
-  #[allow(unsafe_code)]
-  #[cfg(unix)]
-  pub fn shutdown(&self) {
-    use std::os::fd::AsRawFd;
-
-    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
-      return;
-    }
-
-    if self.main_thread.is_finished() {
-      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
-      return;
-    }
-
-    unsafe {
-      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        return;
-      }
-
-      //This is very unlikely, I have NEVER seen this happen.
-      let errno = *libc::__errno_location();
-      error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.inner.addr_string, errno);
-      self.shutdown_failed.store(true, Ordering::SeqCst);
-    }
-  }
-
-  #[cfg(not(unix))]
-  pub fn shutdown(&self) {
-    self.shutdown_by_connecting();
   }
 
   /// This fn will set the shutdown flag and then attempt to open a tcp connection to
@@ -255,79 +334,33 @@ impl TcpConnector {
       return;
     }
 
-    if self.main_thread.is_finished() {
+    if self.inner.waiter.is_done(1) {
       return;
     }
 
     for addr in self.inner.addr.iter() {
-      if self.main_thread.is_finished() {
+      if self.inner.waiter.is_done(1) {
         return;
       }
       let mut addr = *addr;
       specify_socket_to_loopback(&mut addr);
-      if TcpStream::connect_timeout(&addr, Duration::from_millis(1000)).is_ok() {
+      if TcpStream::connect_timeout(&addr, CONNECTOR_SHUTDOWN_TIMEOUT).is_ok() {
         info_log!(
           "tcp_connector[{}]: connection to wakeup for shutdown was successful",
           &self.inner.addr_string
         );
+
+        if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+          continue;
+        }
+
         return;
       }
     }
 
-    warn_log!("tcp_connector[{}]: connection to wakeup for shutdown was not successful, join() will not be blocking.", &self.inner.addr_string);
-    self.shutdown_failed.store(true, Ordering::SeqCst);
-  }
-
-  /// Returns true if the unix connector is marked to shut down.
-  /// join will possibly block forever if this fn returns false.
-  pub fn is_shutdown(&self) -> bool {
-    self.inner.shutdown_flag.load(Ordering::SeqCst)
-  }
-
-  /// Returns true if the unix connector is finished, join will not block if this fn returns true.
-  pub fn is_finished(&self) -> bool {
-    self.main_thread.is_finished()
-  }
-
-  /// Instructs the unix connector to shut down and blocks until all served connections are processed.
-  pub fn shutdown_and_join(self) {
-    self.shutdown();
-    self.join()
-  }
-
-  /// Blocks, possibly forever, until the unix connector is done.
-  pub fn join(self) {
-    if self.shutdown_failed.load(Ordering::SeqCst) && !self.main_thread.is_finished() {
-      warn_log!(
-        "tcp_connector[{}]: due to previous failure of libc::shutdown join will not block",
-        &self.inner.addr_string
-      );
-      return;
-    }
-
-    match self.main_thread.join() {
-      Ok(_) => {}
-      Err(err) => {
-        if let Some(msg) = err.downcast_ref::<&'static str>() {
-          error_log!(
-            "tcp_connector[{}]: listener thread panicked: {}",
-            &self.inner.addr_string,
-            msg
-          );
-        } else if let Some(msg) = err.downcast_ref::<String>() {
-          error_log!(
-            "tcp_connector[{}]: listener thread panicked: {}",
-            &self.inner.addr_string,
-            msg
-          );
-        } else {
-          error_log!(
-            "tcp_connector[{}]: listener thread panicked: {:?}",
-            &self.inner.addr_string,
-            err
-          );
-        };
-      }
-    }
+    warn_log!(
+      "tcp_connector[{}]: connection to wakeup for shutdown was not successful",
+      &self.inner.addr_string
+    );
   }
 }

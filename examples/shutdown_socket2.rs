@@ -1,13 +1,12 @@
 use colog::format::{CologStyle, DefaultCologStyle};
-use humpty::extras;
-use humpty::extras::Connector;
+use humpty::extras::{Connector, Socket2TcpConnector};
 use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
@@ -39,7 +38,7 @@ fn main() -> HumptyResult<()> {
       .ok()
   })?;
 
-  let connector = extras::TcpConnector::start("0.0.0.0:8080", humpty_server)?;
+  let connector = Socket2TcpConnector::start("0.0.0.0:8080", humpty_server)?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:8080")?, Duration::from_secs(30))?;
@@ -53,9 +52,6 @@ fn main() -> HumptyResult<()> {
 
   sleep(Duration::from_secs(5));
   connector.shutdown_and_join(None);
-
-  // With the connector having finished shutdown(), the socket can be rebound immediately.
-  let _listen = TcpListener::bind("0.0.0.0:8080")?;
   Ok(())
 }
 
