@@ -14,9 +14,3 @@ pub use unix_connector::*;
 mod tcp_connector;
 
 pub use tcp_connector::*;
-
-#[cfg(feature = "socket2")]
-mod socket2_tcp_connector;
-
-#[cfg(feature = "socket2")]
-pub use socket2_tcp_connector::*;

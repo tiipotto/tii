@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::{net, thread};
+use std::{io, net, thread};
 
 fn specify_socket_to_loopback(sock: &mut SocketAddr) {
   if sock.ip().is_unspecified() {
@@ -39,6 +39,46 @@ struct TcpConnectorInner {
 }
 
 impl TcpConnectorInner {
+  #[cfg(target_os = "windows")]
+  #[allow(unsafe_code)]
+  fn next(&self) -> io::Result<TcpStream> {
+    use std::os::windows::io::AsRawSocket;
+    use windows_sys::Win32::Networking::WinSock::{
+      WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
+    };
+    let windows_sock_handle = usize::from(self.listener.as_raw_socket());
+
+    loop {
+      let mut pollfd =
+        Box::pin(WSAPOLLFD { fd: windows_sock_handle, events: POLLRDNORM, revents: 0 });
+
+      let result = unsafe {
+        //https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsapoll
+        WSAPoll(pollfd.as_mut().get_mut(), 1, 1000)
+      };
+      drop(pollfd);
+      if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+        return Err(io::ErrorKind::ConnectionAborted.into());
+      }
+
+      if result == SOCKET_ERROR {
+        unsafe {
+          return Err(io::Error::from_raw_os_error(WSAGetLastError()));
+        }
+      }
+
+      if result == 0 {
+        continue;
+      }
+
+      return self.listener.accept().map(|(stream, _)| stream);
+    }
+  }
+  #[cfg(not(target_os = "windows"))]
+  fn next(&self) -> io::Result<TcpStream> {
+    self.listener.accept().map(|(stream, _)| stream)
+  }
+
   fn run(&self) {
     defer! {
       self.waiter.signal(2);
@@ -46,7 +86,8 @@ impl TcpConnectorInner {
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
     info_log!("tcp_connector[{}]: listening...", &self.addr_string);
-    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
+    for this_connection in 1u128.. {
+      let stream = self.next();
       if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("tcp_connector[{}]: shutdown", &self.addr_string);
         break;
