@@ -57,7 +57,13 @@ required-features = ["log", "extras"]
 [[example]]
 name = "shutdown"
 path = "examples/shutdown.rs"
-required-features = ["extras"]
+required-features = ["extras", "log"]
+
+[[example]]
+name = "shutdown_multiple"
+path = "examples/shutdown_multiple.rs"
+required-features = ["extras", "log"]
+
 
 [[example]]
 name = "shutdown_unix"
