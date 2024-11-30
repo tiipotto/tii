@@ -12,7 +12,6 @@ use std::thread;
 pub struct ThreadAdapterJoinHandle(pub Box<dyn FnOnce() -> thread::Result<()> + Send>);
 
 impl ThreadAdapterJoinHandle {
-
   /// Calls the join fn
   pub fn join(self) -> thread::Result<()> {
     self.0()
@@ -27,13 +26,12 @@ impl Debug for ThreadAdapterJoinHandle {
 
 impl Default for ThreadAdapterJoinHandle {
   fn default() -> Self {
-    Self(Box::new(||{Ok(())}))
+    Self(Box::new(|| Ok(())))
   }
 }
 
 /// Trait that represents a user implemented opaque thread starting/pooling mechanism.
 pub trait ThreadAdapter: Send + Sync {
-
   /// Spawns executes the given task immediately in the thread. like "thread::spawn".
   fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle>;
 }

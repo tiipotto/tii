@@ -1,5 +1,7 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
 use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
+use crate::humpty_builder::ThreadAdapterJoinHandle;
 use crate::humpty_error::HumptyResult;
 use crate::humpty_server::HumptyServer;
 use crate::{error_log, info_log, trace_log, HumptyError};
@@ -12,8 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
-use crate::humpty_builder::ThreadAdapterJoinHandle;
 
 /// Represents a handle to the TCP Socket Server that uses the socket2 crate to accept connections
 /// and pumps them into Humpty for handling.
@@ -271,7 +271,11 @@ impl Connector for Socket2TcpConnector {
 
 impl Socket2TcpConnector {
   /// Create a new Connector. Returns an io::Error if it was unable to bind to the socket.
-  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>, thread_adapter: impl ThreadAdapter) -> HumptyResult<Self> {
+  pub fn start(
+    addr: impl ToSocketAddrs,
+    humpty_server: Arc<HumptyServer>,
+    thread_adapter: impl ThreadAdapter,
+  ) -> HumptyResult<Self> {
     let mut addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
     if addr_in_vec.len() > 1 {
@@ -331,7 +335,10 @@ impl Socket2TcpConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  pub fn start_unpooled(
+    addr: impl ToSocketAddrs,
+    humpty_server: Arc<HumptyServer>,
+  ) -> HumptyResult<Self> {
     Self::start(addr, humpty_server, DefaultThreadAdapter)
   }
 }

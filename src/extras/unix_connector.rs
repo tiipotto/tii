@@ -1,5 +1,7 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
 use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::functional_traits::ThreadAdapter;
+use crate::humpty_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::humpty_error::HumptyResult;
 use crate::humpty_server::HumptyServer;
 use crate::{error_log, info_log, trace_log};
@@ -9,11 +11,9 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::{thread};
+use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use crate::functional_traits::ThreadAdapter;
-use crate::humpty_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 
 /// Represents a handle to the simple Unix Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
@@ -271,8 +271,11 @@ impl UnixConnector {
   /// Create a new UnixConnector.
   /// When this fn returns Ok() the socket is already listening in a background thread.
   /// Returns an io::Error if it was unable to bind to the socket.
-  pub fn start(addr: impl AsRef<Path>, humpty_server: Arc<HumptyServer>, thread_adapter: impl ThreadAdapter) -> HumptyResult<Self>
-  {
+  pub fn start(
+    addr: impl AsRef<Path>,
+    humpty_server: Arc<HumptyServer>,
+    thread_adapter: impl ThreadAdapter,
+  ) -> HumptyResult<Self> {
     let path = addr.as_ref();
     if std::fs::exists(path)? {
       std::fs::remove_file(path)?;
@@ -311,7 +314,10 @@ impl UnixConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl AsRef<Path>, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  pub fn start_unpooled(
+    addr: impl AsRef<Path>,
+    humpty_server: Arc<HumptyServer>,
+  ) -> HumptyResult<Self> {
     Self::start(addr, humpty_server, DefaultThreadAdapter)
   }
 }

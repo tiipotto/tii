@@ -1,16 +1,16 @@
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
 use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
 use crate::util::unwrap_poison;
 use rust_tls_duplex_stream::RustTlsDuplexStream;
 use rustls::server::ServerConnectionData;
 use rustls::ServerConnection;
 use std::fmt::Debug;
+use std::io;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{io};
 use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
-use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
 
 /// All connections that can be used to tunnel tls using Humpty's default RustTls wrapper need to provide these functions.
 /// This trait is implemented by default for TcpStream and UnixStream.
@@ -146,9 +146,7 @@ impl HumptyTlsStream {
   /// Create a new HumptyTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using the provided thread spawn function.
   /// The tasks automatically return if the returned ConnectionStream is dropped.
-  pub fn create_tcp<
-    S: TlsCapableStream + 'static,
-  >(
+  pub fn create_tcp<S: TlsCapableStream + 'static>(
     stream: S,
     tls: ServerConnection,
     spawner: impl ThreadAdapter,
