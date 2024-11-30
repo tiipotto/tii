@@ -8,7 +8,6 @@ use humpty::HumptyTlsStream;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ServerConfig, ServerConnection};
 use rustls_pemfile::{certs, private_key};
-use std::error::Error;
 use std::io::{BufReader, Cursor};
 use std::net::TcpListener;
 use std::sync::Arc;
@@ -39,10 +38,9 @@ fn create_server_config() -> Arc<ServerConfig> {
   Arc::new(config)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> HumptyResult<()> {
   let app =
-    HumptyBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/ssl", ssl_route)))
-      .expect("ERROR");
+    HumptyBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/ssl", ssl_route)))?;
   let config = create_server_config();
 
   let listen = TcpListener::bind("0.0.0.0:8080")?;

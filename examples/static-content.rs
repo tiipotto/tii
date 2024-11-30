@@ -4,13 +4,12 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use humpty::extras::builtin_endpoints;
-use humpty::extras::tcp_app;
+use humpty::extras::{builtin_endpoints, Connector, TcpConnector};
 
 use humpty::humpty_builder::HumptyBuilder;
-use std::error::Error;
+use humpty::humpty_error::HumptyResult;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> HumptyResult<()> {
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
@@ -23,10 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Redirect requests to "/ferris" to "/img/ferris.png"
         .route_any("/ferris", builtin_endpoints::redirect("/img/ferris.png"))
     })
-  })
-  .expect("ERROR");
+  })?;
 
-  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
+  let _ = TcpConnector::start("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }

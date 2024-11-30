@@ -1,5 +1,4 @@
 use humpty::extras::{builtin_endpoints, Connector, TcpConnector};
-use humpty::extras::tcp_app;
 
 use humpty::http::request_context::RequestContext;
 use humpty::humpty_builder::HumptyBuilder;
@@ -7,14 +6,13 @@ use humpty::humpty_error::HumptyResult;
 use humpty::websocket::message::WebsocketMessage;
 use humpty::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
 use log::{info, LevelFilter};
-use std::error::Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> HumptyResult<()> {
   //Install a simple "output" for the log crate, so we can see something in the console.
   //Adjust level if it's too verbose for you.
   colog::default_builder().filter_level(LevelFilter::Trace).init();

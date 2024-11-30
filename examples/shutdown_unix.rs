@@ -35,7 +35,10 @@ mod unix {
       .try_init();
 
     let humpty_server = HumptyBuilder::builder_arc(|builder| {
-      builder.router(|router| router.route_any("/*", hello))?.with_read_timeout(Some(Duration::from_secs(5)))?.ok()
+      builder
+        .router(|router| router.route_any("/*", hello))?
+        .with_read_timeout(Some(Duration::from_secs(5)))?
+        .ok()
     })?;
 
     let connector = UnixConnector::start("/tmp/humpty.sock", humpty_server)?;
