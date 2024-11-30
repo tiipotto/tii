@@ -354,7 +354,9 @@ impl TcpConnector {
     let weak_inner = Arc::downgrade(&inner);
 
     humpty_server.add_shutdown_hook(move || {
-      weak_inner.upgrade().map(|inner| inner.shutdown());
+      if let Some(inner) = weak_inner.upgrade() {
+        inner.shutdown()
+      }
     });
 
     Ok(connector)
