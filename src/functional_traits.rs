@@ -5,7 +5,47 @@ use crate::http::Response;
 use crate::humpty_error::HumptyResult;
 use crate::stream::ConnectionStream;
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
+use std::thread;
+
+/// Represents an opaque join handle
+pub struct ThreadAdapterJoinHandle(pub Box<dyn FnOnce() -> thread::Result<()> + Send>);
+
+impl ThreadAdapterJoinHandle {
+
+  /// Calls the join fn
+  pub fn join(self) -> thread::Result<()> {
+    self.0()
+  }
+}
+
+impl Debug for ThreadAdapterJoinHandle {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str("ThreadAdapterJoinHandle")
+  }
+}
+
+impl Default for ThreadAdapterJoinHandle {
+  fn default() -> Self {
+    Self(Box::new(||{Ok(())}))
+  }
+}
+
+/// Trait that represents a user implemented opaque thread starting/pooling mechanism.
+pub trait ThreadAdapter: Send + Sync {
+
+  /// Spawns executes the given task immediately in the thread. like "thread::spawn".
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle>;
+}
+
+#[allow(dead_code)] //This is not used in all feature combinations.
+pub(crate) struct DefaultThreadAdapter;
+impl ThreadAdapter for DefaultThreadAdapter {
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle> {
+    let hdl = thread::Builder::new().spawn(task)?;
+    Ok(ThreadAdapterJoinHandle(Box::new(move || hdl.join())))
+  }
+}
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
 pub trait WebsocketEndpoint: Send + Sync {

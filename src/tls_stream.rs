@@ -8,8 +8,9 @@ use std::io::{Read, Write};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{io, thread};
+use std::{io};
 use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
 
 /// All connections that can be used to tunnel tls using Humpty's default RustTls wrapper need to provide these functions.
 /// This trait is implemented by default for TcpStream and UnixStream.
@@ -139,7 +140,7 @@ impl HumptyTlsStream {
     tcp: S,
     tls: ServerConnection,
   ) -> io::Result<Box<dyn ConnectionStream>> {
-    Self::create_tcp(tcp, tls, |task| thread::Builder::new().spawn(task).map(|_| {}))
+    Self::create_tcp(tcp, tls, DefaultThreadAdapter)
   }
 
   /// Create a new HumptyTlsStream using the given tcp stream.
@@ -147,17 +148,19 @@ impl HumptyTlsStream {
   /// The tasks automatically return if the returned ConnectionStream is dropped.
   pub fn create_tcp<
     S: TlsCapableStream + 'static,
-    T: FnMut(Box<dyn FnOnce() + Send>) -> io::Result<()>,
   >(
     stream: S,
     tls: ServerConnection,
-    spawner: T,
+    spawner: impl ThreadAdapter,
   ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
     let local = stream.local_addr()?.to_string();
     let stream_wrapper = StreamWrapper(Arc::new(stream));
     let tls =
-      RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), spawner)?;
+      RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), move |task| {
+        spawner.spawn(task)?;
+        Ok(())
+      })?;
 
     Ok(Box::new(Self(Arc::new(HumptyTlsWrapperInner {
       stream_ref: stream_wrapper.0 as Arc<_>,

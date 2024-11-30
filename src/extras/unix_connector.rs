@@ -9,15 +9,17 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{thread};
 use std::thread::JoinHandle;
 use std::time::Duration;
+use crate::functional_traits::ThreadAdapter;
+use crate::humpty_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 
 /// Represents a handle to the simple Unix Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
 pub struct UnixConnector {
   inner: Arc<UnixConnectorInner>,
-  main_thread: Mutex<Option<JoinHandle<()>>>,
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
 }
 
 #[derive(Debug)]
@@ -266,8 +268,11 @@ impl UnixConnectorInner {
 }
 
 impl UnixConnector {
-  /// Create a new App. Returns an io::Error if it was unable to bind to the socket.
-  pub fn start(addr: impl AsRef<Path>, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  /// Create a new UnixConnector.
+  /// When this fn returns Ok() the socket is already listening in a background thread.
+  /// Returns an io::Error if it was unable to bind to the socket.
+  pub fn start(addr: impl AsRef<Path>, humpty_server: Arc<HumptyServer>, thread_adapter: impl ThreadAdapter) -> HumptyResult<Self>
+  {
     let path = addr.as_ref();
     if std::fs::exists(path)? {
       std::fs::remove_file(path)?;
@@ -283,9 +288,9 @@ impl UnixConnector {
 
     let main_thread = {
       let inner = inner.clone();
-      thread::Builder::new().spawn(move || {
+      thread_adapter.spawn(Box::new(move || {
         inner.run();
-      })?
+      }))?
     };
 
     let connector = Self { inner: inner.clone(), main_thread: Mutex::new(Some(main_thread)) };
@@ -299,5 +304,14 @@ impl UnixConnector {
     });
 
     Ok(connector)
+  }
+
+  /// Create a new UnixConnector.
+  /// When this fn returns Ok() the socket is already listening in a background thread.
+  /// Returns an io::Error if it was unable to bind to the socket.
+  ///
+  /// Threads are created using "thread::Builder::new().spawn"
+  pub fn start_unpooled(addr: impl AsRef<Path>, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+    Self::start(addr, humpty_server, DefaultThreadAdapter)
   }
 }

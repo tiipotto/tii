@@ -41,7 +41,7 @@ mod unix {
         .ok()
     })?;
 
-    let connector = UnixConnector::start("/tmp/humpty.sock", humpty_server)?;
+    let connector = UnixConnector::start_unpooled("/tmp/humpty.sock", humpty_server)?;
 
     let mut stream = UnixStream::connect("/tmp/humpty.sock")?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;

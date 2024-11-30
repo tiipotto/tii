@@ -27,7 +27,7 @@ fn main() -> HumptyResult<()> {
   })
   .expect("ERROR");
 
-  let _ = TcpConnector::start("0.0.0.0:8080", humpty_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }

@@ -12,12 +12,14 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
+use crate::humpty_builder::ThreadAdapterJoinHandle;
 
 /// Represents a handle to the TCP Socket Server that uses the socket2 crate to accept connections
 /// and pumps them into Humpty for handling.
 #[derive(Debug)]
 pub struct Socket2TcpConnector {
-  main_thread: Mutex<Option<JoinHandle<()>>>,
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
   inner: Arc<Socket2TcpConnectorInner>,
 }
 
@@ -269,7 +271,7 @@ impl Connector for Socket2TcpConnector {
 
 impl Socket2TcpConnector {
   /// Create a new Connector. Returns an io::Error if it was unable to bind to the socket.
-  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>, thread_adapter: impl ThreadAdapter) -> HumptyResult<Self> {
     let mut addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
     if addr_in_vec.len() > 1 {
@@ -306,9 +308,9 @@ impl Socket2TcpConnector {
 
     let main_thread = {
       let inner = inner.clone();
-      thread::Builder::new().spawn(move || {
+      thread_adapter.spawn(Box::new(move || {
         inner.run();
-      })?
+      }))?
     };
 
     let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
@@ -322,5 +324,14 @@ impl Socket2TcpConnector {
     });
 
     Ok(connector)
+  }
+
+  /// Create a new Socket2TcpConnector.
+  /// When this fn returns Ok() the socket is already listening in a background thread.
+  /// Returns an io::Error if it was unable to bind to the socket.
+  ///
+  /// Threads are created using "thread::Builder::new().spawn"
+  pub fn start_unpooled(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+    Self::start(addr, humpty_server, DefaultThreadAdapter)
   }
 }

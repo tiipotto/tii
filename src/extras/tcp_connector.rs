@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{net, thread};
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 
 fn specify_socket_to_loopback(sock: &mut SocketAddr) {
   if sock.ip().is_unspecified() {
@@ -23,7 +24,7 @@ fn specify_socket_to_loopback(sock: &mut SocketAddr) {
 /// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
 pub struct TcpConnector {
-  main_thread: Mutex<Option<JoinHandle<()>>>,
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
   inner: Arc<TcpConnectorInner>,
 }
 
@@ -322,7 +323,7 @@ impl TcpConnector {
   /// Creates a new tcp connector that is listening on the given addr.
   /// Return Err on error.
   /// The TCP listener will listen immediately in a background thread.
-  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+  pub fn start(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>, thread_adapter: impl ThreadAdapter) -> HumptyResult<Self> {
     let mut addr_string = String::new();
     let addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
@@ -344,9 +345,9 @@ impl TcpConnector {
 
     let main_thread = {
       let inner = inner.clone();
-      thread::Builder::new().spawn(move || {
+      thread_adapter.spawn(Box::new(move || {
         inner.run();
-      })?
+      }))?
     };
 
     let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
@@ -360,6 +361,15 @@ impl TcpConnector {
     });
 
     Ok(connector)
+  }
+
+  /// Create a new TcpConnector.
+  /// When this fn returns Ok() the socket is already listening in a background thread.
+  /// Returns an io::Error if it was unable to bind to the socket.
+  ///
+  /// Threads are created using "thread::Builder::new().spawn"
+  pub fn start_unpooled(addr: impl ToSocketAddrs, humpty_server: Arc<HumptyServer>) -> HumptyResult<Self> {
+    Self::start(addr, humpty_server, DefaultThreadAdapter)
   }
 
   /// This fn will set the shutdown flag and then attempt to open a tcp connection to

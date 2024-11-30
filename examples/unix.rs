@@ -57,11 +57,11 @@ mod unix {
 
     //HANDLE TCP CONNECTIONS
     //curl -X GET http://127.0.0.1:8080/some/path
-    let tcp = extras::TcpConnector::start("0.0.0.0:8080", humpty_server.clone())?;
+    let tcp = extras::TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server.clone())?;
 
     //HANDLE UNIX CONNECTIONS
     //curl -X GET --unix-socket /tmp/humpty.sock http://unix/some/path
-    let unix = extras::UnixConnector::start("/tmp/humpty.sock", humpty_server.clone())?;
+    let unix = extras::UnixConnector::start_unpooled("/tmp/humpty.sock", humpty_server.clone())?;
 
     //Both of this will block forever
     unix.join(None);

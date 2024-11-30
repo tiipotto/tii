@@ -40,9 +40,9 @@ fn main() -> HumptyResult<()> {
       .ok()
   })?;
 
-  let c1 = extras::TcpConnector::start("0.0.0.0:28080", humpty_server.clone())?;
-  let c2 = extras::TcpConnector::start("0.0.0.0:28081", humpty_server.clone())?;
-  let c3 = extras::TcpConnector::start("0.0.0.0:28082", humpty_server.clone())?;
+  let c1 = extras::TcpConnector::start_unpooled("0.0.0.0:28080", humpty_server.clone())?;
+  let c2 = extras::TcpConnector::start_unpooled("0.0.0.0:28081", humpty_server.clone())?;
+  let c3 = extras::TcpConnector::start_unpooled("0.0.0.0:28082", humpty_server.clone())?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28080")?, Duration::from_secs(30))?;

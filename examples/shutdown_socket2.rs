@@ -38,7 +38,7 @@ fn main() -> HumptyResult<()> {
       .ok()
   })?;
 
-  let connector = Socket2TcpConnector::start("0.0.0.0:8080", humpty_server)?;
+  let connector = Socket2TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:8080")?, Duration::from_secs(30))?;
