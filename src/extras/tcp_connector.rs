@@ -351,8 +351,10 @@ impl TcpConnector {
 
     let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
 
+    let weak_inner = Arc::downgrade(&inner);
+
     humpty_server.add_shutdown_hook(move || {
-      inner.shutdown();
+      weak_inner.upgrade().map(|inner| inner.shutdown());
     });
 
     Ok(connector)
