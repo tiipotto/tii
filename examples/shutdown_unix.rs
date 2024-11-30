@@ -64,8 +64,9 @@ fn main() -> HumptyResult<()> {
 }
 
 #[cfg(not(unix))]
-pub fn main() {
+pub fn main() -> HumptyResult<()> {
   println!("This program is only intended to run on Unix systems!");
+  Ok(())
 }
 
 #[test]
