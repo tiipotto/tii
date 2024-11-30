@@ -273,7 +273,7 @@ impl Socket2TcpConnector {
     let mut addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
     if addr_in_vec.len() > 1 {
-      return Err(HumptyError::from_io_kind(ErrorKind::ArgumentListTooLong));
+      return Err(HumptyError::from_io_kind(ErrorKind::AddrNotAvailable));
     }
 
     let Some(addr) = addr_in_vec.pop() else {

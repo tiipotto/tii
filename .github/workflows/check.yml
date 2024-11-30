@@ -30,7 +30,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable
+          toolchain: stable minus 2 releases
       - name: Test gnu
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          toolchain: stable minus 2 releases
       - name: 64-bit Valgrind
         run: |
           cargo build --example shutdown --target x86_64-unknown-linux-gnu --features extras,log
@@ -91,7 +91,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable
+          toolchain: stable minus 2 releases
       - name: Build gnu target
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -127,7 +127,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable
+          toolchain: stable minus 2 releases
       - name: Build Windows
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -163,7 +163,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable
+          toolchain: stable minus 2 releases
       - name: Test Windows
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -188,7 +188,7 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: clippy
-            toolchain: stable
+            toolchain: stable minus 2 releases
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
 
@@ -201,5 +201,5 @@ jobs:
         - uses: actions/checkout@v4
         - uses: dtolnay/rust-toolchain@stable
           with:
-            toolchain: stable
+            toolchain: stable minus 2 releases
         - run: cargo doc --all-features --no-deps
