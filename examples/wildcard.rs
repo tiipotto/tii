@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use humpty::extras::tcp_app;
+use humpty::extras::{Connector, TcpConnector};
 use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   })
   .expect("ERROR");
 
-  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
+  let _ = TcpConnector::start("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }

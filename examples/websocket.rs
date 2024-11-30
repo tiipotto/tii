@@ -1,4 +1,4 @@
-use humpty::extras::builtin_endpoints;
+use humpty::extras::{builtin_endpoints, Connector, TcpConnector};
 use humpty::extras::tcp_app;
 
 use humpty::http::request_context::RequestContext;
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   })
   .expect("ERROR");
 
-  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
+  let _ = TcpConnector::start("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }
