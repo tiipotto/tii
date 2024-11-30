@@ -12,12 +12,12 @@ use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::{error_log, trace_log};
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::ErrorKind;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Trait for metadata for streams. This could for example be an indicator of what type of stream this is
@@ -54,7 +54,23 @@ pub struct HumptyServer {
   keep_alive_timeout: Option<Duration>,
   request_body_io_timeout: Option<Duration>,
   write_timeout: Option<Duration>,
+  shutdown_hooks: Hooks,
 }
+
+struct Hooks(Mutex<Vec<Box<dyn FnMut() + Send + Sync>>>);
+
+impl Debug for Hooks {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Hooks")
+  }
+}
+
+impl Default for Hooks {
+  fn default() -> Self {
+    Self(Mutex::new(Vec::new()))
+  }
+}
+
 impl HumptyServer {
   #[allow(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
@@ -79,6 +95,7 @@ impl HumptyServer {
       keep_alive_timeout: keep_alive_timeout.or(read_timeout),
       request_body_io_timeout: request_body_io_timeout.or(read_timeout),
       write_timeout,
+      shutdown_hooks: Hooks::default(),
     }
   }
 
@@ -99,13 +116,41 @@ impl HumptyServer {
   /// Will mark this humpty server as shutdown.
   /// It will no longer accept new connections, send Connection: Close for all pending requests
   /// but not cancel any ongoing requests.
+  ///
+  /// This fn will also execute all shutdown hooks.
+  ///
+  /// Attention: If a Shutdown hook panics then remaining shutdown hooks are not executed.
+  /// After a panic subsequent executions of shutdown will also NOT execute remaining hooks!
+  ///
   pub fn shutdown(&self) {
     self.shutdown.store(true, SeqCst);
+    if let Ok(mut guard) = self.shutdown_hooks.0.lock() {
+      while let Some(mut hook) = guard.pop() {
+        hook()
+      }
+    }
   }
 
   /// Returns true if this HumptyServer is marked for shutdown.
   pub fn is_shutdown(&self) -> bool {
     self.shutdown.load(SeqCst)
+  }
+
+  /// Adds the given shutdown hook to the HumptyServer.
+  pub fn add_shutdown_hook<F: FnMut() + Sync + Send + 'static>(&self, mut hook: F) {
+    let Ok(mut guard) = self.shutdown_hooks.0.lock() else {
+      //Only way for poisoned mutex was if shutdown was already called and a hook panicked.
+      hook();
+      return;
+    };
+
+    if self.is_shutdown() {
+      drop(guard); // Do not poison the mutex if "hook" blows up.
+      hook();
+      return;
+    }
+
+    guard.push(Box::new(hook));
   }
 
   /// Impl for handle connection.
@@ -319,5 +364,11 @@ impl HumptyServer {
     );
 
     Response::new(StatusCode::InternalServerError)
+  }
+}
+
+impl Drop for HumptyServer {
+  fn drop(&mut self) {
+    self.shutdown();
   }
 }

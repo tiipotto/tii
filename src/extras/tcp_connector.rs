@@ -20,7 +20,7 @@ fn specify_socket_to_loopback(sock: &mut SocketAddr) {
   }
 }
 
-/// Represents a handle to the simple TCP server app
+/// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
 pub struct TcpConnector {
   main_thread: Mutex<Option<JoinHandle<()>>>,
@@ -173,27 +173,27 @@ impl TcpConnectorInner {
   }
 }
 
-impl Connector for TcpConnector {
+impl TcpConnectorInner {
   #[allow(unsafe_code)]
   #[cfg(unix)]
   fn shutdown(&self) {
     use std::os::fd::AsRawFd;
 
-    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
+    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
     }
 
-    if self.inner.waiter.is_done(1) {
+    if self.waiter.is_done(1) {
       //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
       return;
     }
 
     unsafe {
-      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
+        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
             "tcp_connector[{}]: shutdown failed to wake up the listener thread",
-            &self.inner.addr_string
+            &self.addr_string
           );
           return;
         }
@@ -203,8 +203,8 @@ impl Connector for TcpConnector {
 
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
-      if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.inner.addr_string, errno);
+      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+        error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
       }
     }
   }
@@ -212,6 +212,51 @@ impl Connector for TcpConnector {
   #[cfg(not(unix))]
   pub fn shutdown(&self) {
     self.shutdown_by_connecting();
+  }
+
+  fn shutdown_by_connecting(&self) {
+    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
+      return;
+    }
+
+    if self.waiter.is_done(1) {
+      return;
+    }
+
+    for addr in self.addr.iter() {
+      if self.waiter.is_done(1) {
+        return;
+      }
+      let mut addr = *addr;
+      specify_socket_to_loopback(&mut addr);
+      if TcpStream::connect_timeout(&addr, CONNECTOR_SHUTDOWN_TIMEOUT).is_ok() {
+        info_log!(
+          "tcp_connector[{}]: connection to wakeup for shutdown was successful",
+          &self.addr_string
+        );
+
+        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+          continue;
+        }
+
+        return;
+      }
+    }
+
+    warn_log!(
+      "tcp_connector[{}]: connection to wakeup for shutdown was not successful",
+      &self.addr_string
+    );
+  }
+}
+impl Connector for TcpConnector {
+  #[cfg(unix)]
+  fn shutdown(&self) {
+    self.inner.shutdown();
+  }
+  #[cfg(not(unix))]
+  fn shutdown(&self) {
+    self.inner.shutdown();
   }
 
   fn is_marked_for_shutdown(&self) -> bool {
@@ -292,7 +337,7 @@ impl TcpConnector {
       listener: TcpListener::bind(addr)?,
       shutdown_flag: AtomicBool::new(false),
       addr_string,
-      humpty_server,
+      humpty_server: humpty_server.clone(),
       addr: addr_in_vec,
       waiter: ConnWait::default(),
     });
@@ -305,6 +350,11 @@ impl TcpConnector {
     };
 
     let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
+
+    humpty_server.add_shutdown_hook(move || {
+      inner.shutdown();
+    });
+
     Ok(connector)
   }
 
@@ -330,37 +380,6 @@ impl TcpConnector {
   /// and the background "thread" will keep waiting until eventually someone connects to it to wake it up.
   ///
   pub fn shutdown_by_connecting(&self) {
-    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
-      return;
-    }
-
-    if self.inner.waiter.is_done(1) {
-      return;
-    }
-
-    for addr in self.inner.addr.iter() {
-      if self.inner.waiter.is_done(1) {
-        return;
-      }
-      let mut addr = *addr;
-      specify_socket_to_loopback(&mut addr);
-      if TcpStream::connect_timeout(&addr, CONNECTOR_SHUTDOWN_TIMEOUT).is_ok() {
-        info_log!(
-          "tcp_connector[{}]: connection to wakeup for shutdown was successful",
-          &self.inner.addr_string
-        );
-
-        if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          continue;
-        }
-
-        return;
-      }
-    }
-
-    warn_log!(
-      "tcp_connector[{}]: connection to wakeup for shutdown was not successful",
-      &self.inner.addr_string
-    );
+    self.inner.shutdown_by_connecting();
   }
 }

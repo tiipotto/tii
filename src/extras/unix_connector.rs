@@ -29,25 +29,24 @@ struct UnixConnectorInner {
   humpty_server: Arc<HumptyServer>,
 }
 
-impl Connector for UnixConnector {
+impl UnixConnectorInner {
   #[allow(unsafe_code)]
-  #[cfg(unix)]
   fn shutdown(&self) {
-    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
+    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
     }
 
-    if self.inner.waiter.is_done(1) {
+    if self.waiter.is_done(1) {
       //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
       return;
     }
 
     unsafe {
-      if libc::shutdown(self.inner.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
+        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
             "unix_connector[{}]: shutdown failed to wake up the listener thread",
-            self.inner.path.display()
+            self.path.display()
           );
           return;
         }
@@ -57,14 +56,16 @@ impl Connector for UnixConnector {
 
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
-      if !self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!(
-          "unix_connector[{}]: shutdown failed: errno={}",
-          self.inner.path.display(),
-          errno
-        );
+      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+        error_log!("unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
       }
     }
+  }
+}
+
+impl Connector for UnixConnector {
+  fn shutdown(&self) {
+    self.inner.shutdown();
   }
 
   #[cfg(not(unix))]
@@ -277,7 +278,7 @@ impl UnixConnector {
       waiter: ConnWait::default(),
       shutdown_flag: AtomicBool::new(false),
       path: path.to_path_buf(),
-      humpty_server,
+      humpty_server: humpty_server.clone(),
     });
 
     let main_thread = {
@@ -288,6 +289,11 @@ impl UnixConnector {
     };
 
     let connector = Self { inner: inner.clone(), main_thread: Mutex::new(Some(main_thread)) };
+
+    humpty_server.add_shutdown_hook(move || {
+      inner.shutdown();
+    });
+
     Ok(connector)
   }
 }

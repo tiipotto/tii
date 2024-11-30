@@ -13,7 +13,8 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-/// Represents a handle to the simple TCP server app
+/// Represents a handle to the TCP Socket Server that uses the socket2 crate to accept connections
+/// and pumps them into Humpty for handling.
 #[derive(Debug)]
 pub struct Socket2TcpConnector {
   main_thread: Mutex<Option<JoinHandle<()>>>,
@@ -170,40 +171,41 @@ impl Socket2TcpConnectorInner {
 
     info_log!("socket2_tcp_connector[{}]: shutdown done", &self.addr_string);
   }
-}
 
-impl Connector for Socket2TcpConnector {
   fn shutdown(&self) {
-    if self.inner.shutdown_flag.swap(true, Ordering::SeqCst) {
+    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
     }
 
-    if self.inner.waiter.is_done(1) {
+    if self.waiter.is_done(1) {
       //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
       return;
     }
 
-    if let Err(err) = self.inner.listener.shutdown(Shutdown::Both) {
-      if self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+    if let Err(err) = self.listener.shutdown(Shutdown::Both) {
+      if self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
         return;
       }
 
       error_log!(
         "socket2_tcp_connector[{}]: failed to shutdown listener: {}",
-        &self.inner.addr_string,
+        &self.addr_string,
         err
       );
       return;
     }
 
-    if self.inner.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+    if self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
       return;
     }
 
-    error_log!(
-      "socket2_tcp_connector[{}]: failed to wakeup listener thread",
-      &self.inner.addr_string
-    );
+    error_log!("socket2_tcp_connector[{}]: failed to wakeup listener thread", &self.addr_string);
+  }
+}
+
+impl Connector for Socket2TcpConnector {
+  fn shutdown(&self) {
+    self.inner.shutdown();
   }
 
   fn is_marked_for_shutdown(&self) -> bool {
@@ -298,7 +300,7 @@ impl Socket2TcpConnector {
       listener: socket,
       shutdown_flag: AtomicBool::new(false),
       addr_string,
-      humpty_server,
+      humpty_server: humpty_server.clone(),
       waiter: ConnWait::default(),
     });
 
@@ -310,6 +312,11 @@ impl Socket2TcpConnector {
     };
 
     let connector = Self { main_thread: Mutex::new(Some(main_thread)), inner: inner.clone() };
+
+    humpty_server.add_shutdown_hook(move || {
+      inner.shutdown();
+    });
+
     Ok(connector)
   }
 }
