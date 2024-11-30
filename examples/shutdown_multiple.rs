@@ -6,12 +6,12 @@ use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
 use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
+use log::info;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
-use log::info;
 
 fn hello(_: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
@@ -55,7 +55,7 @@ fn main() -> HumptyResult<()> {
   assert_eq!(std::str::from_utf8(response.as_slice())?, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: Close\r\nContent-Length: 40\r\n\r\n<html><body><h1>Hello</h1></body></html>");
 
   let mut stream =
-      TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28081")?, Duration::from_secs(30))?;
+    TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28081")?, Duration::from_secs(30))?;
   stream.set_write_timeout(Some(Duration::from_secs(5)))?;
   stream.write_all("GET / HTTP/1.1\r\n\r\n".as_bytes())?;
   stream.flush()?;
@@ -64,9 +64,8 @@ fn main() -> HumptyResult<()> {
   stream.read_to_end(&mut response)?;
   assert_eq!(std::str::from_utf8(response.as_slice())?, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: Close\r\nContent-Length: 40\r\n\r\n<html><body><h1>Hello</h1></body></html>");
 
-
   let mut stream =
-      TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28082")?, Duration::from_secs(30))?;
+    TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28082")?, Duration::from_secs(30))?;
   stream.set_write_timeout(Some(Duration::from_secs(5)))?;
   stream.write_all("GET / HTTP/1.1\r\n\r\n".as_bytes())?;
   stream.flush()?;
@@ -87,7 +86,6 @@ fn main() -> HumptyResult<()> {
   c1.join(None);
   c2.join(None);
   c3.join(None);
-
 
   // With the connector having finished shutdown(), the sockets can be rebound immediately.
   let _listen1 = TcpListener::bind("0.0.0.0:28080")?;
