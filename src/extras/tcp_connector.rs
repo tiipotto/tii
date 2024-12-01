@@ -252,9 +252,18 @@ impl TcpConnectorInner {
     }
   }
 
-  #[cfg(not(unix))]
+  #[cfg(target_os = "windows")]
   pub fn shutdown(&self) {
-    self.shutdown_by_connecting();
+    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
+      return;
+    }
+
+    if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+      error_log!(
+        "tcp_connector[{}]: shutdown failed to wake up the listener thread",
+        &self.addr_string
+      );
+    }
   }
 
   fn shutdown_by_connecting(&self) {

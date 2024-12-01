@@ -58,7 +58,7 @@ jobs:
           valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown
           cargo build --example shutdown_unix --target x86_64-unknown-linux-gnu --features extras,log
           valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown_unix
-          cargo build --example shutdown_multiple --target x86_64-unknown-linux-gnu --features extras,log,socket2
+          cargo build --example shutdown_multiple --target x86_64-unknown-linux-gnu --features extras,log
           valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown_multiple
 
   build_linux:
