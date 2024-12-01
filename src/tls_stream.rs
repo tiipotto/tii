@@ -140,16 +140,16 @@ impl HumptyTlsStream {
     tcp: S,
     tls: ServerConnection,
   ) -> io::Result<Box<dyn ConnectionStream>> {
-    Self::create_tcp(tcp, tls, DefaultThreadAdapter)
+    Self::create(tcp, tls, &DefaultThreadAdapter)
   }
 
   /// Create a new HumptyTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using the provided thread spawn function.
   /// The tasks automatically return if the returned ConnectionStream is dropped.
-  pub fn create_tcp<S: TlsCapableStream + 'static>(
+  pub fn create<S: TlsCapableStream + 'static>(
     stream: S,
     tls: ServerConnection,
-    spawner: impl ThreadAdapter,
+    spawner: &dyn ThreadAdapter,
   ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
     let local = stream.local_addr()?.to_string();

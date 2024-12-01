@@ -2,8 +2,8 @@ pub mod builtin_endpoints;
 
 mod connector;
 
-pub use connector::Connector;
 pub(crate) use connector::CONNECTOR_SHUTDOWN_TIMEOUT;
+pub use {connector::Connector, connector::ConnectorMeta};
 
 #[cfg(unix)]
 mod unix_connector;
@@ -14,3 +14,17 @@ pub use unix_connector::*;
 mod tcp_connector;
 
 pub use tcp_connector::*;
+
+#[cfg(feature = "tls")]
+mod tls_tcp_connector;
+
+#[cfg(feature = "tls")]
+pub use tls_tcp_connector::*;
+
+#[cfg(feature = "tls")]
+#[cfg(unix)]
+mod tls_unix_connector;
+
+#[cfg(feature = "tls")]
+#[cfg(unix)]
+pub use tls_unix_connector::*;

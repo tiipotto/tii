@@ -42,7 +42,7 @@ colog = "1.3.0"
 [features]
 default = []
 random_id = ["getrandom"]
-ssl = ["rust-tls-duplex-stream", "rustls"]
+tls = ["rust-tls-duplex-stream", "rustls"]
 extras = ["libc", "windows-sys"]
 
 [lints.rust]
@@ -72,9 +72,9 @@ path = "examples/shutdown_unix.rs"
 required-features = ["extras", "log"]
 
 [[example]]
-name = "ssl"
-path = "examples/ssl.rs"
-required-features = ["ssl"]
+name = "tls"
+path = "examples/tls.rs"
+required-features = ["tls", "extras", "log"]
 
 [[example]]
 name = "static-content"

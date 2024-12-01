@@ -7,11 +7,17 @@ use crate::stream::ConnectionStream;
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::fmt::{Debug, Formatter};
 use std::thread;
+use std::thread::JoinHandle;
 
 /// Represents an opaque join handle
-pub struct ThreadAdapterJoinHandle(pub Box<dyn FnOnce() -> thread::Result<()> + Send>);
+pub struct ThreadAdapterJoinHandle(Box<dyn FnOnce() -> thread::Result<()> + Send>);
 
 impl ThreadAdapterJoinHandle {
+  /// Constructor
+  pub fn new(inner: Box<dyn FnOnce() -> thread::Result<()> + Send>) -> Self {
+    ThreadAdapterJoinHandle(inner)
+  }
+
   /// Calls the join fn
   pub fn join(self) -> thread::Result<()> {
     self.0()
@@ -31,17 +37,18 @@ impl Default for ThreadAdapterJoinHandle {
 }
 
 /// Trait that represents a user implemented opaque thread starting/pooling mechanism.
-pub trait ThreadAdapter: Send + Sync {
+pub trait ThreadAdapter: Send + Sync + Debug {
   /// Spawns executes the given task immediately in the thread. like "thread::spawn".
   fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle>;
 }
 
 #[allow(dead_code)] //This is not used in all feature combinations.
+#[derive(Debug)]
 pub(crate) struct DefaultThreadAdapter;
 impl ThreadAdapter for DefaultThreadAdapter {
   fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle> {
-    let hdl = thread::Builder::new().spawn(task)?;
-    Ok(ThreadAdapterJoinHandle(Box::new(move || hdl.join())))
+    let hdl: JoinHandle<()> = thread::Builder::new().spawn(task)?;
+    Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
   }
 }
 

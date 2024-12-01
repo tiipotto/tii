@@ -1,10 +1,11 @@
-use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
+use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::humpty_error::HumptyResult;
 use crate::humpty_server::HumptyServer;
-use crate::{error_log, info_log, trace_log};
+use crate::{error_log, info_log, trace_log, HumptyTlsStream};
 use defer_heavy::defer;
+use rustls::{ServerConfig, ServerConnection};
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,14 +14,15 @@ use std::time::Duration;
 
 /// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
-pub struct TcpConnector {
+pub struct TlsTcpConnector {
   main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
-  inner: Arc<TcpConnectorInner>,
+  inner: Arc<TlsTcpConnectorInner>,
 }
 
 #[derive(Debug)]
-struct TcpConnectorInner {
+struct TlsTcpConnectorInner {
   thread_adapter: Arc<dyn ThreadAdapter>,
+  config: Arc<ServerConfig>,
   addr_string: String,
   waiter: ConnWait,
   listener: TcpListener,
@@ -28,7 +30,7 @@ struct TcpConnectorInner {
   humpty_server: Arc<HumptyServer>,
 }
 
-impl TcpConnectorInner {
+impl TlsTcpConnectorInner {
   #[cfg(target_os = "windows")]
   #[allow(unsafe_code)]
   fn next(&self) -> io::Result<TcpStream> {
@@ -76,19 +78,21 @@ impl TcpConnectorInner {
     }
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("tcp_connector[{}]: listening...", &self.addr_string);
+    info_log!("tls_tcp_connector[{}]: listening...", &self.addr_string);
     for this_connection in 1u128.. {
       let stream = self.next();
       if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("tcp_connector[{}]: shutdown", &self.addr_string);
+        info_log!("tls_tcp_connector[{}]: shutdown", &self.addr_string);
         break;
       }
 
-      info_log!("tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
+      info_log!("tls_tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
       let path_clone = self.addr_string.clone();
       let server_clone = self.humpty_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));
       let done_clone = Arc::clone(&done_flag);
+      let tls_config = self.config.clone();
+      let thread_adapter_clone = self.thread_adapter.clone();
 
       match self.thread_adapter.spawn(Box::new(move || {
         defer! {
@@ -96,29 +100,57 @@ impl TcpConnectorInner {
         }
         match stream {
           Ok(stream) => {
-            match server_clone.handle_connection_with_meta(stream, ConnectorMeta::Tcp) {
+            let tls_stream = match ServerConnection::new(tls_config) {
+              Ok(tls_con) => {
+                match HumptyTlsStream::create(
+                  stream,
+                  tls_con,
+                  thread_adapter_clone.as_ref(),
+                ) {
+                  Ok(conn) => conn,
+                  Err(err) => {
+                    error_log!(
+                "tls_tcp_connector[{}]: connection {} failed to construct HumptyTlsStream err={}",
+                path_clone,
+                this_connection,
+                err);
+                    return;
+                  }
+                }
+              }
+              Err(err) => {
+                error_log!(
+                "tls_tcp_connector[{}]: connection {} failed to construct rust-tls ServerConnection err={}",
+                path_clone,
+                this_connection,
+                err);
+                return;
+              }
+            };
+
+            match server_clone.handle_connection_with_meta(tls_stream, ConnectorMeta::TlsTcp) {
               Ok(_) => {
                 info_log!(
-                  "tcp_connector[{}]: connection {} processed successfully",
-                  path_clone,
-                  this_connection
-                );
+                "tls_tcp_connector[{}]: connection {} processed successfully",
+                path_clone,
+                this_connection
+              );
               }
               Err(err) => {
                 // User code errored, like return Err in an Error handler.
                 error_log!(
-                  "tcp_connector[{}]: connection {} humpty server returned err={}",
-                  path_clone,
-                  this_connection,
-                  err
-                );
+                "tls_tcp_connector[{}]: connection {} humpty server returned err={}",
+                path_clone,
+                this_connection,
+                err
+              );
               }
             }
-          }
+          },
           Err(err) => {
             // This may just affect a single connection and is likely to recover on its own?
             error_log!(
-              "tcp_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              "tls_tcp_connector[{}]: connection {} failed to accept a unix socket connection err={}",
               path_clone,
               this_connection,
               err
@@ -135,7 +167,7 @@ impl TcpConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
+          error_log!("tls_tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
         }
       }
 
@@ -152,7 +184,7 @@ impl TcpConnectorInner {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
-              "tcp_connector[{}]: connection {} thread panicked: {}",
+              "tls_tcp_connector[{}]: connection {} thread panicked: {}",
               &self.addr_string,
               this_connection,
               msg
@@ -166,13 +198,13 @@ impl TcpConnectorInner {
 
     self.waiter.signal(1);
 
-    trace_log!("tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
+    trace_log!("tls_tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
     //Wait for all threads to finish
     for mut con in active_connection {
       let this_connection = con.id;
       if !con.done_flag.load(Ordering::SeqCst) {
         trace_log!(
-          "tcp_connector[{}]: connection {} is not yet done. blocking...",
+          "tls_tcp_connector[{}]: connection {} is not yet done. blocking...",
           &self.addr_string,
           this_connection
         );
@@ -182,7 +214,7 @@ impl TcpConnectorInner {
       if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
-            "tcp_connector[{}]: connection {} thread panicked: {}",
+            "tls_tcp_connector[{}]: connection {} thread panicked: {}",
             &self.addr_string,
             this_connection,
             msg
@@ -191,11 +223,11 @@ impl TcpConnectorInner {
       }
     }
 
-    info_log!("tcp_connector[{}]: shutdown done", &self.addr_string);
+    info_log!("tls_tcp_connector[{}]: shutdown done", &self.addr_string);
   }
 }
 
-impl TcpConnectorInner {
+impl TlsTcpConnectorInner {
   #[allow(unsafe_code)]
   #[cfg(unix)]
   fn shutdown(&self) {
@@ -214,7 +246,7 @@ impl TcpConnectorInner {
       if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
-            "tcp_connector[{}]: shutdown failed to wake up the listener thread",
+            "tls_tcp_connector[{}]: shutdown failed to wake up the listener thread",
             &self.addr_string
           );
           return;
@@ -226,7 +258,7 @@ impl TcpConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
+        error_log!("tls_tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
       }
     }
   }
@@ -239,13 +271,13 @@ impl TcpConnectorInner {
 
     if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
       error_log!(
-        "tcp_connector[{}]: shutdown failed to wake up the listener thread",
+        "tls_tcp_connector[{}]: shutdown failed to wake up the listener thread",
         &self.addr_string
       );
     }
   }
 }
-impl Connector for TcpConnector {
+impl Connector for TlsTcpConnector {
   #[cfg(unix)]
   fn shutdown(&self) {
     self.inner.shutdown();
@@ -290,19 +322,19 @@ impl Connector for TcpConnector {
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "tcp_connector[{}]: listener thread panicked: {}",
+            "tls_tcp_connector[{}]: listener thread panicked: {}",
             &self.inner.addr_string,
             msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "tcp_connector[{}]: listener thread panicked: {}",
+            "tls_tcp_connector[{}]: listener thread panicked: {}",
             &self.inner.addr_string,
             msg
           );
         } else {
           error_log!(
-            "tcp_connector[{}]: listener thread panicked: {:?}",
+            "tls_tcp_connector[{}]: listener thread panicked: {:?}",
             &self.inner.addr_string,
             err
           );
@@ -314,15 +346,19 @@ impl Connector for TcpConnector {
   }
 }
 
-impl TcpConnector {
-  /// Creates a new tcp connector that is listening on the given addr.
+impl TlsTcpConnector {
+  /// Creates a new tls connector that is listening on the given addr.
   /// Return Err on error.
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
     humpty_server: Arc<HumptyServer>,
+    config: Arc<ServerConfig>,
     thread_adapter: impl ThreadAdapter + 'static,
   ) -> HumptyResult<Self> {
+    //Check if the rust-tls server config is "valid".
+    let _ = ServerConnection::new(config.clone())?;
+
     let mut addr_string = String::new();
     let addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
@@ -334,8 +370,9 @@ impl TcpConnector {
     }
 
     let thread_adapter = Arc::new(thread_adapter);
-    let inner = Arc::new(TcpConnectorInner {
+    let inner = Arc::new(TlsTcpConnectorInner {
       thread_adapter: thread_adapter.clone(),
+      config,
       listener: TcpListener::bind(addr)?,
       shutdown_flag: AtomicBool::new(false),
       addr_string,
@@ -363,22 +400,16 @@ impl TcpConnector {
     Ok(connector)
   }
 
-  /// Create a new TcpConnector.
+  /// Create a new TlsConnector.
   /// When this fn returns Ok() the socket is already listening in a background thread.
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
   pub fn start_unpooled(
     addr: impl ToSocketAddrs,
+    config: Arc<ServerConfig>,
     humpty_server: Arc<HumptyServer>,
   ) -> HumptyResult<Self> {
-    Self::start(addr, humpty_server, DefaultThreadAdapter)
+    Self::start(addr, humpty_server, config, DefaultThreadAdapter)
   }
-}
-
-#[cfg(target_os = "windows")]
-#[test]
-pub fn test_windows_ptr_sanity() {
-  use std::os::windows::io::RawSocket;
-  assert_eq!(size_of::<RawSocket>(), size_of::<usize>());
 }

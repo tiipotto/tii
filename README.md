@@ -3,15 +3,58 @@ humpty is fast compiling low-latency HTTP/1.1 web server, with support for stati
 humpty is currently under active development.
 While it does work, large amounts of breaking changes are expected.
 
+## Example
+For a larger example that uses most features of humpty see the examples/basic.rs file!
+```rust
+use std::net::TcpListener;
+use std::time::Duration;
+use humpty::http::mime::MimeType;
+use humpty::http::request_context::RequestContext;
+use humpty::http::Response;
+use humpty::humpty_builder::HumptyBuilder;
+
+
+fn hello_world(request: &RequestContext) -> Response {
+    let response_body = format!("Path: {} Hello, World!", request.request_head().path());
+    Response::ok(response_body, MimeType::TextPlain)
+}
+fn main() {
+    let humpty_server = HumptyBuilder::builder(|builder| {
+        builder.router(|router| {
+            router.route_get("/*", hello_world)
+        })?
+        .with_keep_alive_timeout(Some(Duration::ZERO)) //We disable http keep alive.
+    }).unwrap();
+
+    // This does not spawn any threads, everything will be done in the main thread!
+    // Connections will be processed 1 at a time.
+    let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
+    for tcp_stream in tcp_listen.incoming() {
+        if let Err(err) = humpty_server.handle_connection(tcp_stream.unwrap()) {
+            eprintln!("Error handling request: {}", err);
+        }
+    }
+}
+```
+
+
 ## Goals
 - Simplicity (simple source, but also simple to use)
 - Low-latency
-- Fast compile times(*)
-- Safety (unsafe_code is denied)
+- Fast compile times (*1)
+- Safety (unsafe_code is denied) (*2)
 
-(*) if rust-tls is not enabled
+(*1) if rust-tls is not enabled, rust-tls itself takes "forever" to build
+
+(*2) there are 2 unsafe blocks in the "extras" feature which is not enabled by default.
+* 1 (Windows) call wsock WSAPoll to check if a TCPListener can accept a connection without blocking forever.
+* 2 (Unix) call libc::shutdown on a TCPListener/UnixListener making it return from accept with an io error immediately.
+
+Both of these are only needed because no alternative in the stdlib exists, should this change then those unsafe blocks will be removed.
+
 ## Non-goals
 - [C10k problem](https://en.wikipedia.org/wiki/C10k_problem)
+- thread pool
 - async
 
   If you need to use async api's, something like
@@ -185,6 +228,32 @@ User code is free to read from the request body during writing of the ResponseBo
 This is useful for doing in place transformation of large data (such as video transcoding) where first reading
 the entire source before beginning to produce an output is not acceptable.
 
+## Use your own Thread Pool
+By default, whenever humpty needs to spawn a thread it uses `thread::Builder::new().spawn` to spawn a new thread.
+Humpty does not do or need this by default, only if you enable and use some features such as "rust-tls" or "extras" then
+some functions will offer a way for you to pass a thread pool. It is very obvious to the user when this is the case.
+
+Your custom thread pool will have to implement the humpty::ThreadAdapter trait. This trait requires your implementation
+to provide a single "spawn" function that runs the given task and returns some type of join handle. 
+It should not be hard or much effort to implement this trait for any given thread pool.
+
+If your thread pool does not support join handles then you can return a noop join handle (`ThreadAdapterJoinHandle::default()`) 
+that does nothing when join() is called. The join handle is not used for critical synchronization or passing return values.
+It is only used to ensure that resources are actually freed already and to log panics that may have occurred 
+in user code in the separate thread. If you do not care about immediate freeing of resources (they are still freed but just in the "background") 
+or logging panic messages then returning a noop join handle is acceptable.
+
+The default "TheadAdapter" implementation looks like this:
+```rust
+#[derive(Debug)]
+pub(crate) struct DefaultThreadAdapter;
+impl ThreadAdapter for DefaultThreadAdapter {
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle> {
+    let hdl : JoinHandle<()> = thread::Builder::new().spawn(task)?;
+    Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
+  }
+}
+```
 
 ## Panics
 Humpty makes a valiant effort to avoid panics where possible.

@@ -1,7 +1,10 @@
-use std::sync::atomic::AtomicUsize;
+use crate::humpty_builder::ThreadAdapterJoinHandle;
+use crate::humpty_server::ConnectionStreamMetadata;
+use std::any::Any;
+use std::fmt::{Display, Formatter};
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::{Condvar, Mutex};
-use std::thread::JoinHandle;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 /// This constant contains the amount of time to wait to confirm that a connector did begin shutting down.
@@ -43,10 +46,43 @@ pub trait Connector {
   fn join(&self, timeout: Option<Duration>) -> bool;
 }
 
+///Metadata type appended by the extras Humpty Connectors.
+#[non_exhaustive]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum ConnectorMeta {
+  /// a TcpConnector made this connection
+  Tcp,
+
+  /// a TlsTcpConnector made this connection
+  #[cfg(feature = "tls")]
+  TlsTcp,
+
+  /// a UnixConnector made this connection
+  #[cfg(unix)]
+  Unix,
+  /// a TlsUnixConnector made this connection
+  #[cfg(unix)]
+  #[cfg(feature = "tls")]
+  TlsUnix,
+}
+
+impl ConnectionStreamMetadata for ConnectorMeta {
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+}
+impl Display for ConnectorMeta {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO improve
+    std::fmt::Debug::fmt(self, f)
+  }
+}
+
 #[derive(Debug)]
 pub(crate) struct ActiveConnection {
   pub(crate) id: u128,
-  pub(crate) hdl: Option<JoinHandle<()>>,
+  pub(crate) hdl: Option<ThreadAdapterJoinHandle>,
+  pub(crate) done_flag: Arc<AtomicBool>,
 }
 
 #[derive(Debug)]
