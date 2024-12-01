@@ -87,6 +87,10 @@ fn main() -> HumptyResult<()> {
   c2.join(None);
   c3.join(None);
 
+  drop(c1);
+  drop(c2);
+  drop(c3);
+
   // With the connector having finished shutdown(), the sockets can be rebound immediately.
   let _listen1 = TcpListener::bind("0.0.0.0:28080")?;
   let _listen2 = TcpListener::bind("0.0.0.0:28081")?;

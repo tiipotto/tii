@@ -43,9 +43,7 @@ mod inner {
     println!("Calling shutdown...");
     assert_eq!(true, connector.shutdown_and_join(None));
     println!("Shutdown complete");
-
-    #[cfg(target_os = "windows")]
-    sleep(Duration::from_secs(5)); //TIMED_WAIT my precious
+    drop(connector);
 
     // With the connector having finished shutdown()
     let _listen = TcpListener::bind("0.0.0.0:28880")?;

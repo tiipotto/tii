@@ -83,7 +83,6 @@ impl TcpConnectorInner {
   fn run(&self) {
     defer! {
       self.waiter.signal(2);
-      println!("SHIT IS HAPPENING");
     }
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
