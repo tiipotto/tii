@@ -3,23 +3,14 @@ use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::humpty_error::HumptyResult;
 use crate::humpty_server::HumptyServer;
-use crate::{error_log, info_log, trace_log, warn_log};
+use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::{io, net, thread};
-
-fn specify_socket_to_loopback(sock: &mut SocketAddr) {
-  if sock.ip().is_unspecified() {
-    match sock.ip() {
-      IpAddr::V4(_) => sock.set_ip(IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1))),
-      IpAddr::V6(_) => sock.set_ip(IpAddr::V6(net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0x1))),
-    };
-  }
-}
+use std::{io, thread};
 
 /// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
 #[derive(Debug)]
@@ -31,7 +22,6 @@ pub struct TcpConnector {
 #[derive(Debug)]
 struct TcpConnectorInner {
   addr_string: String,
-  addr: Vec<SocketAddr>,
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
@@ -265,41 +255,6 @@ impl TcpConnectorInner {
       );
     }
   }
-
-  fn shutdown_by_connecting(&self) {
-    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
-      return;
-    }
-
-    if self.waiter.is_done(1) {
-      return;
-    }
-
-    for addr in self.addr.iter() {
-      if self.waiter.is_done(1) {
-        return;
-      }
-      let mut addr = *addr;
-      specify_socket_to_loopback(&mut addr);
-      if TcpStream::connect_timeout(&addr, CONNECTOR_SHUTDOWN_TIMEOUT).is_ok() {
-        info_log!(
-          "tcp_connector[{}]: connection to wakeup for shutdown was successful",
-          &self.addr_string
-        );
-
-        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          continue;
-        }
-
-        return;
-      }
-    }
-
-    warn_log!(
-      "tcp_connector[{}]: connection to wakeup for shutdown was not successful",
-      &self.addr_string
-    );
-  }
 }
 impl Connector for TcpConnector {
   #[cfg(unix)]
@@ -394,7 +349,6 @@ impl TcpConnector {
       shutdown_flag: AtomicBool::new(false),
       addr_string,
       humpty_server: humpty_server.clone(),
-      addr: addr_in_vec,
       waiter: ConnWait::default(),
     });
 
@@ -428,31 +382,6 @@ impl TcpConnector {
     humpty_server: Arc<HumptyServer>,
   ) -> HumptyResult<Self> {
     Self::start(addr, humpty_server, DefaultThreadAdapter)
-  }
-
-  /// This fn will set the shutdown flag and then attempt to open a tcp connection to
-  /// the listening server (if it is still running) to wake it up.
-  ///
-  /// This is prone to failure because our lord and savior the Windows firewall may say no to this.
-  /// On linux the netfilter kernel module might say no to this, if configured by a paranoid person
-  /// (or someone is using RedHat linux).
-  ///
-  /// Should this be called on a system with a particularly nasty routing table configuration then
-  /// the routing table may send the connection attempt into "nirvana". To ensure this doesn't happen
-  /// the connection attempt is made with a timeout of 1s. Since any successfully made connection will be to localhost,
-  /// this should be fine to handle this. If the routing table does indeed re-route this connection attempt to
-  /// somewhere else that's not our server but is something that is running any kind of tcp server then there is no error
-  /// to detect and this might cause join() to block until something successfully connects to our actual server.
-  ///
-  /// This is the best one can do given rusts standard library on windows.
-  /// On Windows the shutdown fn will just call this fn, because there is nothing better that can be done.
-  /// On Unix the shutdown fn is recommended as it will not establish a tcp connection to wake up the listener.
-  ///
-  /// Should wake up by establishing a connection fail then any call to join() will not be blocking
-  /// and the background "thread" will keep waiting until eventually someone connects to it to wake it up.
-  ///
-  pub fn shutdown_by_connecting(&self) {
-    self.inner.shutdown_by_connecting();
   }
 }
 
