@@ -46,6 +46,7 @@ impl TcpConnectorInner {
     use windows_sys::Win32::Networking::WinSock::{
       WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
     };
+
     let windows_sock_handle = self.listener.as_raw_socket() as usize;
 
     loop {
@@ -82,6 +83,7 @@ impl TcpConnectorInner {
   fn run(&self) {
     defer! {
       self.waiter.signal(2);
+      println!("SHIT IS HAPPENING");
     }
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
@@ -444,4 +446,11 @@ impl TcpConnector {
   pub fn shutdown_by_connecting(&self) {
     self.inner.shutdown_by_connecting();
   }
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+pub fn test_windows_ptr_sanity() {
+  use std::os::windows::io::RawSocket;
+  assert_eq!(size_of::<RawSocket>(), size_of::<usize>());
 }
