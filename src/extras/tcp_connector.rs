@@ -46,7 +46,7 @@ impl TcpConnectorInner {
     use windows_sys::Win32::Networking::WinSock::{
       WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
     };
-    let windows_sock_handle = usize::from(self.listener.as_raw_socket());
+    let windows_sock_handle = self.listener.as_raw_socket() as usize;
 
     loop {
       let mut pollfd =
