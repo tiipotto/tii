@@ -1049,7 +1049,6 @@ impl MimeType {
       MimeType::ApplicationJson => &MimeGroup::Application,
       MimeType::ApplicationJsonLd => &MimeGroup::Application,
       MimeType::ApplicationYaml => &MimeGroup::Application,
-      MimeType::TextLua => &MimeGroup::Application,
       MimeType::ApplicationLuaBytecode => &MimeGroup::Application,
       MimeType::ApplicationPdf => &MimeGroup::Application,
       MimeType::ApplicationZip => &MimeGroup::Application,
@@ -1104,6 +1103,7 @@ impl MimeType {
       MimeType::TextCss => &MimeGroup::Text,
       MimeType::TextHtml => &MimeGroup::Text,
       MimeType::TextJavaScript => &MimeGroup::Text,
+      MimeType::TextLua => &MimeGroup::Text,
       MimeType::TextPlain => &MimeGroup::Text,
       MimeType::TextCsv => &MimeGroup::Text,
       MimeType::TextCalendar => &MimeGroup::Text,
@@ -1556,6 +1556,7 @@ impl From<AcceptQualityMimeType> for AcceptMimeType {
 mod tests {
   use crate::http::mime::QValue;
 
+  /// Shutup clippy.
   #[macro_export]
   macro_rules! test_qvalue {
     ($input:expr, $expected:expr) => {

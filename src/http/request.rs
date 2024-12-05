@@ -195,7 +195,8 @@ fn parse_raw_query(raw_query: &str) -> HumptyResult<Vec<(String, String)>> {
         current_key = Vec::new();
         current_value = Vec::new()
       }
-      b'-' | b'.' | b'_' | b'~' | b'/' => {
+      b'!' | b'$' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b'-' | b'.' | b'/' | b':' | b';'
+      | b'@' | b'_' | b'~' => {
         if matching_value {
           current_value.push(*n);
         } else {

@@ -1,8 +1,30 @@
 pub mod builtin_endpoints;
 
-/// Convenience functions related to networking
-pub mod network_utils;
+mod connector;
 
-/// A very simple TCP application that spawns a thread per connection.
-/// See examples for usage, in particular `shutdown`.
-pub mod tcp_app;
+pub(crate) use connector::CONNECTOR_SHUTDOWN_TIMEOUT;
+pub use {connector::Connector, connector::ConnectorMeta};
+
+#[cfg(unix)]
+mod unix_connector;
+
+#[cfg(unix)]
+pub use unix_connector::*;
+
+mod tcp_connector;
+
+pub use tcp_connector::*;
+
+#[cfg(feature = "tls")]
+mod tls_tcp_connector;
+
+#[cfg(feature = "tls")]
+pub use tls_tcp_connector::*;
+
+#[cfg(feature = "tls")]
+#[cfg(unix)]
+mod tls_unix_connector;
+
+#[cfg(feature = "tls")]
+#[cfg(unix)]
+pub use tls_unix_connector::*;

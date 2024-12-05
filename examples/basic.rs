@@ -1,6 +1,4 @@
-use std::error::Error;
-
-use humpty::extras::tcp_app;
+use humpty::extras::{Connector, TcpConnector};
 use humpty::http::method::Method;
 use humpty::http::mime::{AcceptMimeType, MimeType};
 use humpty::http::request_context::RequestContext;
@@ -9,7 +7,7 @@ use humpty::humpty_builder::HumptyBuilder;
 use humpty::humpty_error::HumptyResult;
 use log::info;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> HumptyResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
@@ -68,10 +66,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_response_filter(resp)?
         .ok()
     })
-  })
-  .expect("ERROR");
+  })?;
 
-  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }

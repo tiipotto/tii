@@ -169,7 +169,13 @@ fn test_accept_q_display_and_parse() {
       let orig = AcceptQualityMimeType::from_group(n.clone(), q);
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
+
       assert_eq!(orig, parsed);
+      assert_eq!(n, parsed.group().unwrap());
+      assert!(parsed.mime().is_none());
+      assert!(!parsed.is_wildcard());
+      assert!(parsed.is_group_wildcard());
+      assert!(!parsed.is_specific());
     }
   }
 
@@ -180,6 +186,19 @@ fn test_accept_q_display_and_parse() {
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
       assert_eq!(orig, parsed);
+      assert_eq!(n.mime_group(), parsed.group().unwrap());
+      assert_eq!(n, parsed.mime().unwrap());
+      assert!(!parsed.is_wildcard());
+      assert!(!parsed.is_group_wildcard());
+      assert!(parsed.is_specific());
+
+      let accq = AcceptMimeType::from(parsed);
+      match accq {
+        AcceptMimeType::Specific(t) => {
+          assert_eq!(t, n.clone());
+        }
+        _ => panic!("{}", accq.to_string()),
+      }
     }
   }
 
@@ -189,5 +208,54 @@ fn test_accept_q_display_and_parse() {
     let parsed =
       AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
     assert_eq!(orig, parsed);
+    assert!(parsed.group().is_none());
+    assert!(parsed.is_wildcard());
+    assert!(!parsed.is_group_wildcard());
+    assert!(!parsed.is_specific());
   }
+
+  assert_eq!(AcceptQualityMimeType::default(), AcceptQualityMimeType::wildcard(QValue::default()));
+}
+
+#[test]
+fn test_accept_q_edge() {
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json;q=0.500").unwrap().into_iter().next().unwrap(),
+    AcceptQualityMimeType::from_mime(MimeType::ApplicationJson, QValue::from_clamped(500))
+  );
+  assert!(AcceptQualityMimeType::parse("application/json;sad=0.500").is_none());
+  assert!(AcceptQualityMimeType::parse("application/json;q=4.0").is_none());
+  assert!(AcceptQualityMimeType::parse("application/*j;q=1.0").is_none());
+  assert!(AcceptQualityMimeType::parse("app*/json;q=1.0").is_none());
+  assert!(AcceptQualityMimeType::parse("application/*j").is_none());
+  assert!(AcceptQualityMimeType::parse("app*/json").is_none());
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/*").unwrap().into_iter().next().unwrap(),
+    AcceptQualityMimeType::from_group(MimeGroup::Application, QValue::from_clamped(1000))
+  );
+}
+
+#[test]
+fn test_accept_q_parse_all() {
+  let mut types: Vec<AcceptQualityMimeType> = Vec::new();
+  for n in MimeType::well_known() {
+    types.push(AcceptQualityMimeType::from_mime(n.clone(), QValue::from_clamped(500)));
+  }
+
+  let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
+  let parsed_types = AcceptQualityMimeType::parse(hdr_value).unwrap();
+  assert_eq!(types, parsed_types);
+}
+
+#[test]
+fn test_mime_type2group() {
+  for n in MimeType::well_known() {
+    let x = MimeGroup::from(n);
+    assert_eq!(x, MimeGroup::parse(n.as_str()).unwrap(), "{}", n);
+  }
+
+  assert_eq!(
+    MimeGroup::from(MimeType::parse("application/dubdub").unwrap()),
+    MimeGroup::parse("application/dubdub").unwrap()
+  );
 }

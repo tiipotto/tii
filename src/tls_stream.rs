@@ -1,14 +1,15 @@
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
 use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
 use crate::util::unwrap_poison;
 use rust_tls_duplex_stream::RustTlsDuplexStream;
 use rustls::server::ServerConnectionData;
 use rustls::ServerConnection;
 use std::fmt::Debug;
+use std::io;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::{io, thread};
 use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
 /// All connections that can be used to tunnel tls using Humpty's default RustTls wrapper need to provide these functions.
@@ -29,6 +30,9 @@ pub trait TlsCapableStream: Debug + Sync + Send {
 
   /// The address of the remote this stream.
   fn peer_addr(&self) -> io::Result<String>;
+
+  /// The address we are listening to for receiving connections.
+  fn local_addr(&self) -> io::Result<String>;
 }
 
 mod tcp {
@@ -54,7 +58,11 @@ mod tcp {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
-      self.peer_addr().map(|p| p.to_string())
+      Ok(format!("{}", TcpStream::peer_addr(self)?))
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
+      Ok(format!("{}", TcpStream::local_addr(self)?))
     }
   }
 }
@@ -84,9 +92,13 @@ mod unix {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
+      Ok("unix".to_string())
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
       self
-        .peer_addr()
-        .map(|p| p.as_pathname().map(|p| p.to_string_lossy().to_string()).unwrap_or_default())
+        .local_addr()
+        .map(|a| a.as_pathname().map(|a| a.to_string_lossy().to_string()).unwrap_or_default())
     }
   }
 }
@@ -128,24 +140,25 @@ impl HumptyTlsStream {
     tcp: S,
     tls: ServerConnection,
   ) -> io::Result<Box<dyn ConnectionStream>> {
-    Self::create_tcp(tcp, tls, |task| thread::Builder::new().spawn(task).map(|_| {}))
+    Self::create(tcp, tls, &DefaultThreadAdapter)
   }
 
   /// Create a new HumptyTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using the provided thread spawn function.
   /// The tasks automatically return if the returned ConnectionStream is dropped.
-  pub fn create_tcp<
-    S: TlsCapableStream + 'static,
-    T: FnMut(Box<dyn FnOnce() + Send>) -> io::Result<()>,
-  >(
+  pub fn create<S: TlsCapableStream + 'static>(
     stream: S,
     tls: ServerConnection,
-    spawner: T,
+    spawner: &dyn ThreadAdapter,
   ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
+    let local = stream.local_addr()?.to_string();
     let stream_wrapper = StreamWrapper(Arc::new(stream));
     let tls =
-      RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), spawner)?;
+      RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), move |task| {
+        spawner.spawn(task)?;
+        Ok(())
+      })?;
 
     Ok(Box::new(Self(Arc::new(HumptyTlsWrapperInner {
       stream_ref: stream_wrapper.0 as Arc<_>,
@@ -153,6 +166,7 @@ impl HumptyTlsStream {
       read: Mutex::new(UnownedReadBuffer::new()),
       write: Mutex::new(UnownedWriteBuffer::new()),
       peer,
+      local,
     }))) as Box<dyn ConnectionStream>)
   }
 }
@@ -164,6 +178,7 @@ struct HumptyTlsWrapperInner {
   read: Mutex<UnownedReadBuffer<0x4000>>,
   write: Mutex<UnownedWriteBuffer<0x4000>>,
   peer: String,
+  local: String,
 }
 
 impl Drop for HumptyTlsWrapperInner {
@@ -271,5 +286,9 @@ impl ConnectionStream for HumptyTlsStream {
 
   fn peer_addr(&self) -> io::Result<String> {
     Ok(self.0.peer.clone())
+  }
+
+  fn local_addr(&self) -> io::Result<String> {
+    Ok(self.0.local.clone())
   }
 }

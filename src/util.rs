@@ -13,6 +13,22 @@ fn do_abort() -> ! {
   unreachable!("A condition that should be unreachable was reached. Please enable the 'backtrace' feature on humpty for more information and then file a bug report!");
 }
 
+/// Convert a panic message from a catch_unwind or ThreadHandle::join into a str and call the close with it.
+#[cfg(feature = "extras")] //For now only used by extras feature.
+pub fn panic_msg<X>(
+  panic_message: Box<dyn std::any::Any + Send + 'static>,
+  handler: impl FnOnce(&str) -> X,
+) -> X {
+  if let Some(msg) = panic_message.downcast_ref::<&'static str>() {
+    handler(msg)
+  } else if let Some(msg) = panic_message.downcast_ref::<String>() {
+    handler(msg)
+  } else {
+    let dbg = format!("{:?}", panic_message);
+    handler(&dbg)
+  }
+}
+
 pub fn unreachable() -> ! {
   do_abort()
 }

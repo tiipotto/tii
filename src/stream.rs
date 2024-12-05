@@ -28,6 +28,7 @@ pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
   fn new_ref(&self) -> Box<dyn ConnectionStream>;
 
   fn peer_addr(&self) -> io::Result<String>;
+  fn local_addr(&self) -> io::Result<String>;
 }
 
 pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
@@ -251,6 +252,10 @@ mod tcp {
     fn peer_addr(&self) -> io::Result<String> {
       Ok(format!("{}", self.0.stream.peer_addr()?))
     }
+
+    fn local_addr(&self) -> io::Result<String> {
+      Ok(format!("{}", self.0.stream.local_addr()?))
+    }
   }
 }
 
@@ -396,6 +401,10 @@ mod boxed {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
+      Ok("Box".to_string())
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
       Ok("Box".to_string())
     }
   }
@@ -548,15 +557,15 @@ mod unix {
     }
 
     fn peer_addr(&self) -> io::Result<String> {
-      Ok(
-        self
-          .0
-          .stream
-          .peer_addr()?
-          .as_pathname()
-          .map(|a| a.to_string_lossy().to_string())
-          .unwrap_or_else(|| "".to_string()),
-      )
+      Ok("unix".to_string())
+    }
+
+    fn local_addr(&self) -> io::Result<String> {
+      self
+        .0
+        .stream
+        .local_addr()
+        .map(|a| a.as_pathname().map(|a| a.to_string_lossy().to_string()).unwrap_or_default())
     }
   }
 }

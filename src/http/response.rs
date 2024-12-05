@@ -249,14 +249,14 @@ impl Response {
 
   /// HTTP 403 Forbidden
   pub fn forbidden(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::Unauthorized)
+    Self::new(StatusCode::Forbidden)
       .with_body(body.into())
       .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 403 Forbidden
   pub fn forbidden_no_body() -> Response {
-    Self::new(StatusCode::Unauthorized)
+    Self::new(StatusCode::Forbidden)
   }
 
   /// HTTP 404 Not Found with body

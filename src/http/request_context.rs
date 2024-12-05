@@ -20,7 +20,8 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct RequestContext {
   id: u128,
-  address: String,
+  peer_address: String,
+  local_address: String,
   request: RequestHead,
   body: Option<RequestBody>,
   force_connection_close: bool,
@@ -43,13 +44,16 @@ impl RequestContext {
     max_head_buffer_size: usize,
   ) -> HumptyResult<RequestContext> {
     let id = util::next_id();
-    let address = stream.peer_addr()?;
+    let peer_address = stream.peer_addr()?;
+    let local_address = stream.local_addr()?;
+
     let req = RequestHead::new(stream, max_head_buffer_size)?;
 
     if req.version() == HttpVersion::Http09 {
       return Ok(RequestContext {
         id,
-        address,
+        peer_address,
+        local_address,
         request: req,
         body: None,
         force_connection_close: true,
@@ -66,7 +70,8 @@ impl RequestContext {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
             id,
-            address,
+            peer_address,
+            local_address,
             request: req,
             body: Some(body),
             force_connection_close: false,
@@ -95,7 +100,8 @@ impl RequestContext {
       if content_length == 0 {
         return Ok(RequestContext {
           id,
-          address,
+          peer_address,
+          local_address,
           request: req,
           body: None,
           force_connection_close: is_http_10,
@@ -109,7 +115,8 @@ impl RequestContext {
       let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
       return Ok(RequestContext {
         id,
-        address,
+        peer_address,
+        local_address,
         request: req,
         body: Some(body),
         force_connection_close: is_http_10,
@@ -122,7 +129,8 @@ impl RequestContext {
 
     Ok(RequestContext {
       id,
-      address,
+      peer_address,
+      local_address,
       request: req,
       body: None,
       force_connection_close: true,
@@ -140,7 +148,12 @@ impl RequestContext {
 
   /// address of the peer we are talking to, entirely socket dependant.
   pub fn peer_address(&self) -> &str {
-    self.address.as_str()
+    self.peer_address.as_str()
+  }
+
+  /// address of our socket
+  pub fn local_address(&self) -> &str {
+    self.local_address.as_str()
   }
 
   /// True if the request contains the specified property.

@@ -12,10 +12,12 @@ use crate::humpty_error::{HumptyError, HumptyResult};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::{error_log, trace_log};
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::ErrorKind;
-use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Trait for metadata for streams. This could for example be an indicator of what type of stream this is
@@ -42,6 +44,7 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 /// It does NOT own any OS resources like server sockets / file descriptors.
 #[derive(Debug)]
 pub struct HumptyServer {
+  shutdown: AtomicBool,
   routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
@@ -51,7 +54,23 @@ pub struct HumptyServer {
   keep_alive_timeout: Option<Duration>,
   request_body_io_timeout: Option<Duration>,
   write_timeout: Option<Duration>,
+  shutdown_hooks: Hooks,
 }
+
+struct Hooks(Mutex<Vec<Box<dyn FnMut() + Send + Sync>>>);
+
+impl Debug for Hooks {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Hooks")
+  }
+}
+
+impl Default for Hooks {
+  fn default() -> Self {
+    Self(Mutex::new(Vec::new()))
+  }
+}
+
 impl HumptyServer {
   #[allow(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
@@ -66,6 +85,7 @@ impl HumptyServer {
     write_timeout: Option<Duration>,
   ) -> Self {
     HumptyServer {
+      shutdown: AtomicBool::new(false),
       routers,
       error_handler,
       not_found_handler,
@@ -75,6 +95,7 @@ impl HumptyServer {
       keep_alive_timeout: keep_alive_timeout.or(read_timeout),
       request_body_io_timeout: request_body_io_timeout.or(read_timeout),
       write_timeout,
+      shutdown_hooks: Hooks::default(),
     }
   }
 
@@ -92,12 +113,56 @@ impl HumptyServer {
     self.handle_connection_inner(stream, Some(meta))
   }
 
+  /// Will mark this humpty server as shutdown.
+  /// It will no longer accept new connections, send Connection: Close for all pending requests
+  /// but not cancel any ongoing requests.
+  ///
+  /// This fn will also execute all shutdown hooks.
+  ///
+  /// Attention: If a Shutdown hook panics then remaining shutdown hooks are not executed.
+  /// After a panic subsequent executions of shutdown will also NOT execute remaining hooks!
+  ///
+  pub fn shutdown(&self) {
+    self.shutdown.store(true, SeqCst);
+    if let Ok(mut guard) = self.shutdown_hooks.0.lock() {
+      while let Some(mut hook) = guard.pop() {
+        hook()
+      }
+    }
+  }
+
+  /// Returns true if this HumptyServer is marked for shutdown.
+  pub fn is_shutdown(&self) -> bool {
+    self.shutdown.load(SeqCst)
+  }
+
+  /// Adds the given shutdown hook to the HumptyServer.
+  pub fn add_shutdown_hook<F: FnMut() + Sync + Send + 'static>(&self, mut hook: F) {
+    let Ok(mut guard) = self.shutdown_hooks.0.lock() else {
+      //Only way for poisoned mutex was if shutdown was already called and a hook panicked.
+      hook();
+      return;
+    };
+
+    if self.is_shutdown() {
+      drop(guard); // Do not poison the mutex if "hook" blows up.
+      hook();
+      return;
+    }
+
+    guard.push(Box::new(hook));
+  }
+
   /// Impl for handle connection.
   fn handle_connection_inner<S: IntoConnectionStream, M: ConnectionStreamMetadata>(
     &self,
     stream: S,
     meta: Option<M>,
   ) -> HumptyResult<()> {
+    if self.shutdown.load(SeqCst) {
+      return Err(HumptyError::from_io_kind(ErrorKind::ConnectionAborted));
+    }
+
     let stream = stream.into_connection_stream();
 
     stream.set_read_timeout(self.connection_timeout)?;
@@ -163,9 +228,9 @@ impl HumptyServer {
       }
 
       // Will we do keep alive?
-      let mut keep_alive =
+      let mut keep_alive = !self.is_shutdown()
           // is this http 1.1 because earlier does not support it.
-          context.request_head().version() == HttpVersion::Http11
+          && context.request_head().version() == HttpVersion::Http11
           // Do we have a keep alive timeout that is not zero?
           && self.keep_alive_timeout.as_ref().map(|a| !a.is_zero()).unwrap_or(true)
           // did the client tell us not to do keep alive?
@@ -211,6 +276,11 @@ impl HumptyServer {
   }
 
   fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> HumptyResult<bool> {
+    if self.is_shutdown() {
+      trace_log!("Keep-alive server shutting down...");
+      return Ok(false);
+    }
+
     if stream.available() > 0 {
       trace_log!("Keep-alive client sent data. Processing next request...");
       return Ok(true);
@@ -294,5 +364,12 @@ impl HumptyServer {
     );
 
     Response::new(StatusCode::InternalServerError)
+  }
+}
+
+impl Drop for HumptyServer {
+  fn drop(&mut self) {
+    self.shutdown();
+    trace_log!("HumptyServer::drop");
   }
 }

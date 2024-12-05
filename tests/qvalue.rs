@@ -31,6 +31,9 @@ pub fn test() {
 #[test]
 pub fn test_edge() {
   assert_eq!(1000, QValue::parse("1").unwrap().as_u16());
+  assert_eq!(1000, QValue::parse("1.0").unwrap().as_u16());
+  assert_eq!(1000, QValue::parse("1.00").unwrap().as_u16());
+  assert_eq!(1000, QValue::parse("1.000").unwrap().as_u16());
   assert_eq!(0, QValue::parse("0").unwrap().as_u16());
   assert!(QValue::parse("2").is_none());
   assert!(QValue::parse("2.0").is_none());

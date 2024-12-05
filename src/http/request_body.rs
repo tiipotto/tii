@@ -42,6 +42,10 @@ impl RequestBody {
 }
 
 impl RequestBody {
+  pub fn as_read(&self) -> impl Read + '_ {
+    Box::new(self)
+  }
+
   pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     match unwrap_poison(self.0.lock())?.deref_mut() {
       RequestBodyInner::WithContentLength(body) => body.read(buf),
@@ -71,7 +75,7 @@ impl RequestBody {
   }
 }
 
-impl Read for RequestBody {
+impl Read for &RequestBody {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     RequestBody::read(self, buf) //de-mut upcall
   }
@@ -137,7 +141,7 @@ impl RequestBodyChunked {
       let to_read = u64::min(buf.len() as u64, self.remaining_chunk_length) as usize;
       let read = self.read.read(&mut buf[..to_read])?;
       if read == 0 {
-        return Err(io::Error::new(
+        return Err(Error::new(
           ErrorKind::UnexpectedEof,
           "chunked transfer encoding suggest more data",
         ));

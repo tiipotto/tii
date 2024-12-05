@@ -14,7 +14,7 @@ pub mod humpty_router;
 pub mod humpty_router_builder;
 pub mod humpty_server;
 pub mod stream;
-#[cfg(feature = "ssl")]
+#[cfg(feature = "tls")]
 mod tls_stream;
 mod util;
 
@@ -24,5 +24,5 @@ mod util;
 #[cfg(feature = "extras")]
 pub mod extras;
 
-#[cfg(feature = "ssl")]
+#[cfg(feature = "tls")]
 pub use tls_stream::{HumptyTlsStream, TlsCapableStream};

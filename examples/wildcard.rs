@@ -1,6 +1,4 @@
-use std::error::Error;
-
-use humpty::extras::tcp_app;
+use humpty::extras::{Connector, TcpConnector};
 use humpty::http::mime::MimeType;
 use humpty::http::request_context::RequestContext;
 use humpty::http::Response;
@@ -33,13 +31,12 @@ const HTML: &str = r##"
 
 </html>"##;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> HumptyResult<()> {
   let humpty_server = HumptyBuilder::builder_arc(|builder| {
     builder.router(|router| router.route_any("/", home)?.route_any("/wildcard/*", wildcard))
-  })
-  .expect("ERROR");
+  })?;
 
-  let _ = tcp_app::App::new("0.0.0.0:8080", humpty_server)?.run();
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
 
   Ok(())
 }
