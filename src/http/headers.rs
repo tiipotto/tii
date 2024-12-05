@@ -1,6 +1,5 @@
 //! Provides functionality for handling HTTP headers.
 
-use crate::util::unwrap_some;
 use std::fmt::Display;
 
 /// Represents a collection of headers as part of a request or response.
@@ -66,7 +65,6 @@ impl Headers {
     if self.get(&header).is_some() {
       return self.get(header);
     }
-
     self.0.push(Header::new(header, value));
     None
   }
