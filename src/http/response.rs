@@ -1,7 +1,7 @@
 //! Provides functionality for handling HTTP responses.
 
 use crate::http::cookie::SetCookie;
-use crate::http::headers::{Header, HeaderLike, HeaderName, Headers};
+use crate::http::headers::{Header, HeaderName, Headers};
 use crate::http::status::StatusCode;
 
 use crate::http::method::Method;
@@ -422,7 +422,7 @@ impl Response {
   /// Returns itself for use in a builder pattern.
   pub fn with_header(
     mut self,
-    header: impl HeaderLike,
+    header: impl AsRef<str>,
     value: impl AsRef<str>,
   ) -> HumptyResult<Self> {
     self.add_header(header, value)?;
@@ -430,19 +430,14 @@ impl Response {
   }
 
   /// Internal add header where the entire state of the request obj is known.
-  fn with_header_unchecked(mut self, header: impl HeaderLike, value: impl AsRef<str>) -> Self {
+  fn with_header_unchecked(mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> Self {
     self.headers.add(header, value);
     self
   }
 
   /// Adds the header to the Response.
-  pub fn add_header(
-    &mut self,
-    header: impl HeaderLike,
-    value: impl AsRef<str>,
-  ) -> HumptyResult<()> {
-    let hdr = header.to_header();
-    match &hdr {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
+    match &hdr.as_ref().into() {
       HeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
       }
@@ -460,11 +455,10 @@ impl Response {
   /// Replace all header values in the Response
   pub fn set_header(
     &mut self,
-    header: impl HeaderLike,
+    header: impl AsRef<str>,
     value: impl AsRef<str>,
   ) -> HumptyResult<()> {
-    let hdr = header.to_header();
-    match &hdr {
+    match &header.as_ref().into() {
       HeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
       }
@@ -480,7 +474,7 @@ impl Response {
   }
 
   /// remove all values for a given header.
-  pub fn remove_header(&mut self, header: impl HeaderLike) {
+  pub fn remove_header(&mut self, header: impl AsRef<str>) {
     self.headers.remove(header);
   }
 
@@ -490,12 +484,12 @@ impl Response {
   }
 
   /// Returns the first header or None
-  pub fn get_header(&self, name: impl HeaderLike) -> Option<&str> {
+  pub fn get_header(&self, name: impl AsRef<str>) -> Option<&str> {
     self.headers.get(name)
   }
 
   /// Returns the all header values of empty Vec.
-  pub fn get_headers(&self, name: impl HeaderLike) -> Vec<&str> {
+  pub fn get_headers(&self, name: impl AsRef<str>) -> Vec<&str> {
     self.headers.get_all(name)
   }
 

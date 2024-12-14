@@ -1,6 +1,5 @@
 //! Provides functionality for handling HTTP headers.
 
-use crate::util::unwrap_some;
 use std::fmt::Display;
 
 /// Represents a collection of headers as part of a request or response.
@@ -35,8 +34,8 @@ impl Headers {
   }
 
   /// Create and add a new header with the given name and value.
-  pub fn add(&mut self, name: impl HeaderLike, value: impl AsRef<str>) {
-    self.0.push(Header::new(name.to_header(), value));
+  pub fn add(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
+    self.0.push(Header::new(name, value));
   }
 
   /// Add an existing header to the collection.
@@ -48,50 +47,36 @@ impl Headers {
   ///
   /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
   ///   a string, e.g. `Content-Type`.
-  pub fn get(&self, name: impl HeaderLike) -> Option<&str> {
-    let header = name.to_header();
-    self.0.iter().find(|h| h.name == header).map(|h| h.value.as_str())
+  pub fn get(&self, name: impl AsRef<str>) -> Option<&str> {
+    self.0.iter().find(|h| h.name == name.as_ref().into()).map(|h| h.value.as_str())
   }
 
   /// Removes all previous instances of the header and sets the header to the single value.
   /// Its guaranteed that the header is only present exactly once after this call returns.
-  pub fn set(&mut self, name: impl HeaderLike, value: impl AsRef<str>) {
-    //TODO optimize
-    let header = name.to_header();
-    self.remove(header.clone());
-    self.add(header, value);
+  pub fn set(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
+    self.remove(&name);
+    self.add(name, value);
   }
 
   /// Will Set the header value if it is not already set.
   /// Should the value already be set then the previous value is returned as Some().
   /// Returns None if the value was set.
-  pub fn try_set(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> Option<&str> {
-    let header = name.to_header();
-    let mut found = None;
-    for (index, h) in &mut self.0.iter().enumerate() {
-      if h.name == header {
-        found = Some(index);
-        break;
-      }
+  pub fn try_set(&mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> Option<&str> {
+    if self.get(&header).is_some() {
+      return self.get(header);
     }
-
-    if found.is_none() {
-      self.0.push(Header::new(header, value));
-      return None;
-    }
-
-    Some(self.0[unwrap_some(found)].value.as_str())
+    self.0.push(Header::new(header, value));
+    None
   }
 
   /// Replaces all header values with a single header.
   /// The returned Vec contains the removed values. is len() == 0 if there were none.
-  pub fn replace_all(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> Vec<Header> {
-    let header = name.to_header();
+  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Vec<Header> {
     let mut hcopy = Vec::with_capacity(self.len());
     let mut hrem = Vec::new();
     std::mem::swap(&mut self.0, &mut hcopy);
     for h in hcopy {
-      if h.name == header {
+      if h.name == name.as_ref().into() {
         hrem.push(h);
         continue;
       }
@@ -99,21 +84,19 @@ impl Headers {
       self.0.push(h);
     }
 
-    self.0.push(Header::new(header, value));
+    self.0.push(Header::new(name, value));
     hrem
   }
 
   /// Get a list of all the values of the headers with the given name.
   /// If no headers with the given name exist, an empty list is returned.
-  pub fn get_all(&self, name: impl HeaderLike) -> Vec<&str> {
-    let header = name.to_header();
-    self.0.iter().filter(|h| h.name == header).map(|h| h.value.as_str()).collect()
+  pub fn get_all(&self, name: impl AsRef<str>) -> Vec<&str> {
+    self.0.iter().filter(|h| h.name == name.as_ref().into()).map(|h| h.value.as_str()).collect()
   }
 
   /// Remove all headers with the given name.
-  pub fn remove(&mut self, name: impl HeaderLike) {
-    let header = name.to_header();
-    self.0.retain(|h| h.name != header);
+  pub fn remove(&mut self, name: impl AsRef<str>) {
+    self.0.retain(|h| h.name != name.as_ref().into());
   }
 
   /// Return an iterator over the headers in the collection.
@@ -127,37 +110,8 @@ impl Header {
   ///
   /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
   ///   a string, e.g. `Content-Type`.
-  pub fn new(name: impl HeaderLike, value: impl AsRef<str>) -> Self {
-    Self { name: name.to_header(), value: value.as_ref().to_string() }
-  }
-}
-
-/// Represents a type which can be interpreted as a header.
-///
-/// This includes `HeaderType` and strings.
-pub trait HeaderLike {
-  /// Consume the value and return the corresponding header type.
-  fn to_header(self) -> HeaderName;
-}
-
-impl HeaderLike for HeaderName {
-  fn to_header(self) -> HeaderName {
-    self
-  }
-}
-
-impl HeaderLike for &HeaderName {
-  fn to_header(self) -> HeaderName {
-    self.clone()
-  }
-}
-
-impl<T> HeaderLike for T
-where
-  T: AsRef<str>,
-{
-  fn to_header(self) -> HeaderName {
-    HeaderName::from(self.as_ref())
+  pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+    Self { name: HeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
   }
 }
 
@@ -310,6 +264,7 @@ static WELL_KNOWN: &[HeaderName] = &[
   HeaderName::TE,
   HeaderName::ProxyAuthenticate,
 ];
+
 impl HeaderName {
   /// Returns a static array of all well known header types
   #[must_use]
@@ -506,6 +461,12 @@ impl From<&str> for HeaderName {
 impl Display for HeaderName {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.to_str())
+  }
+}
+
+impl AsRef<str> for HeaderName {
+  fn as_ref(&self) -> &str {
+    self.to_str()
   }
 }
 

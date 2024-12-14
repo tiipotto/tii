@@ -1,7 +1,7 @@
 //! Provides functionality for handling HTTP requests.
 
 use crate::http::cookie::Cookie;
-use crate::http::headers::{Header, HeaderLike, HeaderName, Headers};
+use crate::http::headers::{Header, HeaderName, Headers};
 use crate::http::method::Method;
 
 use crate::http::mime::{AcceptQualityMimeType, MimeType, QValue};
@@ -270,7 +270,7 @@ impl RequestHead {
       return Err(HumptyError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
     }
 
-    let raw_path = uri_iter.next().unwrap();
+    let raw_path = unwrap_some(uri_iter.next());
 
     let path = urlencoding::decode(raw_path)
       .map_err(|_| {
@@ -510,19 +510,18 @@ impl RequestHead {
   }
 
   /// Returns the first header or None
-  pub fn get_header(&self, name: impl HeaderLike) -> Option<&str> {
+  pub fn get_header(&self, name: impl AsRef<str>) -> Option<&str> {
     self.headers.get(name)
   }
 
   /// Returns the all header values of empty Vec.
-  pub fn get_headers(&self, name: impl HeaderLike) -> Vec<&str> {
+  pub fn get_headers(&self, name: impl AsRef<str>) -> Vec<&str> {
     self.headers.get_all(name)
   }
 
   /// Removes all instances of a particular header.
-  pub fn remove_header(&mut self, name: impl HeaderLike) -> HumptyResult<()> {
-    let hdr = name.to_header();
-    match &hdr {
+  pub fn remove_header(&mut self, hdr: impl AsRef<str>) -> HumptyResult<()> {
+    match &hdr.as_ref().into() {
       HeaderName::Accept => {
         self.accept = vec![AcceptQualityMimeType::default()];
         self.headers.set(hdr, "*/*");
@@ -548,10 +547,9 @@ impl RequestHead {
 
   /// Sets the header value.
   /// Some header values cannot be modified through this fn and attempting to change them are a noop.
-  pub fn set_header(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> HumptyResult<()> {
-    let hdr = name.to_header();
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
     let hdr_value = value.as_ref();
-    match &hdr {
+    match &hdr.as_ref().into() {
       HeaderName::Accept => {
         if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           self.accept = accept;
@@ -585,10 +583,9 @@ impl RequestHead {
   }
 
   /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
-  pub fn add_header(&mut self, name: impl HeaderLike, value: impl AsRef<str>) -> HumptyResult<()> {
-    let hdr = name.to_header();
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
     let hdr_value = value.as_ref();
-    match &hdr {
+    match &hdr.as_ref().into() {
       HeaderName::Accept => {
         if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
