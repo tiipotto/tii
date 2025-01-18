@@ -12,7 +12,7 @@ pub struct MockStream {
 
 impl MockStream {
   pub fn with_str(data: &str) -> Self {
-    Self::with_data(VecDeque::from_iter(data.to_string().bytes().into_iter()))
+    Self::with_data(VecDeque::from_iter(data.to_string().bytes()))
   }
 
   pub fn with_slice(data: &[u8]) -> Self {

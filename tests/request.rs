@@ -30,7 +30,7 @@ fn test_request_from_stream() {
   let mut expected_headers = Vec::new();
   expected_headers.push(Header::new(HeaderName::Host, "localhost"));
 
-  let collected_headers = request.get_all_headers().map(|a| a.clone()).collect::<Vec<_>>();
+  let collected_headers = request.get_all_headers().cloned().collect::<Vec<_>>();
   assert_eq!(collected_headers, expected_headers);
 }
 
@@ -68,7 +68,7 @@ fn test_proxied_request_from_stream() {
   let mut expected_headers = Vec::new();
   expected_headers.push(Header::new(HeaderName::Host, "localhost"));
   expected_headers.push(Header::new("X-Forwarded-For", "9.10.11.12,13.14.15.16"));
-  let collected: Vec<Header> = request.get_all_headers().map(|h| h.clone()).collect();
+  let collected: Vec<Header> = request.get_all_headers().cloned().collect();
 
   assert_eq!(collected, expected_headers);
 }

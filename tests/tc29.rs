@@ -18,7 +18,7 @@ pub fn tc29() {
   })
   .expect("ERROR");
 
-  let many_a = String::from_utf8(vec!['A' as u8; 513]).unwrap();
+  let many_a = String::from_utf8(vec![b'A'; 513]).unwrap();
 
   let blub = format!("GET /{many_a} HTTP/1.1\r\n\r\n");
 
