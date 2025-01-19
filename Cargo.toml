@@ -88,3 +88,7 @@ required-features = ["extras", "log"]
 [[example]]
 name = "unix"
 required-features = ["extras", "log"]
+
+[[example]]
+name = "websocket_broadcast"
+required-features = ["extras"]
