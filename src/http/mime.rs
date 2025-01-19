@@ -237,10 +237,7 @@ impl AcceptQualityMimeType {
           return None;
         }
 
-        let qvalue = match QValue::parse(&rawq[2..]) {
-          Some(qvalue) => qvalue,
-          None => return None,
-        };
+        let qvalue = QValue::parse(&rawq[2..])?;
 
         if mime == "*/*" {
           data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: qvalue });

@@ -141,7 +141,7 @@ impl ResponseBody {
   pub fn content_length(&self) -> Option<u64> {
     match self {
       ResponseBody::FixedSizeBinaryData(data) => u64::try_from(data.len()).ok(),
-      ResponseBody::FixedSizeTextData(data) => u64::try_from(data.as_bytes().len()).ok(),
+      ResponseBody::FixedSizeTextData(data) => u64::try_from(data.len()).ok(),
       ResponseBody::FixedSizeFile(_, sz) => Some(*sz),
       _ => None,
     }

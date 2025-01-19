@@ -17,11 +17,9 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
 
-  Ok(
-    Response::new(StatusCode::OK)
-      .with_body(ResponseBody::from_slice("Okay!"))
-      .with_header("Connection", "Close")?,
-  )
+  Response::new(StatusCode::OK)
+    .with_body(ResponseBody::from_slice("Okay!"))
+    .with_header("Connection", "Close")
 }
 
 #[test]

@@ -136,7 +136,7 @@ fn test_acceptable_permits_group() {
 fn test_acceptable_permits() {
   assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeType::VideoMp4)));
   assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeGroup::Video)));
-  assert!(AcceptMimeType::from(MimeGroup::Video).permits(&AcceptMimeType::from(MimeGroup::Video)));
+  assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeGroup::Video)));
   assert!(!AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::Wildcard));
   assert!(AcceptMimeType::Wildcard.permits(AcceptMimeType::Wildcard));
 }
