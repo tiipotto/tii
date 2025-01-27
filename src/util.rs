@@ -117,7 +117,7 @@ mod counter {
 #[cfg(feature = "random_id")]
 fn next_rand_id() -> u128 {
   let mut bytes = [0u8; 16];
-  if getrandom::getrandom(&mut bytes).is_err() {
+  if getrandom::fill(&mut bytes).is_err() {
     return counter::next();
   }
 
