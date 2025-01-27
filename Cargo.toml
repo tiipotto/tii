@@ -14,7 +14,7 @@ categories = ["web-programming::http-server", "network-programming"]
 [dependencies]
 backtrace = { version = "0.3.74", optional = true}
 constutils = { path = "constutils" }
-getrandom = { version = "0.2", optional = true }
+getrandom = { version = "0.3", optional = true }
 log = { version = "^0.4.22", optional = true }
 unowned-buf = "0.1.2"
 urlencoding = "2.1.3"
