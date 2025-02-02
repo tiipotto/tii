@@ -13,7 +13,7 @@ categories = ["web-programming::http-server", "network-programming"]
 
 [dependencies]
 backtrace = { version = "0.3.74", optional = true }
-constutils = { path = "constutils" }
+tii-procmacro = { version = "0.0.1" }
 getrandom = { version = "0.3", optional = true }
 log = { version = "^0.4.22", optional = true }
 unowned-buf = "0.1.2"
