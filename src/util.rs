@@ -5,8 +5,8 @@ fn do_abort() -> ! {
   #[cfg(feature = "backtrace")]
   {
     let bt = backtrace::Backtrace::new();
-    crate::error_log!("A impossible state was reached by the program. Please file a bug report on https://github.com/Grinkers/tii. The program will terminate now. bt={:?}", bt);
-    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/Grinkers/tii. The program will terminate now. bt={:?}", bt);
+    crate::error_log!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}", bt);
+    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}", bt);
     std::process::abort();
   }
   #[cfg(not(feature = "backtrace"))]
