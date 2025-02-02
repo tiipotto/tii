@@ -6,10 +6,10 @@ use tii::http::headers::{Header, HeaderName};
 use tii::http::method::Method;
 use tii::http::RequestHead;
 
-use tii::http::request::HttpVersion;
-use tii::stream::IntoConnectionStream;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
+use tii::http::request::HttpVersion;
+use tii::stream::IntoConnectionStream;
 
 #[allow(deprecated)]
 #[test]

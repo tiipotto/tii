@@ -1,15 +1,15 @@
 mod mock_stream;
 
+use mock_stream::MockStream;
 use tii::http::cookie::{SameSite, SetCookie};
 use tii::http::headers::HeaderName;
 use tii::http::response::Response;
 use tii::http::status::StatusCode;
-use mock_stream::MockStream;
 
+use std::time::Duration;
 use tii::http::request::HttpVersion;
 use tii::http::response_body::{ResponseBody, ResponseBodySink};
 use tii::stream::IntoConnectionStream;
-use std::time::Duration;
 
 #[test]
 fn test_response() {

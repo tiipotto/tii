@@ -1,7 +1,7 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
-use crate::tii_error::{TiiResult, RequestHeadParsingError};
 use crate::stream::{ConnectionStreamRead, ConnectionStreamWrite};
+use crate::tii_error::{RequestHeadParsingError, TiiResult};
 use crate::util;
 
 /// Represents a frame of WebSocket data.

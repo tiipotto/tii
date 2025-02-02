@@ -8,8 +8,8 @@ use crate::http::method::Method;
 use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::{ReadAndSeek, ResponseBody};
-use crate::tii_error::{TiiResult, UserError};
 use crate::stream::ConnectionStreamWrite;
+use crate::tii_error::{TiiResult, UserError};
 use std::io;
 
 /// Represents a response from the server.
@@ -420,11 +420,7 @@ impl Response {
 
   /// Adds the given header to the response.
   /// Returns itself for use in a builder pattern.
-  pub fn with_header(
-    mut self,
-    header: impl AsRef<str>,
-    value: impl AsRef<str>,
-  ) -> TiiResult<Self> {
+  pub fn with_header(mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<Self> {
     self.add_header(header, value)?;
     Ok(self)
   }
@@ -453,11 +449,7 @@ impl Response {
   }
 
   /// Replace all header values in the Response
-  pub fn set_header(
-    &mut self,
-    header: impl AsRef<str>,
-    value: impl AsRef<str>,
-  ) -> TiiResult<()> {
+  pub fn set_header(&mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     match &header.as_ref().into() {
       HeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()

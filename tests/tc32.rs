@@ -1,11 +1,11 @@
 use crate::mock_stream::MockStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tii::http::headers::HeaderName;
 use tii::http::mime::{AcceptQualityMimeType, MimeType};
 use tii::http::request_context::RequestContext;
 use tii::http::Response;
 use tii::tii_builder::TiiBuilder;
 use tii::tii_error::TiiResult;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod mock_stream;
 

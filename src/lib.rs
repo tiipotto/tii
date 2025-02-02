@@ -10,10 +10,10 @@ mod functional_traits;
 pub mod tii_builder;
 pub mod tii_error;
 pub use tii_error::TiiError;
+pub mod stream;
 pub mod tii_router;
 pub mod tii_router_builder;
 pub mod tii_server;
-pub mod stream;
 #[cfg(feature = "tls")]
 mod tls_stream;
 mod util;

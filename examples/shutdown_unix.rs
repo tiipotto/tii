@@ -3,16 +3,16 @@ use tii::tii_error::TiiResult;
 #[cfg(unix)]
 mod unix {
   use colog::format::{CologStyle, DefaultCologStyle};
+  use std::io::{Read, Write};
+  use std::os::unix::net::UnixStream;
+  use std::thread::sleep;
+  use std::time::Duration;
   use tii::extras::{Connector, UnixConnector};
   use tii::http::mime::MimeType;
   use tii::http::request_context::RequestContext;
   use tii::http::Response;
   use tii::tii_builder::TiiBuilder;
   use tii::tii_error::TiiResult;
-  use std::io::{Read, Write};
-  use std::os::unix::net::UnixStream;
-  use std::thread::sleep;
-  use std::time::Duration;
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {
     Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))

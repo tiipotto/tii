@@ -5,8 +5,8 @@ use crate::http::headers::{Header, HeaderName, Headers};
 use crate::http::method::Method;
 
 use crate::http::mime::{AcceptQualityMimeType, MimeType, QValue};
-use crate::tii_error::{TiiError, TiiResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
+use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult, UserError};
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
 use std::fmt::{Display, Formatter};

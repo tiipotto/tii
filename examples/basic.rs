@@ -1,3 +1,4 @@
+use log::info;
 use tii::extras::{Connector, TcpConnector};
 use tii::http::method::Method;
 use tii::http::mime::{AcceptMimeType, MimeType};
@@ -5,7 +6,6 @@ use tii::http::request_context::RequestContext;
 use tii::http::Response;
 use tii::tii_builder::TiiBuilder;
 use tii::tii_error::TiiResult;
-use log::info;
 
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();

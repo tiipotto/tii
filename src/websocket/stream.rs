@@ -5,8 +5,8 @@ use crate::websocket::message::WebsocketMessage;
 use std::collections::VecDeque;
 use std::{io, mem};
 
-use crate::tii_error::{TiiError, TiiResult, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
+use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::{unwrap_poison, unwrap_some};
 use crate::{error_log, trace_log, warn_log};
 use std::io::{Cursor, ErrorKind, Read, Write};

@@ -1,13 +1,13 @@
 use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 
+use log::{info, LevelFilter};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 use tii::http::request_context::RequestContext;
 use tii::tii_builder::TiiBuilder;
 use tii::tii_error::TiiResult;
 use tii::websocket::message::WebsocketMessage;
 use tii::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
-use log::{info, LevelFilter};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);

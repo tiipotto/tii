@@ -47,9 +47,8 @@ mod unix {
   pub fn work() -> TiiResult<()> {
     colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-    let tii_server = TiiBuilder::builder_arc(|builder| {
-      builder.router(|router| router.route_any("/*", handle))
-    })?;
+    let tii_server =
+      TiiBuilder::builder_arc(|builder| builder.router(|router| router.route_any("/*", handle)))?;
 
     if std::fs::exists("/tmp/tii.sock")? {
       std::fs::remove_file("/tmp/tii.sock")?;

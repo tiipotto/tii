@@ -122,10 +122,7 @@ impl TiiRouteBuilder {
   }
 
   /// Finish building the route by proving the route.
-  pub fn endpoint<T: HttpEndpoint + 'static>(
-    mut self,
-    handler: T,
-  ) -> TiiResult<TiiRouterBuilder> {
+  pub fn endpoint<T: HttpEndpoint + 'static>(mut self, handler: T) -> TiiResult<TiiRouterBuilder> {
     self.inner.routes.push(HttpRoute::new(
       self.route,
       self.method,
@@ -259,11 +256,7 @@ impl TiiRouterBuilder {
 
   /// Adds a route that will handle the POST http method.
   /// The endpoint will be called for any media type.
-  pub fn route_post<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> TiiResult<Self> {
+  pub fn route_post<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Post, route, handler)
   }
 
@@ -275,21 +268,13 @@ impl TiiRouterBuilder {
 
   /// Adds a route that will handle the PATCH http method.
   /// The endpoint will be called for any media type.
-  pub fn route_patch<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> TiiResult<Self> {
+  pub fn route_patch<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Patch, route, handler)
   }
 
   /// Adds a route that will handle the DELETE http method.
   /// The endpoint will be called for any media type.
-  pub fn route_delete<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> TiiResult<Self> {
+  pub fn route_delete<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Delete, route, handler)
   }
 

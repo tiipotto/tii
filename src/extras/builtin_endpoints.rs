@@ -70,9 +70,7 @@ pub fn serve_as_file_path(
 /// Respects index files with the following rules:
 ///   - requests to `/directory` will return either the file `directory`, 301 redirect to `/directory/` if it is a directory, or return 404
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
-pub fn serve_dir(
-  directory_path: &'static str,
-) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);

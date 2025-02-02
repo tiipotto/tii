@@ -1,10 +1,10 @@
 use crate::mock_stream::MockStream;
+use std::sync::Mutex;
 use tii::http::mime::MimeType;
 use tii::http::request_context::RequestContext;
 use tii::http::Response;
 use tii::tii_builder::TiiBuilder;
 use tii::tii_error::TiiResult;
-use std::sync::Mutex;
 
 mod mock_stream;
 

@@ -2,8 +2,8 @@
 
 use crate::http::request_context::RequestContext;
 use crate::http::Response;
-use crate::tii_error::TiiResult;
 use crate::stream::ConnectionStream;
+use crate::tii_error::TiiResult;
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::fmt::{Debug, Formatter};
 use std::thread;

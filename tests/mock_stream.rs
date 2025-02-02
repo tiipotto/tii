@@ -1,8 +1,8 @@
 #![allow(dead_code)]
-use tii::stream::{ConnectionStream, IntoConnectionStream};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use tii::stream::{ConnectionStream, IntoConnectionStream};
 
 #[derive(Debug, Clone)]
 pub struct MockStream {

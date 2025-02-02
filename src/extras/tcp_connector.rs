@@ -368,10 +368,7 @@ impl TcpConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(
-    addr: impl ToSocketAddrs,
-    tii_server: Arc<TiiServer>,
-  ) -> TiiResult<Self> {
+  pub fn start_unpooled(addr: impl ToSocketAddrs, tii_server: Arc<TiiServer>) -> TiiResult<Self> {
     Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }
