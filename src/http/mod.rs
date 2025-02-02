@@ -1,4 +1,4 @@
-//! Contains the Humpty HTTP implementation.
+//! Contains the Tii HTTP implementation.
 
 pub mod cookie;
 pub mod headers;

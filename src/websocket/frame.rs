@@ -1,6 +1,6 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
-use crate::humpty_error::{HumptyResult, RequestHeadParsingError};
+use crate::tii_error::{TiiResult, RequestHeadParsingError};
 use crate::stream::{ConnectionStreamRead, ConnectionStreamWrite};
 use crate::util;
 
@@ -63,7 +63,7 @@ impl Frame {
     write: &T,
     opcode: Opcode,
     payload: impl AsRef<[u8]>,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     let payload = payload.as_ref();
     let tmp_frame = Self {
       fin: true,
@@ -82,7 +82,7 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
-  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> HumptyResult<Self> {
+  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> TiiResult<Self> {
     let mut header: [u8; 2] = [0; 2];
     stream.read_exact(&mut header)?;
 
@@ -125,13 +125,13 @@ impl Frame {
     Ok(Self { fin, rsv, opcode, mask, length, masking_key, payload })
   }
 
-  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> HumptyResult<()> {
+  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
     self.write_to_no_flush(write)?;
     write.flush()?;
     Ok(())
   }
 
-  fn write_to_no_flush<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> HumptyResult<()> {
+  fn write_to_no_flush<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
     let mut buf = [0, 0];
 
     // Set the header bits

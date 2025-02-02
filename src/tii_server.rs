@@ -7,8 +7,8 @@ use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
-use crate::humpty_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
-use crate::humpty_error::{HumptyError, HumptyResult};
+use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
+use crate::tii_error::{TiiError, TiiResult};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::{error_log, trace_log};
 use std::any::Any;
@@ -43,7 +43,7 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 /// Struct that represents a built server capable of handling connections from some sources.
 /// It does NOT own any OS resources like server sockets / file descriptors.
 #[derive(Debug)]
-pub struct HumptyServer {
+pub struct TiiServer {
   shutdown: AtomicBool,
   routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
@@ -71,7 +71,7 @@ impl Default for Hooks {
   }
 }
 
-impl HumptyServer {
+impl TiiServer {
   #[expect(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
     routers: Vec<Box<dyn Router>>,
@@ -84,7 +84,7 @@ impl HumptyServer {
     request_body_io_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
   ) -> Self {
-    HumptyServer {
+    TiiServer {
       shutdown: AtomicBool::new(false),
       routers,
       error_handler,
@@ -100,7 +100,7 @@ impl HumptyServer {
   }
 
   /// Handles a connection without any metadata
-  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> HumptyResult<()> {
+  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> TiiResult<()> {
     self.handle_connection_inner::<S, PhantomStreamMetadata>(stream, None)
   }
 
@@ -109,11 +109,11 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: M,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     self.handle_connection_inner(stream, Some(meta))
   }
 
-  /// Will mark this humpty server as shutdown.
+  /// Will mark this tii server as shutdown.
   /// It will no longer accept new connections, send Connection: Close for all pending requests
   /// but not cancel any ongoing requests.
   ///
@@ -131,12 +131,12 @@ impl HumptyServer {
     }
   }
 
-  /// Returns true if this HumptyServer is marked for shutdown.
+  /// Returns true if this TiiServer is marked for shutdown.
   pub fn is_shutdown(&self) -> bool {
     self.shutdown.load(SeqCst)
   }
 
-  /// Adds the given shutdown hook to the HumptyServer.
+  /// Adds the given shutdown hook to the TiiServer.
   pub fn add_shutdown_hook<F: FnMut() + Sync + Send + 'static>(&self, mut hook: F) {
     let Ok(mut guard) = self.shutdown_hooks.0.lock() else {
       //Only way for poisoned mutex was if shutdown was already called and a hook panicked.
@@ -158,9 +158,9 @@ impl HumptyServer {
     &self,
     stream: S,
     meta: Option<M>,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     if self.shutdown.load(SeqCst) {
-      return Err(HumptyError::from_io_kind(ErrorKind::ConnectionAborted));
+      return Err(TiiError::from_io_kind(ErrorKind::ConnectionAborted));
     }
 
     let stream = stream.into_connection_stream();
@@ -168,7 +168,7 @@ impl HumptyServer {
     stream.set_read_timeout(self.connection_timeout)?;
     stream.set_write_timeout(self.write_timeout)?;
     if !stream.ensure_readable()? {
-      return Err(HumptyError::from_io_kind(ErrorKind::UnexpectedEof));
+      return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 
     let meta = meta.map(|a| Arc::new(a) as Arc<dyn ConnectionStreamMetadata>);
@@ -269,7 +269,7 @@ impl HumptyServer {
     Ok(())
   }
 
-  fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> HumptyResult<bool> {
+  fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> TiiResult<bool> {
     if self.is_shutdown() {
       trace_log!("Keep-alive server shutting down...");
       return Ok(false);
@@ -316,7 +316,7 @@ impl HumptyServer {
     context: RequestContext,
     keep_alive: bool,
     mut response: Response,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     if context.request_head().version() == HttpVersion::Http11 {
       let previous_headers = if keep_alive {
         response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
@@ -326,7 +326,7 @@ impl HumptyServer {
 
       if !previous_headers.is_empty() {
         trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
-        return Err(HumptyError::new_io(
+        return Err(TiiError::new_io(
           io::ErrorKind::InvalidInput,
           "Endpoint has set banned header 'Connection'",
         ));
@@ -347,7 +347,7 @@ impl HumptyServer {
     Ok(())
   }
 
-  fn fallback_error_handler(&self, request: &mut RequestContext, error: HumptyError) -> Response {
+  fn fallback_error_handler(&self, request: &mut RequestContext, error: TiiError) -> Response {
     request.force_connection_close();
 
     error_log!(
@@ -361,9 +361,9 @@ impl HumptyServer {
   }
 }
 
-impl Drop for HumptyServer {
+impl Drop for TiiServer {
   fn drop(&mut self) {
     self.shutdown();
-    trace_log!("HumptyServer::drop");
+    trace_log!("TiiServer::drop");
   }
 }

@@ -1,11 +1,11 @@
-//! Provides a number of useful handlers for Humpty apps.
+//! Provides a number of useful handlers for Tii apps.
 use crate::http::headers::HeaderName;
 use crate::http::response_body::ResponseBody;
 use crate::http::{Response, StatusCode};
 
 use crate::http::mime::MimeType;
 use crate::http::request_context::RequestContext;
-use crate::humpty_error::HumptyResult;
+use crate::tii_error::TiiResult;
 use std::fs::{metadata, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -20,7 +20,7 @@ pub enum LocatedPath {
   File(PathBuf),
 }
 
-fn try_file_open(path: &PathBuf) -> HumptyResult<Response> {
+fn try_file_open(path: &PathBuf) -> TiiResult<Response> {
   let mime = MimeType::from_extension(
     path.extension().map(|a| a.to_string_lossy().to_string()).unwrap_or("".to_string()).as_str(),
   );
@@ -36,7 +36,7 @@ fn try_file_open(path: &PathBuf) -> HumptyResult<Response> {
 }
 
 /// Serve the specified file, or a default error 404 if not found.
-pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
+pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   let path_buf = PathBuf::from(file_path);
 
   move |_| try_file_open(&path_buf)
@@ -52,7 +52,7 @@ pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> Humpty
 /// This is **not** equivalent to `serve_dir`, as `serve_dir` respects index files within nested directories.
 pub fn serve_as_file_path(
   directory_path: &'static str,
-) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
+) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
     let file_path =
@@ -72,7 +72,7 @@ pub fn serve_as_file_path(
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
 pub fn serve_dir(
   directory_path: &'static str,
-) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
+) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
@@ -135,6 +135,6 @@ fn try_find_path(directory: &str, request_path: &str, index_files: &[&str]) -> O
 }
 
 /// Redirects requests to the given location with status code 301.
-pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> HumptyResult<Response> {
+pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |_| Ok(Response::permanent_redirect_no_body(location))
 }

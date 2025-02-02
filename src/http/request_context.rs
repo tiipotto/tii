@@ -4,8 +4,8 @@ use crate::http::headers::HeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
 use crate::http::RequestHead;
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
-use crate::humpty_server::ConnectionStreamMetadata;
+use crate::tii_error::{TiiError, TiiResult, RequestHeadParsingError};
+use crate::tii_server::ConnectionStreamMetadata;
 use crate::stream::ConnectionStream;
 use crate::util;
 use crate::util::unwrap_some;
@@ -42,7 +42,7 @@ impl RequestContext {
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     max_head_buffer_size: usize,
-  ) -> HumptyResult<RequestContext> {
+  ) -> TiiResult<RequestContext> {
     let id = util::next_id();
     let peer_address = stream.peer_addr()?;
     let local_address = stream.local_addr()?;
@@ -82,7 +82,7 @@ impl RequestContext {
           });
         }
         Some(other) => {
-          return Err(HumptyError::from(RequestHeadParsingError::TransferEncodingNotSupported(
+          return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
             other.to_string(),
           )))
         }
@@ -92,7 +92,7 @@ impl RequestContext {
 
     if let Some(content_length) = req.get_header(&HeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
-        HumptyError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+        TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
       let is_http_10 = req.version() == HttpVersion::Http10;

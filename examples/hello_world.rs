@@ -1,7 +1,7 @@
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
 use std::net::TcpListener;
 use std::time::Duration;
 
@@ -10,7 +10,7 @@ fn hello_world(request: &RequestContext) -> Response {
   Response::ok(response_body, MimeType::TextPlain)
 }
 fn main() {
-  let humpty_server = HumptyBuilder::builder(|builder| {
+  let tii_server = TiiBuilder::builder(|builder| {
     builder
       .router(|router| router.route_get("/*", hello_world))?
       .with_keep_alive_timeout(Some(Duration::ZERO)) //We disable http keep alive.
@@ -21,7 +21,7 @@ fn main() {
   // Connections will be processed 1 at a time.
   let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
   for tcp_stream in tcp_listen.incoming() {
-    if let Err(err) = humpty_server.handle_connection(tcp_stream.unwrap()) {
+    if let Err(err) = tii_server.handle_connection(tcp_stream.unwrap()) {
       eprintln!("Error handling request: {}", err);
     }
   }

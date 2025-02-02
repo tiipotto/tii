@@ -2,7 +2,7 @@
 
 use crate::http::request_context::RequestContext;
 use crate::http::Response;
-use crate::humpty_error::HumptyResult;
+use crate::tii_error::TiiResult;
 use crate::stream::ConnectionStream;
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::fmt::{Debug, Formatter};
@@ -39,14 +39,14 @@ impl Default for ThreadAdapterJoinHandle {
 /// Trait that represents a user implemented opaque thread starting/pooling mechanism.
 pub trait ThreadAdapter: Send + Sync + Debug {
   /// Spawns executes the given task immediately in the thread. like "thread::spawn".
-  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle>;
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle>;
 }
 
 #[allow(dead_code)] //This is not used in all feature combinations.
 #[derive(Debug)]
 pub(crate) struct DefaultThreadAdapter;
 impl ThreadAdapter for DefaultThreadAdapter {
-  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle> {
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle> {
     let hdl: JoinHandle<()> = thread::Builder::new().spawn(task)?;
     Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
   }
@@ -60,21 +60,21 @@ pub trait WebsocketEndpoint: Send + Sync {
     request: &RequestContext,
     receiver: WebsocketReceiver,
     sender: WebsocketSender,
-  ) -> HumptyResult<()>;
+  ) -> TiiResult<()>;
 }
 
 trait IntoWebsocketEndpointResponse {
-  fn into(self) -> HumptyResult<()>;
+  fn into(self) -> TiiResult<()>;
 }
 
-impl IntoWebsocketEndpointResponse for HumptyResult<()> {
-  fn into(self) -> HumptyResult<()> {
+impl IntoWebsocketEndpointResponse for TiiResult<()> {
+  fn into(self) -> TiiResult<()> {
     self
   }
 }
 
 impl IntoWebsocketEndpointResponse for () {
-  fn into(self) -> HumptyResult<()> {
+  fn into(self) -> TiiResult<()> {
     Ok(())
   }
 }
@@ -89,7 +89,7 @@ where
     request: &RequestContext,
     receiver: WebsocketReceiver,
     sender: WebsocketSender,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     self(request, receiver, sender).into()
   }
 }
@@ -100,23 +100,23 @@ where
 /// ## Example
 /// The most basic request handler would be as follows:
 /// ```
-/// use humpty::http::mime::MimeType;
+/// use tii::http::mime::MimeType;
 ///
-/// fn handler(_: humpty::http::RequestHead) -> humpty::http::Response {
-///     humpty::http::Response::ok("Success", MimeType::TextPlain)
+/// fn handler(_: tii::http::RequestHead) -> tii::http::Response {
+///     tii::http::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```
 pub trait HttpEndpoint: Send + Sync {
   /// Serve an ordinary http request.
-  fn serve(&self, request: &RequestContext) -> HumptyResult<Response>;
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response>;
 }
 
 impl<F, R> HttpEndpoint for F
 where
-  R: Into<HumptyResult<Response>>,
+  R: Into<TiiResult<Response>>,
   F: Fn(&RequestContext) -> R + Send + Sync,
 {
-  fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
     self(request).into()
   }
 }
@@ -128,38 +128,38 @@ pub trait RouterFilter: Send + Sync {
   /// true -> the router should handle this one,
   /// false -> the router should not handle this one,
   //TODO make it impossible for this shit to read the body.
-  fn filter(&self, request: &RequestContext) -> HumptyResult<bool>;
+  fn filter(&self, request: &RequestContext) -> TiiResult<bool>;
 }
 
-impl<F: Fn(&RequestContext) -> HumptyResult<bool> + Send + Sync> RouterFilter for F {
-  fn filter(&self, request: &RequestContext) -> HumptyResult<bool> {
+impl<F: Fn(&RequestContext) -> TiiResult<bool> + Send + Sync> RouterFilter for F {
+  fn filter(&self, request: &RequestContext) -> TiiResult<bool> {
     self(request)
   }
 }
 
 trait IntoRequestFilterResult {
-  fn into(self) -> HumptyResult<Option<Response>>;
+  fn into(self) -> TiiResult<Option<Response>>;
 }
 
 impl IntoRequestFilterResult for Option<Response> {
-  fn into(self) -> HumptyResult<Option<Response>> {
+  fn into(self) -> TiiResult<Option<Response>> {
     Ok(self)
   }
 }
 
-impl IntoRequestFilterResult for HumptyResult<Option<Response>> {
-  fn into(self) -> HumptyResult<Option<Response>> {
+impl IntoRequestFilterResult for TiiResult<Option<Response>> {
+  fn into(self) -> TiiResult<Option<Response>> {
     self
   }
 }
 impl IntoRequestFilterResult for () {
-  fn into(self) -> HumptyResult<Option<Response>> {
+  fn into(self) -> TiiResult<Option<Response>> {
     Ok(None)
   }
 }
 
-impl IntoRequestFilterResult for HumptyResult<()> {
-  fn into(self) -> HumptyResult<Option<Response>> {
+impl IntoRequestFilterResult for TiiResult<()> {
+  fn into(self) -> TiiResult<Option<Response>> {
     self.map(|_| None)
   }
 }
@@ -176,7 +176,7 @@ pub trait RequestFilter: Send + Sync {
   /// Ok(None) -> proceed.
   /// Ok(Some) -> abort request with given response.
   /// Err -> Call error handler and proceed (endpoint won't be called)
-  fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
+  fn filter(&self, request: &mut RequestContext) -> TiiResult<Option<Response>>;
 }
 
 impl<F, R> RequestFilter for F
@@ -184,7 +184,7 @@ where
   R: IntoRequestFilterResult,
   F: Fn(&mut RequestContext) -> R + Send + Sync,
 {
-  fn filter(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
+  fn filter(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     self(request).into()
   }
 }
@@ -199,15 +199,15 @@ pub trait ResponseFilter: Send + Sync {
   /// Called with the request context adn response after the endpoint or error handler is called.
   /// Ok(...) -> proceed.
   /// Err -> Call error handler and proceed. (You cannot create a loop, a Response filter will only be called exactly once per RequestContext)
-  fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response>;
+  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response>;
 }
 
 impl<F, R> ResponseFilter for F
 where
-  R: Into<HumptyResult<Response>>,
+  R: Into<TiiResult<Response>>,
   F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
 {
-  fn filter(&self, request: &mut RequestContext, response: Response) -> HumptyResult<Response> {
+  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response> {
     self(request, response).into()
   }
 }
@@ -233,7 +233,7 @@ pub trait Router: Debug + Send + Sync {
   /// Err -> abort
   ///
   /// Note: If the request body is read then returning Ok(None) will most likely result in unintended behavior in the next Router.
-  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>>;
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>>;
 
   /// Handle a web socket request.
   /// Ok(true) -> request was handled
@@ -245,5 +245,5 @@ pub trait Router: Debug + Send + Sync {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<RouterWebSocketServingResponse>;
+  ) -> TiiResult<RouterWebSocketServingResponse>;
 }

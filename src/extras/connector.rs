@@ -1,5 +1,5 @@
-use crate::humpty_builder::ThreadAdapterJoinHandle;
-use crate::humpty_server::ConnectionStreamMetadata;
+use crate::tii_builder::ThreadAdapterJoinHandle;
+use crate::tii_server::ConnectionStreamMetadata;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::Ordering::SeqCst;
@@ -16,10 +16,10 @@ use std::time::Duration;
 /// Otherwise, is that we log an error and later succeed.
 ///
 /// If this value is too big:
-/// We may block for this amount of time without the user of humpty expecting it.
+/// We may block for this amount of time without the user of tii expecting it.
 pub(crate) const CONNECTOR_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Trait that defines all fn's that each connector implemented by humpty::extras has.
+/// Trait that defines all fn's that each connector implemented by tii::extras has.
 pub trait Connector {
   /// Request a shutdown.
   /// This will not interrupt/stop open connections.
@@ -46,7 +46,7 @@ pub trait Connector {
   fn join(&self, timeout: Option<Duration>) -> bool;
 }
 
-///Metadata type appended by the extras Humpty Connectors.
+///Metadata type appended by the extras Tii Connectors.
 #[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ConnectorMeta {

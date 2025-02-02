@@ -1,11 +1,11 @@
 use colog::format::{CologStyle, DefaultCologStyle};
-use humpty::extras;
-use humpty::extras::Connector;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::extras;
+use tii::extras::Connector;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 use log::info;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -13,11 +13,11 @@ use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 
-fn hello(_: &RequestContext) -> HumptyResult<Response> {
+fn hello(_: &RequestContext) -> TiiResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
 }
 
-fn main() -> HumptyResult<()> {
+fn main() -> TiiResult<()> {
   _ = colog::default_builder()
     .format(|buf, record| {
       let sep = DefaultCologStyle.line_separator();
@@ -33,16 +33,16 @@ fn main() -> HumptyResult<()> {
     .filter_level(log::LevelFilter::Trace)
     .try_init();
 
-  let humpty_server = HumptyBuilder::builder_arc(|builder| {
+  let tii_server = TiiBuilder::builder_arc(|builder| {
     builder
       .router(|router| router.route_any("/*", hello))?
       .with_connection_timeout(Some(Duration::from_secs(5)))?
       .ok()
   })?;
 
-  let c1 = extras::TcpConnector::start_unpooled("0.0.0.0:28080", humpty_server.clone())?;
-  let c2 = extras::TcpConnector::start_unpooled("0.0.0.0:28081", humpty_server.clone())?;
-  let c3 = extras::TcpConnector::start_unpooled("0.0.0.0:28082", humpty_server.clone())?;
+  let c1 = extras::TcpConnector::start_unpooled("0.0.0.0:28080", tii_server.clone())?;
+  let c2 = extras::TcpConnector::start_unpooled("0.0.0.0:28081", tii_server.clone())?;
+  let c3 = extras::TcpConnector::start_unpooled("0.0.0.0:28082", tii_server.clone())?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28080")?, Duration::from_secs(30))?;
@@ -76,8 +76,8 @@ fn main() -> HumptyResult<()> {
 
   sleep(Duration::from_secs(5));
 
-  humpty_server.shutdown();
-  // Shutting down the humpty server should also shut down all connectors.
+  tii_server.shutdown();
+  // Shutting down the tii server should also shut down all connectors.
   assert!(c1.is_marked_for_shutdown());
   assert!(c2.is_marked_for_shutdown());
   assert!(c3.is_marked_for_shutdown());

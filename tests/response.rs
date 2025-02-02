@@ -1,14 +1,14 @@
 mod mock_stream;
 
-use humpty::http::cookie::{SameSite, SetCookie};
-use humpty::http::headers::HeaderName;
-use humpty::http::response::Response;
-use humpty::http::status::StatusCode;
+use tii::http::cookie::{SameSite, SetCookie};
+use tii::http::headers::HeaderName;
+use tii::http::response::Response;
+use tii::http::status::StatusCode;
 use mock_stream::MockStream;
 
-use humpty::http::request::HttpVersion;
-use humpty::http::response_body::{ResponseBody, ResponseBodySink};
-use humpty::stream::IntoConnectionStream;
+use tii::http::request::HttpVersion;
+use tii::http::response_body::{ResponseBody, ResponseBodySink};
+use tii::stream::IntoConnectionStream;
 use std::time::Duration;
 
 #[test]

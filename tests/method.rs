@@ -1,4 +1,4 @@
-use humpty::http::method::Method;
+use tii::http::method::Method;
 
 #[test]
 fn test_from_name() {

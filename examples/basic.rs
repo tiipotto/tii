@@ -1,16 +1,16 @@
-use humpty::extras::{Connector, TcpConnector};
-use humpty::http::method::Method;
-use humpty::http::mime::{AcceptMimeType, MimeType};
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::extras::{Connector, TcpConnector};
+use tii::http::method::Method;
+use tii::http::mime::{AcceptMimeType, MimeType};
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 use log::info;
 
-fn main() -> HumptyResult<()> {
+fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-  let humpty_server = HumptyBuilder::builder_arc(|builder| {
+  let tii_server = TiiBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.
     builder.router(|router| {
       router
@@ -39,7 +39,7 @@ fn main() -> HumptyResult<()> {
         .route_any("/any/method", echo_method)?
         //Same but limited to http GET method
         .route_get("/only/get", echo_method)?
-        // Humpty also supports non-standard custom methods.
+        // Tii also supports non-standard custom methods.
         .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)?
         // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
@@ -68,36 +68,36 @@ fn main() -> HumptyResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
-fn pre_routing(req: &mut RequestContext) -> HumptyResult<Option<Response>> {
+fn pre_routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   info!("pre_routing {:?}", req);
   Ok(None)
 }
 
-fn routing(req: &mut RequestContext) -> HumptyResult<Option<Response>> {
+fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   info!("routing {:?}", req);
   Ok(None)
 }
 
-fn resp(req: &mut RequestContext, mut resp: Response) -> HumptyResult<Response> {
+fn resp(req: &mut RequestContext, mut resp: Response) -> TiiResult<Response> {
   info!("resp {:?}", req);
   resp.add_header("X-Magic", "true magic")?;
   Ok(resp)
 }
 
-fn home(_: &RequestContext) -> HumptyResult<Response> {
+fn home(_: &RequestContext) -> TiiResult<Response> {
   Ok(Response::ok("<html><body><h1>Home</h1></body></html>", MimeType::TextHtml))
 }
 
-fn contact(_: &RequestContext) -> HumptyResult<Response> {
+fn contact(_: &RequestContext) -> TiiResult<Response> {
   Ok(Response::ok("<html><body><h1>Contact</h1></body></html>", MimeType::TextHtml))
 }
 
-fn generic(request: &RequestContext) -> HumptyResult<Response> {
+fn generic(request: &RequestContext) -> TiiResult<Response> {
   let html = format!(
     "<html><body><h1>You just requested {}.</h1></body></html>",
     request.request_head().path()
@@ -106,7 +106,7 @@ fn generic(request: &RequestContext) -> HumptyResult<Response> {
   Ok(Response::ok(html, MimeType::TextHtml))
 }
 
-fn pong(request: &RequestContext) -> HumptyResult<Response> {
+fn pong(request: &RequestContext) -> TiiResult<Response> {
   let body = if let Some(body) = request.request_body() {
     let mut buffer = Vec::new();
     body.clone().read_to_end(&mut buffer)?;

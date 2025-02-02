@@ -5,14 +5,14 @@ use crate::http::headers::{Header, HeaderName, Headers};
 use crate::http::method::Method;
 
 use crate::http::mime::{AcceptQualityMimeType, MimeType, QValue};
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError, UserError};
+use crate::tii_error::{TiiError, TiiResult, RequestHeadParsingError, UserError};
 use crate::stream::ConnectionStream;
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
 use std::fmt::{Display, Formatter};
 use std::io::ErrorKind;
 
-/// Enum for http versions humpty supports.
+/// Enum for http versions tii supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[non_exhaustive] //Not sure but I don't want to close the door on http 2 shut!
 pub enum HttpVersion {
@@ -108,7 +108,7 @@ pub struct RequestHead {
   headers: Headers,
 }
 
-fn parse_status_line(start_line_buf: &Vec<u8>) -> HumptyResult<&str> {
+fn parse_status_line(start_line_buf: &Vec<u8>) -> TiiResult<&str> {
   for n in start_line_buf {
     // https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters
     // plus space char which we check later...
@@ -159,7 +159,7 @@ fn parse_status_line(start_line_buf: &Vec<u8>) -> HumptyResult<&str> {
   )
 }
 
-fn parse_raw_query(raw_query: &str) -> HumptyResult<Vec<(String, String)>> {
+fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
   if raw_query.is_empty() {
     return Ok(Vec::new());
   }
@@ -236,12 +236,12 @@ fn parse_raw_query(raw_query: &str) -> HumptyResult<Vec<(String, String)>> {
 
 impl RequestHead {
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn new(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> HumptyResult<Self> {
+  pub fn new(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
     let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
     if count == 0 {
-      return Err(HumptyError::from_io_kind(ErrorKind::UnexpectedEof));
+      return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 
     if count == max_head_buffer_size {
@@ -267,14 +267,14 @@ impl RequestHead {
       .map_err(|version| RequestHeadParsingError::HttpVersionNotSupported(version.to_string()))?;
 
     if start_line.next().is_some() {
-      return Err(HumptyError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
+      return Err(TiiError::from(RequestHeadParsingError::StatusLineTooManyWhitespaces));
     }
 
     let raw_path = unwrap_some(uri_iter.next());
 
     let path = urlencoding::decode(raw_path)
       .map_err(|_| {
-        HumptyError::from(RequestHeadParsingError::PathInvalidUrlEncoding(raw_path.to_string()))
+        TiiError::from(RequestHeadParsingError::PathInvalidUrlEncoding(raw_path.to_string()))
       })?
       .to_string();
 
@@ -285,7 +285,7 @@ impl RequestHead {
 
     if version == HttpVersion::Http09 {
       if method != Method::Get {
-        return Err(HumptyError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(
+        return Err(TiiError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(
           version, method,
         )));
       }
@@ -323,13 +323,13 @@ impl RequestHead {
       let name = unwrap_some(line_parts.next()).trim();
 
       if name.is_empty() {
-        return Err(HumptyError::from(RequestHeadParsingError::HeaderNameEmpty));
+        return Err(TiiError::from(RequestHeadParsingError::HeaderNameEmpty));
       }
 
       let value = line_parts.next().ok_or(RequestHeadParsingError::HeaderValueMissing)?.trim();
 
       if value.is_empty() {
-        return Err(HumptyError::from(RequestHeadParsingError::HeaderValueEmpty));
+        return Err(TiiError::from(RequestHeadParsingError::HeaderValueEmpty));
       }
 
       headers.add(HeaderName::from(name), value);
@@ -520,7 +520,7 @@ impl RequestHead {
   }
 
   /// Removes all instances of a particular header.
-  pub fn remove_header(&mut self, hdr: impl AsRef<str>) -> HumptyResult<()> {
+  pub fn remove_header(&mut self, hdr: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
       HeaderName::Accept => {
         self.accept = vec![AcceptQualityMimeType::default()];
@@ -547,7 +547,7 @@ impl RequestHead {
 
   /// Sets the header value.
   /// Some header values cannot be modified through this fn and attempting to change them are a noop.
-  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
       HeaderName::Accept => {
@@ -583,7 +583,7 @@ impl RequestHead {
   }
 
   /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
       HeaderName::Accept => {

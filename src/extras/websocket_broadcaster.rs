@@ -6,7 +6,7 @@ use std::{io, thread, time::Duration};
 use crate::http::request_context::RequestContext;
 use crate::websocket::message::WebsocketMessage;
 use crate::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
-use crate::{error_log, info_log, util, warn_log, HumptyError};
+use crate::{error_log, info_log, util, warn_log, TiiError};
 
 type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
 
@@ -15,7 +15,7 @@ type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
 ///
 pub fn ws_link_hook(
   hook: Arc<Mutex<Sender<WebsocketContext>>>,
-) -> impl Fn(&RequestContext, WebsocketReceiver, WebsocketSender) -> Result<(), HumptyError> {
+) -> impl Fn(&RequestContext, WebsocketReceiver, WebsocketSender) -> Result<(), TiiError> {
   move |request: &RequestContext, receiver: WebsocketReceiver, sender: WebsocketSender| {
     let hook = util::unwrap_poison(hook.lock());
     Ok(hook?.send((receiver, sender, request.peer_address().to_string()))?)
@@ -34,9 +34,9 @@ pub enum AppError {
   Panic,
 }
 
-/// WebSocketApp builder/linker for setup and linking to Humpty
+/// WebSocketApp builder/linker for setup and linking to Tii
 pub struct WsBroadcastBuilder {
-  humpty_link: Arc<Mutex<Sender<WebsocketContext>>>,
+  tii_link: Arc<Mutex<Sender<WebsocketContext>>>,
   state: State,
 }
 
@@ -47,7 +47,7 @@ pub struct App {
 
 // internal app structure
 struct State {
-  // A receiver to receive new WebsocketStreams from HumptyServer.
+  // A receiver to receive new WebsocketStreams from TiiServer.
   incoming_streams: Receiver<WebsocketContext>,
 
   heartbeat: Option<Duration>,
@@ -91,7 +91,7 @@ impl BroadcastSender {
   }
 }
 
-/// Represents a message to be sent from the server (humpty) to client(s).
+/// Represents a message to be sent from the server (tii) to client(s).
 #[derive(Debug)]
 pub enum OutgoingMessage {
   /// A message to be sent to a specific client.
@@ -106,10 +106,10 @@ pub enum OutgoingMessage {
 /// ## Example
 /// A basic example of an event handler would be as follows:
 /// ```
-/// fn connection_handler(stream: &humpty::extras::WsHandle) {
+/// fn connection_handler(stream: &tii::extras::WsHandle) {
 ///     println!("A new client connected! {:?}", stream.peer_addr());
 ///
-///     stream.send(humpty::websocket::message::WebsocketMessage::new_text("Hello, World!"));
+///     stream.send(tii::websocket::message::WebsocketMessage::new_text("Hello, World!"));
 /// }
 /// ```
 pub trait EventHandler: Fn(WsHandle) + Send + Sync + 'static {}
@@ -121,8 +121,8 @@ impl<T> EventHandler for T where T: Fn(WsHandle) + Send + Sync + 'static {}
 /// ## Example
 /// A basic example of a message handler would be as follows:
 /// ```
-/// use humpty::websocket::message::WebsocketMessage;
-/// use humpty::extras::WsHandle;
+/// use tii::websocket::message::WebsocketMessage;
+/// use tii::extras::WsHandle;
 /// fn message_handler(handle: WsHandle, message: WebsocketMessage) {
 ///    println!("{:?}", message);
 ///
@@ -138,7 +138,7 @@ impl Default for WsBroadcastBuilder {
     let (broadcast_sender, outgoing_broadcasts) = channel();
 
     Self {
-      humpty_link: Arc::new(Mutex::new(connect_hook)),
+      tii_link: Arc::new(Mutex::new(connect_hook)),
       state: State {
         heartbeat: Some(Duration::from_secs(5)),
         send_streams: Default::default(),
@@ -162,9 +162,9 @@ impl WsBroadcastBuilder {
   }
 
   /// Returns a reference to the connection hook of the application.
-  /// This is used by the HumptyServer to send new streams to the app.
+  /// This is used by the TiiServer to send new streams to the app.
   pub fn connect_hook(&self) -> Arc<Mutex<Sender<WebsocketContext>>> {
-    self.humpty_link.clone()
+    self.tii_link.clone()
   }
 
   /// Returns a new `BroadcastSender`, which can be used to send messages.
@@ -202,7 +202,7 @@ impl WsBroadcastBuilder {
   /// Registers a shutdown signal to gracefully shutdown the app
   ///
   /// For a full/consistent shutdown, you must set both
-  ///`HumptyBuilder::with_connection_timeout` and `with_heartbeat`
+  ///`TiiBuilder::with_connection_timeout` and `with_heartbeat`
   ///
   /// Threads are fully joined, but won't exit until timeouts/heartbeats.
   pub fn with_shutdown(mut self, shutdown_receiver: Receiver<()>) -> Self {
@@ -213,7 +213,7 @@ impl WsBroadcastBuilder {
 
 impl App {
   /// Start the application on the main thread.
-  /// This blocks until the Humpty server has been dropped.
+  /// This blocks until the Tii server has been dropped.
   pub fn run(self) -> Result<(), AppError> {
     let connect_handler = self.state.connect_handler.map(Arc::new);
     let disconnect_handler = self.state.disconnect_handler.map(Arc::new);
@@ -278,9 +278,9 @@ impl App {
         let new_stream = match recv {
           Ok(ns) => ns,
           Err(RecvTimeoutError::Timeout) => continue,
-          // The HumptyServer has exit, so we tell everybody to exit
+          // The TiiServer has exit, so we tell everybody to exit
           Err(RecvTimeoutError::Disconnected) => {
-            info_log!("WebsocketApp initializing shutdown, due to Humpty exiting");
+            info_log!("WebsocketApp initializing shutdown, due to Tii exiting");
             sd_flag.store(true, Ordering::SeqCst);
             break;
           }

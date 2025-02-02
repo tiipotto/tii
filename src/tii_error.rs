@@ -12,16 +12,16 @@ use std::hash::Hash;
 use std::io;
 use std::io::ErrorKind;
 
-pub type HumptyResult<T> = Result<T, HumptyError>;
+pub type TiiResult<T> = Result<T, TiiError>;
 
-impl From<Response> for HumptyResult<Response> {
+impl From<Response> for TiiResult<Response> {
   fn from(value: Response) -> Self {
     Ok(value)
   }
 }
 
-impl From<HumptyError> for HumptyResult<Response> {
-  fn from(value: HumptyError) -> Self {
+impl From<TiiError> for TiiResult<Response> {
+  fn from(value: TiiError) -> Self {
     Err(value)
   }
 }
@@ -101,7 +101,7 @@ impl Error for InvalidPathError {}
 
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum HumptyError {
+pub enum TiiError {
   RequestHeadParsing(RequestHeadParsingError),
   UserError(UserError),
   InvalidPathError(InvalidPathError),
@@ -109,99 +109,99 @@ pub enum HumptyError {
   Other(Box<dyn Error + Send + Sync>),
 }
 
-impl HumptyError {
-  pub fn new_io<E: Into<Box<dyn Error + Send + Sync>>>(kind: ErrorKind, message: E) -> HumptyError {
+impl TiiError {
+  pub fn new_io<E: Into<Box<dyn Error + Send + Sync>>>(kind: ErrorKind, message: E) -> TiiError {
     io::Error::new(kind, message).into()
   }
 
-  pub fn from_io_kind(kind: ErrorKind) -> HumptyError {
+  pub fn from_io_kind(kind: ErrorKind) -> TiiError {
     io::Error::from(kind).into()
   }
 
   pub fn kind(&self) -> ErrorKind {
     match self {
-      HumptyError::IO(io) => io.kind(),
-      HumptyError::RequestHeadParsing(_) => ErrorKind::InvalidData,
+      TiiError::IO(io) => io.kind(),
+      TiiError::RequestHeadParsing(_) => ErrorKind::InvalidData,
       _ => ErrorKind::Other,
     }
   }
   pub fn downcast_mut<T: Error + Send + 'static>(&mut self) -> Option<&mut T> {
     match self {
-      HumptyError::IO(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
-      HumptyError::Other(other) => other.downcast_mut::<T>(),
+      TiiError::IO(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      TiiError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      TiiError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      TiiError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      TiiError::Other(other) => other.downcast_mut::<T>(),
     }
   }
 
   pub fn downcast_ref<T: Error + Send + 'static>(&self) -> Option<&T> {
     match self {
-      HumptyError::IO(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
-      HumptyError::Other(other) => other.downcast_ref::<T>(),
+      TiiError::IO(err) => (err as &dyn Error).downcast_ref::<T>(),
+      TiiError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
+      TiiError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      TiiError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      TiiError::Other(other) => other.downcast_ref::<T>(),
     }
   }
   pub fn into_inner(self) -> Box<dyn Error + Send + Sync + 'static> {
     match self {
-      HumptyError::IO(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
-      HumptyError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
-      HumptyError::UserError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
-      HumptyError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
-      HumptyError::Other(other) => other,
+      TiiError::IO(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      TiiError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      TiiError::UserError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      TiiError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      TiiError::Other(other) => other,
     }
   }
 }
 
-impl Display for HumptyError {
+impl Display for TiiError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      HumptyError::IO(err) => Display::fmt(err, f),
-      HumptyError::RequestHeadParsing(err) => Display::fmt(err, f),
-      HumptyError::UserError(err) => Display::fmt(err, f),
-      HumptyError::InvalidPathError(err) => Display::fmt(err, f),
-      HumptyError::Other(err) => Display::fmt(err, f),
+      TiiError::IO(err) => Display::fmt(err, f),
+      TiiError::RequestHeadParsing(err) => Display::fmt(err, f),
+      TiiError::UserError(err) => Display::fmt(err, f),
+      TiiError::InvalidPathError(err) => Display::fmt(err, f),
+      TiiError::Other(err) => Display::fmt(err, f),
     }
   }
 }
 
-impl<T> From<T> for HumptyError
+impl<T> From<T> for TiiError
 where
   T: Error + Send + Sync + 'static,
 {
   fn from(value: T) -> Self {
     let mut dyn_box = Box::new(value) as Box<dyn Error + Send + Sync>;
     dyn_box = match dyn_box.downcast::<io::Error>() {
-      Ok(err) => return HumptyError::IO(*err),
+      Ok(err) => return TiiError::IO(*err),
       Err(err) => err,
     };
     dyn_box = match dyn_box.downcast::<RequestHeadParsingError>() {
-      Ok(err) => return HumptyError::RequestHeadParsing(*err),
+      Ok(err) => return TiiError::RequestHeadParsing(*err),
       Err(err) => err,
     };
 
-    HumptyError::Other(dyn_box)
+    TiiError::Other(dyn_box)
   }
 }
 
-impl From<HumptyError> for Box<dyn Error + Send> {
-  fn from(value: HumptyError) -> Self {
+impl From<TiiError> for Box<dyn Error + Send> {
+  fn from(value: TiiError) -> Self {
     value.into_inner()
   }
 }
 
-impl<T> From<UserError> for HumptyResult<T> {
+impl<T> From<UserError> for TiiResult<T> {
   fn from(value: UserError) -> Self {
-    Err(HumptyError::UserError(value))
+    Err(TiiError::UserError(value))
   }
 }
 
-impl From<HumptyError> for io::Error {
-  fn from(value: HumptyError) -> Self {
+impl From<TiiError> for io::Error {
+  fn from(value: TiiError) -> Self {
     match value {
-      HumptyError::IO(io) => io,
+      TiiError::IO(io) => io,
       err => io::Error::new(err.kind(), err.into_inner()),
     }
   }

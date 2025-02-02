@@ -1,22 +1,22 @@
 use crate::mock_stream::MockStream;
-use humpty::http::headers::HeaderName;
-use humpty::http::mime::{AcceptQualityMimeType, MimeType};
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::http::headers::HeaderName;
+use tii::http::mime::{AcceptQualityMimeType, MimeType};
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn filter_set_accept(request: &mut RequestContext) -> HumptyResult<()> {
+fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
   if request.request_head().path() == "/" {
     request.request_head_mut().set_header(HeaderName::Accept, "*/*")?;
   }
   Ok(())
 }
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
   assert_eq!(ctx.request_head().get_accept()[0], AcceptQualityMimeType::default());
   Ok(Response::no_content())
@@ -24,7 +24,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc32() {
-  let server = HumptyBuilder::builder(|builder| {
+  let server = TiiBuilder::builder(|builder| {
     builder
       .router(|rt| {
         rt.get("/*")

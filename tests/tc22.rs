@@ -1,14 +1,14 @@
 use crate::mock_stream::MockStream;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 use std::io::ErrorKind;
 
 mod mock_stream;
 
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   let body = ctx.request_body().unwrap();
   assert_eq!(0, body.read(&mut [])?);
   let mut data = [0; 12];
@@ -34,7 +34,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc22a() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route))
     .expect("ERROR")
     .build();
@@ -48,7 +48,7 @@ pub fn tc22a() {
 
 #[test]
 pub fn tc22b() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route))
     .expect("ERROR")
     .build();

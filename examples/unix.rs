@@ -1,6 +1,6 @@
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
 
 #[cfg(not(unix))]
 pub fn main() {
@@ -13,7 +13,7 @@ pub fn main() {
 }
 pub fn handle(ctx: &RequestContext) -> Response {
   if ctx.peer_address() == "unix" {
-    //Hello unix->/tmp/humpty.sock with GET /path HTTP/1.1
+    //Hello unix->/tmp/tii.sock with GET /path HTTP/1.1
     Response::ok(
       format!(
         "Hello unix->{} with {}\n",
@@ -39,29 +39,29 @@ pub fn handle(ctx: &RequestContext) -> Response {
 #[cfg(unix)]
 mod unix {
   use crate::handle;
-  use humpty::extras;
-  use humpty::extras::Connector;
-  use humpty::humpty_builder::HumptyBuilder;
-  use humpty::humpty_error::HumptyResult;
+  use tii::extras;
+  use tii::extras::Connector;
+  use tii::tii_builder::TiiBuilder;
+  use tii::tii_error::TiiResult;
 
-  pub fn work() -> HumptyResult<()> {
+  pub fn work() -> TiiResult<()> {
     colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-    let humpty_server = HumptyBuilder::builder_arc(|builder| {
+    let tii_server = TiiBuilder::builder_arc(|builder| {
       builder.router(|router| router.route_any("/*", handle))
     })?;
 
-    if std::fs::exists("/tmp/humpty.sock")? {
-      std::fs::remove_file("/tmp/humpty.sock")?;
+    if std::fs::exists("/tmp/tii.sock")? {
+      std::fs::remove_file("/tmp/tii.sock")?;
     }
 
     //HANDLE TCP CONNECTIONS
     //curl -X GET http://127.0.0.1:8080/some/path
-    let tcp = extras::TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server.clone())?;
+    let tcp = extras::TcpConnector::start_unpooled("0.0.0.0:8080", tii_server.clone())?;
 
     //HANDLE UNIX CONNECTIONS
-    //curl -X GET --unix-socket /tmp/humpty.sock http://unix/some/path
-    let unix = extras::UnixConnector::start_unpooled("/tmp/humpty.sock", humpty_server.clone())?;
+    //curl -X GET --unix-socket /tmp/tii.sock http://unix/some/path
+    let unix = extras::UnixConnector::start_unpooled("/tmp/tii.sock", tii_server.clone())?;
 
     //Both of this will block forever
     unix.join(None);

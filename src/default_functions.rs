@@ -1,20 +1,20 @@
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
-use crate::humpty_error::{HumptyError, HumptyResult};
-use crate::humpty_router::{Routeable, RoutingDecision};
+use crate::tii_error::{TiiError, TiiResult};
+use crate::tii_router::{Routeable, RoutingDecision};
 use crate::{error_log, info_log};
 use std::collections::HashSet;
 
-pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> HumptyResult<bool> {
+pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> TiiResult<bool> {
   Ok(true)
 }
 
-/// The default error handler for every Humpty app.
+/// The default error handler for every Tii app.
 /// This can be overridden by using the `with_error_handler` method when building the app.
 pub(crate) fn default_error_handler(
   request: &mut RequestContext,
-  error: HumptyError,
-) -> HumptyResult<Response> {
+  error: TiiError,
+) -> TiiResult<Response> {
   error_log!(
     "Internal Server Error {} {} {:?}",
     &request.request_head().method(),
@@ -26,7 +26,7 @@ pub(crate) fn default_error_handler(
 
 pub(crate) fn default_fallback_not_found_handler(
   request: &mut RequestContext,
-) -> HumptyResult<Response> {
+) -> TiiResult<Response> {
   info_log!(
     "Fallback: Not found {} {}",
     &request.request_head().method(),
@@ -38,7 +38,7 @@ pub(crate) fn default_fallback_not_found_handler(
 pub(crate) fn default_not_found_handler(
   request: &mut RequestContext,
   _: &[Routeable],
-) -> HumptyResult<Response> {
+) -> TiiResult<Response> {
   info_log!("Not found {} {}", &request.request_head().method(), request.request_head().path());
   Ok(Response::not_found_no_body())
 }
@@ -46,7 +46,7 @@ pub(crate) fn default_not_found_handler(
 pub(crate) fn default_not_acceptable_handler(
   request: &mut RequestContext,
   _: &[Routeable],
-) -> HumptyResult<Response> {
+) -> TiiResult<Response> {
   info_log!(
     "Not Acceptable {} {}",
     &request.request_head().method(),
@@ -58,7 +58,7 @@ pub(crate) fn default_not_acceptable_handler(
 pub(crate) fn default_method_not_allowed_handler(
   request: &mut RequestContext,
   routes: &[Routeable],
-) -> HumptyResult<Response> {
+) -> TiiResult<Response> {
   info_log!(
     "Method not allowed {} {}",
     &request.request_head().method(),
@@ -80,7 +80,7 @@ pub(crate) fn default_method_not_allowed_handler(
 pub(crate) fn default_unsupported_media_type_handler(
   request: &mut RequestContext,
   _: &[Routeable],
-) -> HumptyResult<Response> {
+) -> TiiResult<Response> {
   info_log!(
     "Unsupported Media Type {} {} {:?}",
     &request.request_head().method(),

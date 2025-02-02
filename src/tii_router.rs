@@ -10,8 +10,8 @@ use crate::http::mime::{AcceptMimeType, QValue};
 use crate::http::request::HttpVersion;
 use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
-use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
-use crate::humpty_error::{HumptyError, HumptyResult, InvalidPathError, RequestHeadParsingError};
+use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
+use crate::tii_error::{TiiError, TiiResult, InvalidPathError, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::unwrap_some;
 use crate::{trace_log, util};
@@ -33,7 +33,7 @@ enum PathPart {
 }
 
 impl PathPart {
-  fn parse(path: impl AsRef<str>) -> HumptyResult<Vec<PathPart>> {
+  fn parse(path: impl AsRef<str>) -> TiiResult<Vec<PathPart>> {
     let mut path = path.as_ref();
     let full_path = path;
     if path == "/" || path.is_empty() {
@@ -188,7 +188,7 @@ impl HttpRoute {
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
     route: impl HttpEndpoint + 'static,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     Ok(HttpRoute {
       routeable: Routeable::new(path, method, consumes, produces)?,
       handler: Box::new(route) as Box<dyn HttpEndpoint>,
@@ -203,7 +203,7 @@ impl WebSocketRoute {
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
     route: impl WebsocketEndpoint + 'static,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     Ok(WebSocketRoute {
       routeable: Routeable::new(path, method, consumes, produces)?,
       handler: Box::new(route) as Box<dyn WebsocketEndpoint>,
@@ -281,7 +281,7 @@ impl Routeable {
     method: impl Into<Method>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
-  ) -> HumptyResult<Routeable> {
+  ) -> TiiResult<Routeable> {
     let path = path.to_string();
     Ok(Routeable {
       parts: PathPart::parse(path.as_str())?,
@@ -452,7 +452,7 @@ impl Debug for WebSocketRoute {
 }
 
 /// Represents a sub-app to run for a specific host.
-pub struct HumptyRouter {
+pub struct TiiRouter {
   /// This filter/predicate will decide if the router should even serve the request at all
   router_filter: Box<dyn RouterFilter>,
 
@@ -491,9 +491,9 @@ pub struct HumptyRouter {
   error_handler: ErrorHandler,
 }
 
-impl Debug for HumptyRouter {
+impl Debug for TiiRouter {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("HumptyRouter(pre_routing_filters={}, routing_filters={}, response_filters={}, routes={:?}, websocket_routes={})",
+    f.write_fmt(format_args!("TiiRouter(pre_routing_filters={}, routing_filters={}, response_filters={}, routes={:?}, websocket_routes={})",
                                  self.pre_routing_filters.len(),
             self.routing_filters.len(),
             self.response_filters.len(),
@@ -504,7 +504,7 @@ impl Debug for HumptyRouter {
 }
 
 /// Performs the WebSocket handshake.
-fn websocket_handshake(request: &RequestContext) -> HumptyResult<Response> {
+fn websocket_handshake(request: &RequestContext) -> TiiResult<Response> {
   const HANDSHAKE_KEY_CONSTANT: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
   // Get the handshake key header
@@ -533,7 +533,7 @@ fn websocket_handshake(request: &RequestContext) -> HumptyResult<Response> {
   Ok(response)
 }
 
-impl HumptyRouter {
+impl TiiRouter {
   #[expect(clippy::too_many_arguments)] //Only called by the builder.
   pub(crate) fn new(
     router_filter: Box<dyn RouterFilter>,
@@ -576,7 +576,7 @@ impl HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<RouterWebSocketServingResponse> {
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     //TODO this fn is too long and has significant duplicate parts with normal http serving.
     //TODO consolidate both impls and split it into smaller sub fn's
 
@@ -679,8 +679,8 @@ impl HumptyRouter {
   fn call_error_handler(
     &self,
     request: &mut RequestContext,
-    error: HumptyError,
-  ) -> HumptyResult<Response> {
+    error: TiiError,
+  ) -> TiiResult<Response> {
     //TODO i am not 100% sure this is a good idea, but it probably is a good idea.
     //The only thing i could consider is having the default impl do this and outsource this responsibility to the user
     //Not doing this on io::Errors when reading the request body will cause stuff to break in a horrific manner.
@@ -691,7 +691,7 @@ impl HumptyRouter {
     (self.error_handler)(request, error)
   }
 
-  fn serve_outer(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
+  fn serve_outer(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     if !self.router_filter.filter(request)? {
       return Ok(None);
     }
@@ -706,14 +706,14 @@ impl HumptyRouter {
     &self,
     request: &mut RequestContext,
     mut resp: Response,
-  ) -> HumptyResult<Response> {
+  ) -> TiiResult<Response> {
     for filter in self.response_filters.iter() {
       resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
     }
     Ok(resp)
   }
 
-  fn serve_inner(&self, request: &mut RequestContext) -> HumptyResult<Response> {
+  fn serve_inner(&self, request: &mut RequestContext) -> TiiResult<Response> {
     for filter in self.pre_routing_filters.iter() {
       if let Some(resp) = filter.filter(request)? {
         return Ok(resp);
@@ -758,7 +758,7 @@ impl HumptyRouter {
     &self,
     request: &mut RequestContext,
     best_decision: &RoutingDecision,
-  ) -> HumptyResult<Response> {
+  ) -> TiiResult<Response> {
     match best_decision {
       RoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routeables),
       RoutingDecision::MethodMismatch => {
@@ -774,8 +774,8 @@ impl HumptyRouter {
   }
 }
 
-impl Router for HumptyRouter {
-  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
+impl Router for TiiRouter {
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     self.serve_outer(request)
   }
 
@@ -783,13 +783,13 @@ impl Router for HumptyRouter {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<RouterWebSocketServingResponse> {
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     self.serve_ws(stream, request)
   }
 }
 
-impl Router for Arc<HumptyRouter> {
-  fn serve(&self, request: &mut RequestContext) -> HumptyResult<Option<Response>> {
+impl Router for Arc<TiiRouter> {
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     Arc::as_ref(self).serve(request)
   }
 
@@ -797,7 +797,7 @@ impl Router for Arc<HumptyRouter> {
     &self,
     stream: &dyn ConnectionStream,
     request: &mut RequestContext,
-  ) -> HumptyResult<RouterWebSocketServingResponse> {
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     Arc::as_ref(self).serve_websocket(stream, request)
   }
 }

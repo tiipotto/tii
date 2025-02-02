@@ -1,4 +1,4 @@
-use humpty::http::request::HttpVersion;
+use tii::http::request::HttpVersion;
 
 #[test]
 fn test_from_net_name() {

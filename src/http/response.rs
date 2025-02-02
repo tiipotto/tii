@@ -8,7 +8,7 @@ use crate::http::method::Method;
 use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::{ReadAndSeek, ResponseBody};
-use crate::humpty_error::{HumptyResult, UserError};
+use crate::tii_error::{TiiResult, UserError};
 use crate::stream::ConnectionStreamWrite;
 use std::io;
 
@@ -17,17 +17,17 @@ use std::io;
 ///
 /// ## Simple Creation
 /// ```
-/// use humpty::http::mime::MimeType;
-/// use humpty::http::StatusCode;
-/// humpty::http::Response::ok("Success", MimeType::TextPlain);
-/// humpty::http::Response::new(StatusCode::NotFound);
+/// use tii::http::mime::MimeType;
+/// use tii::http::StatusCode;
+/// tii::http::Response::ok("Success", MimeType::TextPlain);
+/// tii::http::Response::new(StatusCode::NotFound);
 /// ```
 ///
 /// ## Advanced Creation
 /// ```
-/// humpty::http::Response::new(humpty::http::StatusCode::OK)
+/// tii::http::Response::new(tii::http::StatusCode::OK)
 ///     .with_body_slice(b"Success")
-///     .with_header(humpty::http::headers::HeaderName::ContentType, "text/plain");
+///     .with_header(tii::http::headers::HeaderName::ContentType, "text/plain");
 /// ```
 #[derive(Debug)]
 pub struct Response {
@@ -424,7 +424,7 @@ impl Response {
     mut self,
     header: impl AsRef<str>,
     value: impl AsRef<str>,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     self.add_header(header, value)?;
     Ok(self)
   }
@@ -436,7 +436,7 @@ impl Response {
   }
 
   /// Adds the header to the Response.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> HumptyResult<()> {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
       HeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
@@ -457,7 +457,7 @@ impl Response {
     &mut self,
     header: impl AsRef<str>,
     value: impl AsRef<str>,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     match &header.as_ref().into() {
       HeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()

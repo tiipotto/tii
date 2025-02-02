@@ -1,15 +1,15 @@
 use crate::mock_stream::MockStream;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 use std::io;
 use std::io::ErrorKind;
 
 mod mock_stream;
 
-fn dummy_route_invalid_data(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route_invalid_data(ctx: &RequestContext) -> TiiResult<Response> {
   let body = ctx.request_body().unwrap();
   let mut data = vec![];
   //The body trailer is malformed, we will eat the error.
@@ -19,7 +19,7 @@ fn dummy_route_invalid_data(ctx: &RequestContext) -> HumptyResult<Response> {
   Response::ok("Okay!", MimeType::TextPlain).into()
 }
 
-fn dummy_route_eof(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route_eof(ctx: &RequestContext) -> TiiResult<Response> {
   let body = ctx.request_body().unwrap();
   let mut data = vec![];
   //The body trailer is malformed, we will eat the error.
@@ -31,7 +31,7 @@ fn dummy_route_eof(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc21a() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -45,7 +45,7 @@ pub fn tc21a() {
 
 #[test]
 pub fn tc21b() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -59,7 +59,7 @@ pub fn tc21b() {
 
 #[test]
 pub fn tc21c() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -73,7 +73,7 @@ pub fn tc21c() {
 
 #[test]
 pub fn tc21d() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -87,7 +87,7 @@ pub fn tc21d() {
 
 #[test]
 pub fn tc21e() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -101,7 +101,7 @@ pub fn tc21e() {
 
 #[test]
 pub fn tc21f() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -115,7 +115,7 @@ pub fn tc21f() {
 
 #[test]
 pub fn tc21g() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -129,7 +129,7 @@ pub fn tc21g() {
 
 #[test]
 pub fn tc21h() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_eof))
     .expect("ERROR")
     .build();
@@ -143,7 +143,7 @@ pub fn tc21h() {
 
 #[test]
 pub fn tc21i() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -157,7 +157,7 @@ pub fn tc21i() {
 
 #[test]
 pub fn tc21j() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -171,7 +171,7 @@ pub fn tc21j() {
 
 #[test]
 pub fn tc21k() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_eof))
     .expect("ERROR")
     .build();
@@ -187,7 +187,7 @@ pub fn tc21k() {
 
 #[test]
 pub fn tc21l() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();

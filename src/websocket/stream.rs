@@ -5,7 +5,7 @@ use crate::websocket::message::WebsocketMessage;
 use std::collections::VecDeque;
 use std::{io, mem};
 
-use crate::humpty_error::{HumptyError, HumptyResult, RequestHeadParsingError};
+use crate::tii_error::{TiiError, TiiResult, RequestHeadParsingError};
 use crate::stream::ConnectionStream;
 use crate::util::{unwrap_poison, unwrap_some};
 use crate::{error_log, trace_log, warn_log};
@@ -55,7 +55,7 @@ impl WebsocketSender {
   }
 
   /// Sends a message to the client.
-  pub fn send(&self, message: WebsocketMessage) -> HumptyResult<()> {
+  pub fn send(&self, message: WebsocketMessage) -> TiiResult<()> {
     match message {
       WebsocketMessage::Text(txt) => self.text(txt),
       WebsocketMessage::Binary(bin) => self.binary(bin),
@@ -65,7 +65,7 @@ impl WebsocketSender {
   }
 
   /// Closes the Websocket sending the close frame.
-  pub fn close(&self) -> HumptyResult<()> {
+  pub fn close(&self) -> TiiResult<()> {
     let _g = unwrap_poison(self.0.write_mutex.lock())?;
 
     if self.0.closed.swap(true, SeqCst) {
@@ -76,32 +76,32 @@ impl WebsocketSender {
   }
 
   /// Sends a binary message to the client
-  pub fn binary(&self, message: impl Into<Vec<u8>>) -> HumptyResult<()> {
+  pub fn binary(&self, message: impl Into<Vec<u8>>) -> TiiResult<()> {
     let _g = unwrap_poison(self.0.write_mutex.lock())?;
     Frame::new(Opcode::Binary, message.into()).write_to(self.0.stream.as_stream_write())
   }
 
   /// Sends a text message to the client
-  pub fn text(&self, message: impl ToString) -> HumptyResult<()> {
+  pub fn text(&self, message: impl ToString) -> TiiResult<()> {
     let _g = unwrap_poison(self.0.write_mutex.lock())?;
     Frame::new(Opcode::Text, message.to_string().into_bytes())
       .write_to(self.0.stream.as_stream_write())
   }
 
   /// Sends a ping to the client.
-  pub fn ping(&self) -> HumptyResult<()> {
+  pub fn ping(&self) -> TiiResult<()> {
     let _g = unwrap_poison(self.0.write_mutex.lock())?;
     Frame::new(Opcode::Ping, Vec::new()).write_to(self.0.stream.as_stream_write())
   }
 
   /// Sends a pong message to the client.
-  pub fn pong(&self) -> HumptyResult<()> {
+  pub fn pong(&self) -> TiiResult<()> {
     let _g = unwrap_poison(self.0.write_mutex.lock())?;
     Frame::new(Opcode::Ping, Vec::new()).write_to(self.0.stream.as_stream_write())
   }
 
   /// Attempts to get the peer address of this stream.
-  pub fn peer_addr(&self) -> HumptyResult<String> {
+  pub fn peer_addr(&self) -> TiiResult<String> {
     Ok(self.0.stream.peer_addr()?)
   }
 }
@@ -128,7 +128,7 @@ pub enum ReadMessageTimeoutResult {
 
 impl WebsocketReceiver {
   /// Closes the Websocket sending the close frame to the client.
-  pub fn close(&self) -> HumptyResult<()> {
+  pub fn close(&self) -> TiiResult<()> {
     let _g = unwrap_poison(self.guard.write_mutex.lock())?;
 
     if self.guard.closed.swap(true, SeqCst) {
@@ -147,7 +147,7 @@ impl WebsocketReceiver {
 
   /// receive the next complete message.
   /// Ok(None) indicates that the web socket is closed.
-  pub fn read_message(&mut self) -> HumptyResult<Option<WebsocketMessage>> {
+  pub fn read_message(&mut self) -> TiiResult<Option<WebsocketMessage>> {
     if let Some(message) = self.unhandled_messages.pop_front() {
       return Ok(Some(message));
     }
@@ -157,7 +157,7 @@ impl WebsocketReceiver {
 
   /// This fn waits until timeout expires before the first byte of the next Message is received.
   ///
-  /// The specified timeout is completely independent of the read timeout of the HumptyServer.
+  /// The specified timeout is completely independent of the read timeout of the TiiServer.
   /// Values where timeout.is_zero() returns true may cause Err to be returned depending on how the
   /// underlying connection treats this value.
   ///
@@ -171,7 +171,7 @@ impl WebsocketReceiver {
   pub fn read_message_timeout(
     &mut self,
     timeout: Option<Duration>,
-  ) -> HumptyResult<ReadMessageTimeoutResult> {
+  ) -> TiiResult<ReadMessageTimeoutResult> {
     if let Some(message) = self.unhandled_messages.pop_front() {
       return Ok(ReadMessageTimeoutResult::Message(message));
     }
@@ -185,7 +185,7 @@ impl WebsocketReceiver {
       if let Err(err) = self.guard.stream.set_read_timeout(timeout) {
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error setting timeout for 1st byte of next frame {}", &err);
-        return Err(HumptyError::from(err));
+        return Err(TiiError::from(err));
       }
       let res = self.guard.stream.ensure_readable();
       let res2 = self.guard.stream.set_read_timeout(old_timeout);
@@ -193,7 +193,7 @@ impl WebsocketReceiver {
       if let Err(err) = res2 {
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error setting timeout back to read timeout after waiting for 1st byte of next frame {}", &err);
-        return Err(HumptyError::from(err));
+        return Err(TiiError::from(err));
       }
 
       if let Err(err) = res {
@@ -202,7 +202,7 @@ impl WebsocketReceiver {
         }
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error while waiting for 1st byte of next frame {}", &err);
-        return Err(HumptyError::from(err));
+        return Err(TiiError::from(err));
       }
     }
 
@@ -216,7 +216,7 @@ impl WebsocketReceiver {
   /// Attempts to read a message from the given stream.
   ///
   /// Silently responds to pings with pongs, as specified in [RFC 6455 Section 5.5.2](https://datatracker.ietf.org/doc/html/rfc6455#section-5.5.2).
-  fn read_next_frame(&mut self) -> HumptyResult<Option<WebsocketMessage>> {
+  fn read_next_frame(&mut self) -> TiiResult<Option<WebsocketMessage>> {
     if self.guard.closed.load(SeqCst) {
       return Ok(None);
     }
@@ -243,7 +243,7 @@ impl WebsocketReceiver {
           return Ok(None);
         }
 
-        return Err(HumptyError::RequestHeadParsing(
+        return Err(TiiError::RequestHeadParsing(
           RequestHeadParsingError::WebSocketClosedDuringPendingMessage,
         ));
       }
@@ -259,7 +259,7 @@ impl WebsocketReceiver {
 
     for (idx, frame) in frames.into_iter().enumerate() {
       if idx != 0 && frame.opcode != Opcode::Continuation {
-        return Err(HumptyError::RequestHeadParsing(
+        return Err(TiiError::RequestHeadParsing(
           RequestHeadParsingError::UnexpectedWebSocketOpcode,
         ));
       }
@@ -270,7 +270,7 @@ impl WebsocketReceiver {
       Opcode::Text => {
         let payload = String::from_utf8(payload).map_err(|e| {
           self.guard.closed.store(true, SeqCst);
-          HumptyError::RequestHeadParsing(RequestHeadParsingError::WebSocketTextMessageIsNotUtf8(
+          TiiError::RequestHeadParsing(RequestHeadParsingError::WebSocketTextMessageIsNotUtf8(
             e.into_bytes(),
           ))
         })?;
@@ -280,7 +280,7 @@ impl WebsocketReceiver {
       Opcode::Binary => Ok(Some(WebsocketMessage::Binary(payload))),
       _ => {
         self.guard.closed.store(true, SeqCst);
-        Err(HumptyError::RequestHeadParsing(RequestHeadParsingError::UnexpectedWebSocketOpcode))
+        Err(TiiError::RequestHeadParsing(RequestHeadParsingError::UnexpectedWebSocketOpcode))
       }
     }
   }

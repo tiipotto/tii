@@ -1,8 +1,8 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
 use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
-use crate::humpty_error::HumptyResult;
-use crate::humpty_server::HumptyServer;
+use crate::tii_error::TiiResult;
+use crate::tii_server::TiiServer;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
 use std::io;
@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
+/// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
 pub struct TcpConnector {
   main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
@@ -25,7 +25,7 @@ struct TcpConnectorInner {
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  humpty_server: Arc<HumptyServer>,
+  tii_server: Arc<TiiServer>,
 }
 
 impl TcpConnectorInner {
@@ -48,7 +48,7 @@ impl TcpConnectorInner {
         WSAPoll(pollfd.as_mut().get_mut(), 1, 1000)
       };
       drop(pollfd);
-      if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         return Err(io::ErrorKind::ConnectionAborted.into());
       }
 
@@ -79,14 +79,14 @@ impl TcpConnectorInner {
     info_log!("tcp_connector[{}]: listening...", &self.addr_string);
     for this_connection in 1u128.. {
       let stream = self.next();
-      if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("tcp_connector[{}]: shutdown", &self.addr_string);
         break;
       }
 
       info_log!("tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
       let path_clone = self.addr_string.clone();
-      let server_clone = self.humpty_server.clone();
+      let server_clone = self.tii_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));
       let done_clone = Arc::clone(&done_flag);
 
@@ -107,7 +107,7 @@ impl TcpConnectorInner {
               Err(err) => {
                 // User code errored, like return Err in an Error handler.
                 error_log!(
-                  "tcp_connector[{}]: connection {} humpty server returned err={}",
+                  "tcp_connector[{}]: connection {} tii server returned err={}",
                   path_clone,
                   this_connection,
                   err
@@ -320,9 +320,9 @@ impl TcpConnector {
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    humpty_server: Arc<HumptyServer>,
+    tii_server: Arc<TiiServer>,
     thread_adapter: impl ThreadAdapter + 'static,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     let mut addr_string = String::new();
     let addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
 
@@ -339,7 +339,7 @@ impl TcpConnector {
       listener: TcpListener::bind(addr)?,
       shutdown_flag: AtomicBool::new(false),
       addr_string,
-      humpty_server: humpty_server.clone(),
+      tii_server: tii_server.clone(),
       waiter: ConnWait::default(),
     });
 
@@ -354,7 +354,7 @@ impl TcpConnector {
 
     let weak_inner = Arc::downgrade(&inner);
 
-    humpty_server.add_shutdown_hook(move || {
+    tii_server.add_shutdown_hook(move || {
       if let Some(inner) = weak_inner.upgrade() {
         inner.shutdown()
       }
@@ -370,9 +370,9 @@ impl TcpConnector {
   /// Threads are created using "thread::Builder::new().spawn"
   pub fn start_unpooled(
     addr: impl ToSocketAddrs,
-    humpty_server: Arc<HumptyServer>,
-  ) -> HumptyResult<Self> {
-    Self::start(addr, humpty_server, DefaultThreadAdapter)
+    tii_server: Arc<TiiServer>,
+  ) -> TiiResult<Self> {
+    Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }
 

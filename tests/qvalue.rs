@@ -1,4 +1,4 @@
-use humpty::http::mime::QValue;
+use tii::http::mime::QValue;
 
 #[test]
 pub fn test() {

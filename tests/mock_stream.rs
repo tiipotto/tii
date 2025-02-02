@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use humpty::stream::{ConnectionStream, IntoConnectionStream};
+use tii::stream::{ConnectionStream, IntoConnectionStream};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
