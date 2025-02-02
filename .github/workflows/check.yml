@@ -54,12 +54,10 @@ jobs:
           toolchain: stable minus 2 releases
       - name: 64-bit Valgrind
         run: |
-          cargo build --example shutdown --target x86_64-unknown-linux-gnu --features extras,log
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown
-          cargo build --example shutdown_unix --target x86_64-unknown-linux-gnu --features extras,log
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown_unix
-          cargo build --example shutdown_multiple --target x86_64-unknown-linux-gnu --features extras,log
-          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/x86_64-unknown-linux-gnu/debug/examples/shutdown_multiple
+          cargo build --examples
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_unix
+          valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_multiple
 
   build_linux:
     name: Build Linux
@@ -69,6 +67,8 @@ jobs:
         target:
           - "x86_64-unknown-linux-gnu"
           - "i686-unknown-linux-gnu"
+          - "x86_64-unknown-linux-musl"
+          - "i686-unknown-linux-musl"
           - "aarch64-unknown-linux-gnu"
     env:
       RUSTFLAGS: "-D warnings"
@@ -76,6 +76,9 @@ jobs:
     steps:
       - name: Update sources
         run: sudo apt update
+      - name: Install musl deps
+        run: sudo apt install musl-dev musl-tools
+        if: ${{ contains(matrix.target, 'musl') }}
       - name: Install libc6-dev-i386
         run: sudo apt install libc6-dev-i386
         if: ${{ contains(matrix.target, 'i686') }}
@@ -90,12 +93,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
-      - name: Build gnu target
+      - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
-          cargo build --no-default-features
-          cargo build --examples
-          cargo build --examples --all-features
+          cargo build --examples --all-features --target ${{ matrix.target }}
+        if: ${{ !(contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')) }}
+      - name: Build with no and default features
+        run: |
+          cargo build --target ${{ matrix.target }}
+          cargo build --no-default-features --target ${{ matrix.target }}
 
   build_windows:
     name: Build Windows
@@ -129,9 +135,8 @@ jobs:
       - name: Build Windows
         run: |
           cargo build --all-features --target ${{ matrix.target }}
-          cargo build --no-default-features
-          cargo build --examples
-          cargo build --examples --all-features
+          cargo build --no-default-features --target ${{ matrix.target }}
+          cargo build --examples --target ${{ matrix.target }}
 
   test_windows:
     name: Test Windows
