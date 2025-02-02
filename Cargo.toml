@@ -12,7 +12,7 @@ keywords = ["http", "server", "http-server"]
 categories = ["web-programming::http-server", "network-programming"]
 
 [dependencies]
-backtrace = { version = "0.3.74", optional = true}
+backtrace = { version = "0.3.74", optional = true }
 constutils = { path = "constutils" }
 getrandom = { version = "0.3", optional = true }
 log = { version = "^0.4.22", optional = true }
@@ -31,7 +31,7 @@ rust-tls-duplex-stream = { version = "0.1.1", optional = true }
 libc = { version = "*", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59.0", optional = true, features = ["Win32_Networking_WinSock"]}
+windows-sys = { version = "0.59.0", optional = true, features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 rustls-pemfile = "2.2.0"
@@ -55,46 +55,36 @@ unwrap_used = "warn"
 
 [[example]]
 name = "basic"
-path = "examples/basic.rs"
-required-features = ["log", "extras"]
+required-features = ["extras", "log"]
 
 [[example]]
 name = "shutdown"
-path = "examples/shutdown.rs"
 required-features = ["extras", "log"]
 
 [[example]]
 name = "shutdown_multiple"
-path = "examples/shutdown_multiple.rs"
 required-features = ["extras", "log"]
-
 
 [[example]]
 name = "shutdown_unix"
-path = "examples/shutdown_unix.rs"
 required-features = ["extras", "log"]
 
 [[example]]
 name = "tls"
-path = "examples/tls.rs"
-required-features = ["tls", "extras", "log"]
+required-features = ["extras", "log", "tls"]
 
 [[example]]
 name = "static-content"
-path = "examples/static-content.rs"
 required-features = ["extras"]
 
 [[example]]
 name = "wildcard"
-path = "examples/wildcard.rs"
 required-features = ["extras"]
 
 [[example]]
 name = "websocket"
-path = "examples/websocket.rs"
 required-features = ["extras", "log"]
 
 [[example]]
 name = "unix"
-path = "examples/unix.rs"
 required-features = ["extras", "log"]
