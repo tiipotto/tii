@@ -1,24 +1,24 @@
-use humpty::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 
-use humpty::http::request_context::RequestContext;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
-use humpty::websocket::message::WebsocketMessage;
-use humpty::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
 use log::{info, LevelFilter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
+use tii::http::request_context::RequestContext;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
+use tii::websocket::message::WebsocketMessage;
+use tii::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-fn main() -> HumptyResult<()> {
+fn main() -> TiiResult<()> {
   //Install a simple "output" for the log crate, so we can see something in the console.
   //Adjust level if it's too verbose for you.
   colog::default_builder().filter_level(LevelFilter::Trace).init();
 
   //Visit localhost:8080 in a web-browser like firefox or chrome to see this example.
-  let humpty_server = HumptyBuilder::builder_arc(|builder| {
+  let tii_server = TiiBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/*", builtin_endpoints::serve_dir("./examples/static/ws"))?
@@ -27,18 +27,18 @@ fn main() -> HumptyResult<()> {
   })
   .expect("ERROR");
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
 /// Handler for WebSocket connections.
-/// This is wrapped in `websocket_handler` to manage the handshake for us using the `humpty_ws` crate.
+/// This is wrapped in `websocket_handler` to manage the handshake for us using the `tii_ws` crate.
 fn echo_handler(
   request: &RequestContext,
   mut receiver: WebsocketReceiver,
   sender: WebsocketSender,
-) -> HumptyResult<()> {
+) -> TiiResult<()> {
   // Get the address of the client.
   let addr = request.peer_address();
 

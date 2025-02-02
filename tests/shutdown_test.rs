@@ -1,31 +1,31 @@
 #[cfg(feature = "extras")]
 mod inner {
-  use humpty::extras;
-  use humpty::extras::Connector;
-  use humpty::http::mime::MimeType;
-  use humpty::http::request_context::RequestContext;
-  use humpty::http::Response;
-  use humpty::humpty_builder::HumptyBuilder;
-  use humpty::humpty_error::HumptyResult;
   use std::io::{Read, Write};
   use std::net::{SocketAddr, TcpListener, TcpStream};
   use std::str::FromStr;
   use std::thread::sleep;
   use std::time::Duration;
+  use tii::extras;
+  use tii::extras::Connector;
+  use tii::http::mime::MimeType;
+  use tii::http::request_context::RequestContext;
+  use tii::http::Response;
+  use tii::tii_builder::TiiBuilder;
+  use tii::tii_error::TiiResult;
 
-  fn hello(_: &RequestContext) -> HumptyResult<Response> {
+  fn hello(_: &RequestContext) -> TiiResult<Response> {
     Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
   }
 
-  pub(crate) fn work() -> HumptyResult<()> {
-    let humpty_server = HumptyBuilder::builder_arc(|builder| {
+  pub(crate) fn work() -> TiiResult<()> {
+    let tii_server = TiiBuilder::builder_arc(|builder| {
       builder
         .router(|router| router.route_any("/*", hello))?
         .with_connection_timeout(Some(Duration::from_secs(5)))?
         .ok()
     })?;
 
-    let connector = extras::TcpConnector::start_unpooled("0.0.0.0:28880", humpty_server)?;
+    let connector = extras::TcpConnector::start_unpooled("0.0.0.0:28880", tii_server)?;
 
     let mut stream = TcpStream::connect_timeout(
       &SocketAddr::from_str("127.0.0.1:28880")?,

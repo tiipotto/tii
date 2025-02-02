@@ -1,20 +1,20 @@
 use crate::mock_stream::MockStream;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
 use std::io;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
   unreachable!();
 }
 
 #[test]
 pub fn tc15() {
   let server =
-    HumptyBuilder::builder(|builder| builder.router(|rt| rt.route_any("/dummy", dummy_route)))
+    TiiBuilder::builder(|builder| builder.router(|rt| rt.route_any("/dummy", dummy_route)))
       .expect("Error");
 
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\n: \r\n\r\n");

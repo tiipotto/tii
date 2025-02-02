@@ -1,18 +1,18 @@
 use crate::mock_stream::MockStream;
-use humpty::http::request::HttpVersion;
-use humpty::http::request_context::RequestContext;
-use humpty::http::response_body::ResponseBody;
-use humpty::http::{Response, StatusCode};
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::http::request::HttpVersion;
+use tii::http::request_context::RequestContext;
+use tii::http::response_body::ResponseBody;
+use tii::http::{Response, StatusCode};
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
-fn add_header_filter(request: &mut RequestContext) -> HumptyResult<()> {
+fn add_header_filter(request: &mut RequestContext) -> TiiResult<()> {
   request.request_head_mut().set_header("custom-header-name", "custom-header-value")
 }
 
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   assert_eq!(ctx.request_head().get_header("custom-header-name"), Some("custom-header-value"));
@@ -22,7 +22,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc27() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route)?.with_request_filter(add_header_filter))
     .expect("ERROR")
     .build();

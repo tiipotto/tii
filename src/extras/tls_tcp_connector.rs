@@ -1,9 +1,9 @@
 use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
 use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
-use crate::humpty_error::HumptyResult;
-use crate::humpty_server::HumptyServer;
-use crate::{error_log, info_log, trace_log, HumptyTlsStream};
+use crate::tii_error::TiiResult;
+use crate::tii_server::TiiServer;
+use crate::{error_log, info_log, trace_log, TiiTlsStream};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::io;
@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Humpty for handling.
+/// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
 pub struct TlsTcpConnector {
   main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
@@ -27,7 +27,7 @@ struct TlsTcpConnectorInner {
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  humpty_server: Arc<HumptyServer>,
+  tii_server: Arc<TiiServer>,
 }
 
 impl TlsTcpConnectorInner {
@@ -50,7 +50,7 @@ impl TlsTcpConnectorInner {
         WSAPoll(pollfd.as_mut().get_mut(), 1, 1000)
       };
       drop(pollfd);
-      if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         return Err(io::ErrorKind::ConnectionAborted.into());
       }
 
@@ -81,14 +81,14 @@ impl TlsTcpConnectorInner {
     info_log!("tls_tcp_connector[{}]: listening...", &self.addr_string);
     for this_connection in 1u128.. {
       let stream = self.next();
-      if self.humpty_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("tls_tcp_connector[{}]: shutdown", &self.addr_string);
         break;
       }
 
       info_log!("tls_tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
       let path_clone = self.addr_string.clone();
-      let server_clone = self.humpty_server.clone();
+      let server_clone = self.tii_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));
       let done_clone = Arc::clone(&done_flag);
       let tls_config = self.config.clone();
@@ -102,7 +102,7 @@ impl TlsTcpConnectorInner {
           Ok(stream) => {
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
-                match HumptyTlsStream::create(
+                match TiiTlsStream::create(
                   stream,
                   tls_con,
                   thread_adapter_clone.as_ref(),
@@ -110,7 +110,7 @@ impl TlsTcpConnectorInner {
                   Ok(conn) => conn,
                   Err(err) => {
                     error_log!(
-                "tls_tcp_connector[{}]: connection {} failed to construct HumptyTlsStream err={}",
+                "tls_tcp_connector[{}]: connection {} failed to construct TiiTlsStream err={}",
                 path_clone,
                 this_connection,
                 err);
@@ -139,7 +139,7 @@ impl TlsTcpConnectorInner {
               Err(err) => {
                 // User code errored, like return Err in an Error handler.
                 error_log!(
-                "tls_tcp_connector[{}]: connection {} humpty server returned err={}",
+                "tls_tcp_connector[{}]: connection {} tii server returned err={}",
                 path_clone,
                 this_connection,
                 err
@@ -352,10 +352,10 @@ impl TlsTcpConnector {
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    humpty_server: Arc<HumptyServer>,
+    tii_server: Arc<TiiServer>,
     config: Arc<ServerConfig>,
     thread_adapter: impl ThreadAdapter + 'static,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     //Check if the rust-tls server config is "valid".
     let _ = ServerConnection::new(config.clone())?;
 
@@ -376,7 +376,7 @@ impl TlsTcpConnector {
       listener: TcpListener::bind(addr)?,
       shutdown_flag: AtomicBool::new(false),
       addr_string,
-      humpty_server: humpty_server.clone(),
+      tii_server: tii_server.clone(),
       waiter: ConnWait::default(),
     });
 
@@ -391,7 +391,7 @@ impl TlsTcpConnector {
 
     let weak_inner = Arc::downgrade(&inner);
 
-    humpty_server.add_shutdown_hook(move || {
+    tii_server.add_shutdown_hook(move || {
       if let Some(inner) = weak_inner.upgrade() {
         inner.shutdown()
       }
@@ -408,8 +408,8 @@ impl TlsTcpConnector {
   pub fn start_unpooled(
     addr: impl ToSocketAddrs,
     config: Arc<ServerConfig>,
-    humpty_server: Arc<HumptyServer>,
-  ) -> HumptyResult<Self> {
-    Self::start(addr, humpty_server, config, DefaultThreadAdapter)
+    tii_server: Arc<TiiServer>,
+  ) -> TiiResult<Self> {
+    Self::start(addr, tii_server, config, DefaultThreadAdapter)
   }
 }

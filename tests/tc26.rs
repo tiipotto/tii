@@ -1,22 +1,22 @@
 use crate::mock_stream::MockStream;
-use humpty::http::mime::MimeType;
-use humpty::http::request::HttpVersion;
-use humpty::http::request_context::RequestContext;
-use humpty::http::response_body::ResponseBody;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::http::mime::MimeType;
+use tii::http::request::HttpVersion;
+use tii::http::request_context::RequestContext;
+use tii::http::response_body::ResponseBody;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
 
   Ok(Response::ok(ResponseBody::from_slice("Okay!"), MimeType::TextPlain))
 }
 
-fn dummy_route2(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
 
@@ -25,7 +25,7 @@ fn dummy_route2(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc26() {
-  let server = HumptyBuilder::builder(|builder| {
+  let server = TiiBuilder::builder(|builder| {
     builder.router(|rt| {
       rt.get("/dummy")
         .produces(MimeType::TextPlain)

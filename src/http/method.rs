@@ -41,8 +41,8 @@ impl Method {
   ///
   /// ## Example
   /// ```
-  /// let method = humpty::http::method::Method::from("GET");
-  /// assert_eq!(method, humpty::http::method::Method::Get);
+  /// let method = tii::http::method::Method::from("GET");
+  /// assert_eq!(method, tii::http::method::Method::Get);
   /// ```
   pub fn from(name: &str) -> Self {
     match name {

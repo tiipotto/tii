@@ -1,17 +1,17 @@
-# humpty
-humpty is fast compiling low-latency HTTP/1.1 web server, with support for static content and WebSockets.
-humpty is currently under active development.
+# tii
+tii is fast compiling low-latency HTTP/1.1 web server, with support for static content and WebSockets.
+tii is currently under active development.
 While it does work, large amounts of breaking changes are expected.
 
 ## Example
-For a larger example that uses most features of humpty see the examples/basic.rs file!
+For a larger example that uses most features of tii see the examples/basic.rs file!
 ```rust
 use std::net::TcpListener;
 use std::time::Duration;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
 
 
 fn hello_world(request: &RequestContext) -> Response {
@@ -19,7 +19,7 @@ fn hello_world(request: &RequestContext) -> Response {
     Response::ok(response_body, MimeType::TextPlain)
 }
 fn main() {
-    let humpty_server = HumptyBuilder::builder(|builder| {
+    let tii_server = TiiBuilder::builder(|builder| {
         builder.router(|router| {
             router.route_get("/*", hello_world)
         })?
@@ -30,7 +30,7 @@ fn main() {
     // Connections will be processed 1 at a time.
     let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
     for tcp_stream in tcp_listen.incoming() {
-        if let Err(err) = humpty_server.handle_connection(tcp_stream.unwrap()) {
+        if let Err(err) = tii_server.handle_connection(tcp_stream.unwrap()) {
             eprintln!("Error handling request: {}", err);
         }
     }
@@ -61,7 +61,7 @@ Both of these are only needed because no alternative in the stdlib exists, shoul
   [pollster](https://github.com/zesterer/pollster) is recommended.
 
 ## Architecture
-The general Architecture of Humpty is split into 3 parts that are designed to be used together
+The general Architecture of Tii is split into 3 parts that are designed to be used together
 but can be used independent of each other. The layers use Traits that you can
 implement yourself if you desire to replace any of them.
 
@@ -74,14 +74,14 @@ implement yourself if you desire to replace any of them.
      * Supports Timeouts
      * Supports Closing the connection or Re-Synchronizing the connection
 
-The biggest difference from other HTTP Frameworks is that Humpty does not bind a socket for you or accept connections.
-The entrypoint to a `HumptyServer` is the fn `handle_connection` which accepts an arbitrary Raw Connection and
+The biggest difference from other HTTP Frameworks is that Tii does not bind a socket for you or accept connections.
+The entrypoint to a `TiiServer` is the fn `handle_connection` which accepts an arbitrary Raw Connection and
 will process it. All requests on that connection (if keep alive is enabled and supported this may be multiple)
-will be processed completely in the caller thread. Humpty itself will NOT spawn any threads or otherwise
+will be processed completely in the caller thread. Tii itself will NOT spawn any threads or otherwise
 move the processing to another thread.
-A typical use of Humpty would call `TcpListen::accept` and move the resulting `TcpStream`
-into a pooled Thread where `HumptyServer::handle_connection` is called.
-HumptyServer::handle_connection does not require `HumptyServer` to be mut and can therefore be called on an `Arc` of `HumptyServer`
+A typical use of Tii would call `TcpListen::accept` and move the resulting `TcpStream`
+into a pooled Thread where `TiiServer::handle_connection` is called.
+TiiServer::handle_connection does not require `TiiServer` to be mut and can therefore be called on an `Arc` of `TiiServer`
 by multiple Threads concurrently. It's up to the user of the library to decide what thread pool implementation (if any) to use.
 A naive implementation can also just use `thread::spawn` instead of relying on a third party or self built thread pool.
 
@@ -96,9 +96,9 @@ that do not need to handle concurrent requests and only desire a very small foot
 
 `handle_connection` will return Ok if the connection is finished.
 If Ok is returned then the caller is guaranteed that only syntactically correct well-formed HTTP
-requests+responses have been processed by Humpty and sent over the Raw Connection.
+requests+responses have been processed by Tii and sent over the Raw Connection.
 
-Humpty will return Err to `handle_connection` in case of a fatal error.
+Tii will return Err to `handle_connection` in case of a fatal error.
 Examples for Errors considered fatal for the connection:
 * the bytes read from the raw connection do not conform to valid HTTP.
   * For example use of non ASCII characters in an HTTP method.
@@ -129,8 +129,8 @@ as TCP in terms of data integrity. Any connection integrity is responsibility of
 This part is pretty much standardized so there is no need for much flexibility here.
 
 ### Request routing
-The most complex part of Humpty.
-Humpty takes inspiration from Java's excellent Jetty Http Server
+The most complex part of Tii.
+Tii takes inspiration from Java's excellent Jetty Http Server
 and the Java JAX-RS Web Application Standard but applies a rust spin to it.
 
 When a request is received by HTTP processing and validated then it is passed to 1 or more `Router`s.
@@ -156,11 +156,11 @@ Most single purpose applications will likely only have a single `Router`.
 `Router` itself is a Trait so you can fully customize what a `Router` might do,
 if you so desire.
 
-Humpty provides one `Router` implementation which does path, method and media type based
+Tii provides one `Router` implementation which does path, method and media type based
 endpoint matching. This means you can register endpoints by path, method and media type to the `Router` and if
 the request matches all desired criteria then your endpoint gets called and can produce a `Response`.
 
-In addition to doing path based request matching the Default Humpty Router also
+In addition to doing path based request matching the Default Tii Router also
 allows for you to provide custom handling for Paths that have no endpoint,
 (By default 404 is returned) Error handling, (By default 500 is returned)
 and Pre-Request and After-Request handling common to all endpoints.
@@ -205,7 +205,7 @@ the `ErrorHandler` of the `Router`. The `ErrorHandler` must produce a Response. 
 HTTP 500 without any response body. The `ErrorHandler` has full access to the `Request` expect for the
 possibly already consumed body and the Err value in the result which can be used in a Boxed version with downcast_ref.
 
-The `ErrorHandler` itself may also return an Err value. This error is assumed fatal for the connection and Humpty will NOT
+The `ErrorHandler` itself may also return an Err value. This error is assumed fatal for the connection and Tii will NOT
 write any bytes to the connection respond to such a request. The error is propagated all the way back to the user
 of the library to the `handle_connection` fn which originally accepted the Raw Connection.
 There the user of the library may decide to log such a fatal error.
@@ -222,18 +222,18 @@ the error handlers might be called. The generated response is irrelevant in this
 and never written out as all IO/Errors on the underlying connection are assumed to be fatal.
 
 If no user code (Filter/Endpoint/NotFoundHandler/ErrorHandler) fully consumes the request body then
-Humpty will consume and discard the entire RequestBody after writing the Response.
+Tii will consume and discard the entire RequestBody after writing the Response.
 Any error that occurs during this is treated as a fatal error.
 User code is free to read from the request body during writing of the ResponseBody.
 This is useful for doing in place transformation of large data (such as video transcoding) where first reading
 the entire source before beginning to produce an output is not acceptable.
 
 ## Use your own Thread Pool
-By default, whenever humpty needs to spawn a thread it uses `thread::Builder::new().spawn` to spawn a new thread.
-Humpty does not do or need this by default, only if you enable and use some features such as "rust-tls" or "extras" then
+By default, whenever tii needs to spawn a thread it uses `thread::Builder::new().spawn` to spawn a new thread.
+Tii does not do or need this by default, only if you enable and use some features such as "rust-tls" or "extras" then
 some functions will offer a way for you to pass a thread pool. It is very obvious to the user when this is the case.
 
-Your custom thread pool will have to implement the humpty::ThreadAdapter trait. This trait requires your implementation
+Your custom thread pool will have to implement the tii::ThreadAdapter trait. This trait requires your implementation
 to provide a single "spawn" function that runs the given task and returns some type of join handle. 
 It should not be hard or much effort to implement this trait for any given thread pool.
 
@@ -248,7 +248,7 @@ The default "TheadAdapter" implementation looks like this:
 #[derive(Debug)]
 pub(crate) struct DefaultThreadAdapter;
 impl ThreadAdapter for DefaultThreadAdapter {
-  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> HumptyResult<ThreadAdapterJoinHandle> {
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle> {
     let hdl : JoinHandle<()> = thread::Builder::new().spawn(task)?;
     Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
   }
@@ -256,23 +256,23 @@ impl ThreadAdapter for DefaultThreadAdapter {
 ```
 
 ## Panics
-Humpty makes a valiant effort to avoid panics where possible.
+Tii makes a valiant effort to avoid panics where possible.
 It does not contain a single catch_unwind.
-If an endpoint triggers a panic that panic is not caught by humpty.
+If an endpoint triggers a panic that panic is not caught by tii.
 The user of the library may decide to catch the panic as it will eventually be propagated to
 the caller of `handle_connection`.
-In the unlikely scenario that Humpty triggers a panic internally please create a bug report.
-You can enable the `backtrace` feature to force Humpty to print a full backtrace and
+In the unlikely scenario that Tii triggers a panic internally please create a bug report.
+You can enable the `backtrace` feature to force Tii to print a full backtrace and
 automatically call abort() to abort the process in some situations where presumed unreachable code was hit.
 It is not recommended to use this feature in production
 unless you are actively troubleshooting a problem.
-Its advised in general to use panic=abort when working with humpty outside of debugging/development.
+Its advised in general to use panic=abort when working with tii outside of debugging/development.
 
 ## Extras
 The `extras` namespace is for convenience over robustness and is always completely optional; think reusable examples/apps/templates, not staging.
-Stability is not guaranteed (functionality may be moved to another crate or functionality added to Humpty).
+Stability is not guaranteed (functionality may be moved to another crate or functionality added to Tii).
 
-Nothing in Humpty will ever depend on anything in `extras`.
+Nothing in Tii will ever depend on anything in `extras`.
 
 ## Special Thanks
 - [Humphrey](https://github.com/w-henderson/Humphrey)

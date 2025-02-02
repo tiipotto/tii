@@ -11,15 +11,15 @@ use crate::http::method::Method;
 use crate::http::mime::AcceptMimeType;
 use crate::http::request_context::RequestContext;
 use crate::http::Response;
-use crate::humpty_builder::{ErrorHandler, NotRouteableHandler};
-use crate::humpty_error::HumptyResult;
-use crate::humpty_router::{HttpRoute, HumptyRouter, WebSocketRoute};
+use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
+use crate::tii_error::TiiResult;
+use crate::tii_router::{HttpRoute, TiiRouter, WebSocketRoute};
 use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
 use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Represents a sub-app to run for a specific host.
-pub struct HumptyRouterBuilder {
+pub struct TiiRouterBuilder {
   /// This filter/predicate will decide if the router should even serve the request at all
   router_filter: Box<dyn RouterFilter>,
 
@@ -54,7 +54,7 @@ pub struct HumptyRouterBuilder {
 #[derive(Debug)]
 struct RouteWrapper<T: HttpEndpoint + 'static>(Arc<T>);
 impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
-  fn serve(&self, request: &RequestContext) -> HumptyResult<Response> {
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
     self.0.serve(request)
   }
 }
@@ -74,7 +74,7 @@ impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WsRouteWrapper<T> {
     request: &RequestContext,
     receiver: WebsocketReceiver,
     sender: WebsocketSender,
-  ) -> HumptyResult<()> {
+  ) -> TiiResult<()> {
     self.0.serve(request, receiver, sender)
   }
 }
@@ -86,21 +86,21 @@ impl<T: WebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
 }
 
 /// Builder for a route/endpoint.
-pub struct HumptyRouteBuilder {
-  inner: HumptyRouterBuilder,
+pub struct TiiRouteBuilder {
+  inner: TiiRouterBuilder,
   route: String,
   method: Method,
   consumes: HashSet<AcceptMimeType>,
   produces: HashSet<AcceptMimeType>,
 }
 
-impl HumptyRouteBuilder {
+impl TiiRouteBuilder {
   pub(crate) fn new(
-    router_builder: HumptyRouterBuilder,
+    router_builder: TiiRouterBuilder,
     method: Method,
     route: String,
-  ) -> HumptyRouteBuilder {
-    HumptyRouteBuilder {
+  ) -> TiiRouteBuilder {
+    TiiRouteBuilder {
       inner: router_builder,
       route,
       method,
@@ -122,10 +122,7 @@ impl HumptyRouteBuilder {
   }
 
   /// Finish building the route by proving the route.
-  pub fn endpoint<T: HttpEndpoint + 'static>(
-    mut self,
-    handler: T,
-  ) -> HumptyResult<HumptyRouterBuilder> {
+  pub fn endpoint<T: HttpEndpoint + 'static>(mut self, handler: T) -> TiiResult<TiiRouterBuilder> {
     self.inner.routes.push(HttpRoute::new(
       self.route,
       self.method,
@@ -137,9 +134,9 @@ impl HumptyRouteBuilder {
   }
 }
 
-impl Default for HumptyRouterBuilder {
+impl Default for TiiRouterBuilder {
   fn default() -> Self {
-    HumptyRouterBuilder {
+    TiiRouterBuilder {
       router_filter: Box::new(default_pre_routing_filter),
       pre_routing_filters: Vec::default(),
       routing_filters: Vec::default(),
@@ -155,16 +152,16 @@ impl Default for HumptyRouterBuilder {
   }
 }
 
-impl HumptyRouterBuilder {
+impl TiiRouterBuilder {
   /// Create a new sub-app with no routes.
   pub fn new() -> Self {
-    HumptyRouterBuilder::default()
+    TiiRouterBuilder::default()
   }
 
   /// Adds a pre routing filter. This is called before any routing is done.
   /// The filter can modify the path in the request to change the outcome of routing.
   /// This filter gets called for every request, even those that later fail to find a handler.
-  pub fn with_pre_routing_request_filter<T>(mut self, filter: T) -> HumptyResult<Self>
+  pub fn with_pre_routing_request_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
     T: RequestFilter + 'static,
   {
@@ -175,7 +172,7 @@ impl HumptyRouterBuilder {
   /// Adds a routing filter. This filter gets called once routing is done.
   /// This filter is called directly before a handler is called.
   /// This filter is only called on requests that actually do have a handler.
-  pub fn with_request_filter<T>(mut self, filter: T) -> HumptyResult<Self>
+  pub fn with_request_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
     T: RequestFilter + 'static,
   {
@@ -196,7 +193,7 @@ impl HumptyRouterBuilder {
   /// even if the error handler was already called previously for the same request.
   /// However, each "request" will only trigger exactly 1 invocation of the response filter so it is not possible
   /// to create a loop between response filter and error handler.
-  pub fn with_response_filter<T>(mut self, filter: T) -> HumptyResult<Self>
+  pub fn with_response_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
     T: ResponseFilter + 'static,
   {
@@ -213,7 +210,7 @@ impl HumptyRouterBuilder {
   /// - OPTIONS
   ///
   /// The endpoint will be called for any media type.
-  pub fn route_any<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn route_any<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: HttpEndpoint + 'static,
   {
@@ -229,7 +226,7 @@ impl HumptyRouterBuilder {
   }
 
   /// Helper fn to make some builder code look a bit cleaner.
-  pub const fn ok(self) -> HumptyResult<Self> {
+  pub const fn ok(self) -> TiiResult<Self> {
     Ok(self)
   }
 
@@ -240,7 +237,7 @@ impl HumptyRouterBuilder {
     method: Method,
     route: &str,
     handler: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     self.routes.push(HttpRoute::new(
       route,
       method,
@@ -253,43 +250,31 @@ impl HumptyRouterBuilder {
 
   /// Adds a route that will handle the GET http method.
   /// The endpoint will be called for any media type.
-  pub fn route_get<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> HumptyResult<Self> {
+  pub fn route_get<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Get, route, handler)
   }
 
   /// Adds a route that will handle the POST http method.
   /// The endpoint will be called for any media type.
-  pub fn route_post<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> HumptyResult<Self> {
+  pub fn route_post<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Post, route, handler)
   }
 
   /// Adds a route that will handle the PUT http method.
   /// The endpoint will be called for any media type.
-  pub fn route_put<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> HumptyResult<Self> {
+  pub fn route_put<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Put, route, handler)
   }
 
   /// Adds a route that will handle the PATCH http method.
   /// The endpoint will be called for any media type.
-  pub fn route_patch<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> HumptyResult<Self> {
+  pub fn route_patch<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Patch, route, handler)
   }
 
   /// Adds a route that will handle the DELETE http method.
   /// The endpoint will be called for any media type.
-  pub fn route_delete<T: HttpEndpoint + 'static>(
-    self,
-    route: &str,
-    handler: T,
-  ) -> HumptyResult<Self> {
+  pub fn route_delete<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
     self.route_method(Method::Delete, route, handler)
   }
 
@@ -299,113 +284,113 @@ impl HumptyRouterBuilder {
     self,
     route: &str,
     handler: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     self.route_method(Method::Options, route, handler)
   }
 
   /// Helper fn that will just call the passed closure,
   /// this can be used to write the builder in an indenting way.
   /// This method is purely cosmetic.
-  pub fn begin<T: FnOnce(Self) -> HumptyResult<Self>>(self, section: T) -> HumptyResult<Self> {
+  pub fn begin<T: FnOnce(Self) -> TiiResult<Self>>(self, section: T) -> TiiResult<Self> {
     section(self)
   }
 
   /// Build an endpoint with a GET http method.
-  pub fn get(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Get, route.to_string())
+  pub fn get(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Get, route.to_string())
   }
 
   /// Build an endpoint with a GET http method.
-  pub fn begin_get<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_get<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.get(route))
   }
 
   /// Build an endpoint with a POST http method.
-  pub fn post(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Post, route.to_string())
+  pub fn post(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Post, route.to_string())
   }
 
   /// Build an endpoint with a POST http method.
-  pub fn begin_post<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_post<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.post(route))
   }
 
   /// Build an endpoint with a PUT http method.
-  pub fn put(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Put, route.to_string())
+  pub fn put(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Put, route.to_string())
   }
 
   /// Build an endpoint with a PUT http method.
-  pub fn begin_put<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_put<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.put(route))
   }
 
   /// Build an endpoint with a PATCH http method.
-  pub fn patch(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Patch, route.to_string())
+  pub fn patch(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Patch, route.to_string())
   }
 
   /// Build an endpoint with a PATCH http method.
-  pub fn begin_patch<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_patch<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.patch(route))
   }
 
   /// Build an endpoint with a DELETE http method.
-  pub fn delete(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Delete, route.to_string())
+  pub fn delete(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Delete, route.to_string())
   }
 
   /// Build an endpoint with a DELETE http method.
-  pub fn begin_delete<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_delete<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.delete(route))
   }
 
   /// Build an endpoint with a OPTIONS http method.
-  pub fn options(self, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, Method::Options, route.to_string())
+  pub fn options(self, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, Method::Options, route.to_string())
   }
 
   /// Build an endpoint with a OPTIONS http method.
-  pub fn begin_options<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_options<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.delete(route))
   }
 
   /// Build an endpoint with a less commonly used or custom http method.
-  pub fn method(self, method: Method, route: &str) -> HumptyRouteBuilder {
-    HumptyRouteBuilder::new(self, method, route.to_string())
+  pub fn method(self, method: Method, route: &str) -> TiiRouteBuilder {
+    TiiRouteBuilder::new(self, method, route.to_string())
   }
 
   /// Build an endpoint with a less commonly used or custom http method.
-  pub fn begin_method<T: FnOnce(HumptyRouteBuilder) -> HumptyResult<Self>>(
+  pub fn begin_method<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
     method: Method,
     route: &str,
     closure: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     closure(self.method(method, route))
   }
 
@@ -414,7 +399,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will be called for any commonly used HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method.
-  pub fn ws_route_any<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_any<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -439,7 +424,7 @@ impl HumptyRouterBuilder {
     method: Method,
     route: &str,
     handler: T,
-  ) -> HumptyResult<Self> {
+  ) -> TiiResult<Self> {
     self.websocket_routes.push(WebSocketRoute::new(
       route,
       method,
@@ -455,7 +440,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the GET HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will call this endpoint.
-  pub fn ws_route_get<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_get<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -467,7 +452,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the POST HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
-  pub fn ws_route_post<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_post<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -479,7 +464,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the PUT HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
-  pub fn ws_route_put<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_put<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -491,7 +476,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the OPTIONS HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
-  pub fn ws_route_options<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_options<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -503,7 +488,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the PATCH HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
-  pub fn ws_route_patch<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_patch<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -515,7 +500,7 @@ impl HumptyRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the DELETE HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
-  pub fn ws_route_delete<T>(self, route: &str, handler: T) -> HumptyResult<Self>
+  pub fn ws_route_delete<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
     T: WebsocketEndpoint + 'static,
   {
@@ -523,8 +508,8 @@ impl HumptyRouterBuilder {
   }
 
   /// Build the router
-  pub fn build(self) -> HumptyRouter {
-    HumptyRouter::new(
+  pub fn build(self) -> TiiRouter {
+    TiiRouter::new(
       self.router_filter,
       self.pre_routing_filters,
       self.routing_filters,
@@ -540,7 +525,7 @@ impl HumptyRouterBuilder {
   }
 
   /// Equivalent of calling Arc::new(builder.build())
-  pub fn build_arc(self) -> Arc<HumptyRouter> {
+  pub fn build_arc(self) -> Arc<TiiRouter> {
     Arc::new(self.build())
   }
 }

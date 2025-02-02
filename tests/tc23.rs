@@ -1,15 +1,15 @@
 use crate::mock_stream::MockStream;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
 use std::sync::Mutex;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
 static REQ_ID: Mutex<u128> = Mutex::new(0);
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   *REQ_ID.lock().unwrap() = ctx.id();
 
   Response::ok(format!("{:?}", ctx), MimeType::TextPlain).into()
@@ -18,7 +18,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 #[test]
 pub fn tc23() {
   let server =
-    HumptyBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();

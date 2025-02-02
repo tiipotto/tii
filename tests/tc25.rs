@@ -1,17 +1,17 @@
 use crate::mock_stream::MockStream;
-use humpty::http::mime::MimeType;
-use humpty::http::request::HttpVersion;
-use humpty::http::request_context::RequestContext;
-use humpty::http::response_body::ResponseBody;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tii::http::mime::MimeType;
+use tii::http::request::HttpVersion;
+use tii::http::request_context::RequestContext;
+use tii::http::response_body::ResponseBody;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
@@ -23,7 +23,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 }
 
 static COUNTER2: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route2(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER2.fetch_add(1, Ordering::SeqCst);
   assert_eq!(HttpVersion::Http11, ctx.request_head().version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
@@ -36,7 +36,7 @@ fn dummy_route2(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc25() {
-  let server = HumptyBuilder::default()
+  let server = TiiBuilder::default()
     .router(|rt| {
       rt.post("/dummy")
         .consumes(MimeType::TextPlain)

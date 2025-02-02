@@ -1,15 +1,15 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use humpty::http::cookie::Cookie;
-use humpty::http::headers::{Header, HeaderName};
-use humpty::http::method::Method;
-use humpty::http::RequestHead;
+use tii::http::cookie::Cookie;
+use tii::http::headers::{Header, HeaderName};
+use tii::http::method::Method;
+use tii::http::RequestHead;
 
-use humpty::http::request::HttpVersion;
-use humpty::stream::IntoConnectionStream;
 use std::collections::VecDeque;
 use std::iter::FromIterator;
+use tii::http::request::HttpVersion;
+use tii::stream::IntoConnectionStream;
 
 #[allow(deprecated)]
 #[test]

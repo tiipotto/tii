@@ -1,4 +1,4 @@
-use humpty::http::headers::HeaderName;
+use tii::http::headers::HeaderName;
 
 #[test]
 fn test_well_known_header_types() {

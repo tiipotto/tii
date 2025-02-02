@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-  use humpty::http::status::StatusCode;
+  use tii::http::status::StatusCode;
 
   #[test]
   fn test_from_code() {

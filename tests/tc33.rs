@@ -1,23 +1,23 @@
 use crate::mock_stream::MockStream;
-use humpty::http::headers::HeaderName;
-use humpty::http::mime::MimeType;
-use humpty::http::request_context::RequestContext;
-use humpty::http::Response;
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
 use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tii::http::headers::HeaderName;
+use tii::http::mime::MimeType;
+use tii::http::request_context::RequestContext;
+use tii::http::Response;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn filter_set_accept(request: &mut RequestContext) -> HumptyResult<()> {
+fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
   if request.request_head().path() == "/" {
     request.request_head_mut().set_header(HeaderName::ContentType, "text/plain")?;
   }
   Ok(())
 }
-fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   let mut r = ctx.request_body().unwrap().as_read();
   let mut v = Vec::new();
   r.read_to_end(&mut v)?;
@@ -31,7 +31,7 @@ fn dummy_route(ctx: &RequestContext) -> HumptyResult<Response> {
 
 #[test]
 pub fn tc33() {
-  let server = HumptyBuilder::builder(|builder| {
+  let server = TiiBuilder::builder(|builder| {
     builder
       .router(|rt| {
         rt.get("/*")

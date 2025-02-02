@@ -4,13 +4,13 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use humpty::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::humpty_error::HumptyResult;
+use tii::tii_builder::TiiBuilder;
+use tii::tii_error::TiiResult;
 
-fn main() -> HumptyResult<()> {
-  let humpty_server = HumptyBuilder::builder_arc(|builder| {
+fn main() -> TiiResult<()> {
+  let tii_server = TiiBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/", builtin_endpoints::serve_file("./examples/static/pages/index.html"))?
@@ -24,7 +24,7 @@ fn main() -> HumptyResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }

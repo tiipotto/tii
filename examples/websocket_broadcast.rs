@@ -2,9 +2,9 @@ use std::error::Error;
 use std::thread::{self, spawn};
 use std::time::Duration;
 
-use humpty::extras::{ws_link_hook, Connector, TcpConnector, WsBroadcastBuilder, WsHandle};
-use humpty::humpty_builder::HumptyBuilder;
-use humpty::websocket::message::WebsocketMessage;
+use tii::extras::{ws_link_hook, Connector, TcpConnector, WsBroadcastBuilder, WsHandle};
+use tii::tii_builder::TiiBuilder;
+use tii::websocket::message::WebsocketMessage;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let websocket_linker = WsBroadcastBuilder::default()
@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .with_connect_handler(connect_handler)
     .with_disconnect_handler(disconnect_handler);
 
-  let humpty_server = HumptyBuilder::builder_arc(|builder| {
+  let tii_server = TiiBuilder::builder_arc(|builder| {
     builder
       .router(|router| router.ws_route_any("/ws", ws_link_hook(websocket_linker.connect_hook())))?
       .with_connection_timeout(Some(Duration::from_secs(8)))
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     websocket_linker.finalize().run().unwrap();
   });
 
-  let app = TcpConnector::start_unpooled("0.0.0.0:8080", humpty_server).unwrap();
+  let app = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server).unwrap();
 
   // Send shutdown signal after 420 seconds. Override with command line args for valgrind.
   let dur: u64 = {

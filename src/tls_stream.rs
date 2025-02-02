@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
-/// All connections that can be used to tunnel tls using Humpty's default RustTls wrapper need to provide these functions.
+/// All connections that can be used to tunnel tls using Tii's default RustTls wrapper need to provide these functions.
 /// This trait is implemented by default for TcpStream and UnixStream.
 pub trait TlsCapableStream: Debug + Sync + Send {
   /// io::Read &T
@@ -131,9 +131,9 @@ impl<T: TlsCapableStream + ?Sized> Write for StreamWrapper<T> {
 
 /// Wrapper struct that wraps a TLS Engine from RustTLS together with a read and write buffers.
 #[derive(Debug, Clone)]
-pub struct HumptyTlsStream(Arc<HumptyTlsWrapperInner>);
-impl HumptyTlsStream {
-  /// Create a new HumptyTlsStream using the given tcp stream.
+pub struct TiiTlsStream(Arc<TiiTlsWrapperInner>);
+impl TiiTlsStream {
+  /// Create a new TiiTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using `thread::Builder::new()::spawn`
   /// The threads are automatically stopped if the returned ConnectionStream is dropped.
   pub fn create_unpooled<S: TlsCapableStream + 'static>(
@@ -143,7 +143,7 @@ impl HumptyTlsStream {
     Self::create(tcp, tls, &DefaultThreadAdapter)
   }
 
-  /// Create a new HumptyTlsStream using the given tcp stream.
+  /// Create a new TiiTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using the provided thread spawn function.
   /// The tasks automatically return if the returned ConnectionStream is dropped.
   pub fn create<S: TlsCapableStream + 'static>(
@@ -160,7 +160,7 @@ impl HumptyTlsStream {
         Ok(())
       })?;
 
-    Ok(Box::new(Self(Arc::new(HumptyTlsWrapperInner {
+    Ok(Box::new(Self(Arc::new(TiiTlsWrapperInner {
       stream_ref: stream_wrapper.0 as Arc<_>,
       tls,
       read: Mutex::new(UnownedReadBuffer::new()),
@@ -172,7 +172,7 @@ impl HumptyTlsStream {
 }
 
 #[derive(Debug)]
-struct HumptyTlsWrapperInner {
+struct TiiTlsWrapperInner {
   stream_ref: Arc<dyn TlsCapableStream>,
   tls: RustTlsDuplexStream<ServerConnection, ServerConnectionData>,
   read: Mutex<UnownedReadBuffer<0x4000>>,
@@ -181,13 +181,13 @@ struct HumptyTlsWrapperInner {
   local: String,
 }
 
-impl Drop for HumptyTlsWrapperInner {
+impl Drop for TiiTlsWrapperInner {
   fn drop(&mut self) {
     self.stream_ref.shutdown()
   }
 }
 
-impl ConnectionStreamRead for HumptyTlsStream {
+impl ConnectionStreamRead for TiiTlsStream {
   fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
   }
@@ -229,13 +229,13 @@ impl ConnectionStreamRead for HumptyTlsStream {
   }
 }
 
-impl Read for HumptyTlsStream {
+impl Read for TiiTlsStream {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
   }
 }
 
-impl ConnectionStreamWrite for HumptyTlsStream {
+impl ConnectionStreamWrite for TiiTlsStream {
   fn write(&self, buf: &[u8]) -> io::Result<usize> {
     unwrap_poison(self.0.write.lock())?.write(&mut &self.0.tls, buf)
   }
@@ -269,7 +269,7 @@ impl ConnectionStreamWrite for HumptyTlsStream {
   }
 }
 
-impl Write for HumptyTlsStream {
+impl Write for TiiTlsStream {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     unwrap_poison(self.0.write.lock())?.write(&mut &self.0.tls, buf)
   }
@@ -279,7 +279,7 @@ impl Write for HumptyTlsStream {
   }
 }
 
-impl ConnectionStream for HumptyTlsStream {
+impl ConnectionStream for TiiTlsStream {
   fn new_ref(&self) -> Box<dyn ConnectionStream> {
     Box::new(self.clone()) as Box<dyn ConnectionStream>
   }

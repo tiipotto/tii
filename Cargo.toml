@@ -1,11 +1,11 @@
 [package]
-name = "humpty"
-version = "0.1.0"
+name = "tii"
+version = "0.0.1"
 edition = "2021"
 authors = ["Alexander Schuetz <aschuetz@protonmail.com>", "Kevin Nakamura <grinkers@grinkers.net>"]
 license = "MIT"
-homepage = "https://github.com/Grinkers/humpty"
-repository = "https://github.com/Grinkers/humpty"
+homepage = "https://github.com/tiipotto/tii"
+repository = "https://github.com/tiipotto/tii"
 readme = "README.md"
 description = "A Low-Latency Web Server."
 keywords = ["http", "server", "http-server"]
