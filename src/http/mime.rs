@@ -84,7 +84,7 @@ impl QValue {
   /// Returns the QValue in http header representation.
   /// Note: this is without the "q=" prefix!
   pub const fn as_str(&self) -> &'static str {
-    constutils::qvalue_to_strs!()
+    tii_procmacro::qvalue_to_strs!()
   }
 
   /// returns this QValue as an u16. This value always ranges from 0 to 1000.
