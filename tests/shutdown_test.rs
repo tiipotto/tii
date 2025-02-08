@@ -7,11 +7,11 @@ mod inner {
   use std::time::Duration;
   use tii::extras;
   use tii::extras::TiiConnector;
-  use tii::http::mime::TiiMimeType;
-  use tii::http::request_context::TiiRequestContext;
-  use tii::http::TiiResponse;
-  use tii::tii_builder::TiiBuilder;
-  use tii::tii_error::TiiResult;
+  use tii::TiiMimeType;
+  use tii::TiiRequestContext;
+  use tii::TiiResponse;
+  use tii::TiiBuilder;
+  use tii::TiiResult;
 
   fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
     Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
