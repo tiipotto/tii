@@ -1,19 +1,19 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::AtomicUsize;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiHttpVersion;
+use tii::TiiRequestContext;
+use tii::TiiResult;
+use tii::{TiiResponse, TiiStatusCode};
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
-  Response::new(StatusCode::OK).with_body("Okay!").with_header("Fubar", "Dubar")
+  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+  TiiResponse::new(TiiStatusCode::OK).with_body("Okay!").with_header("Fubar", "Dubar")
 }
 
 #[test]

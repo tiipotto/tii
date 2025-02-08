@@ -4,7 +4,9 @@
 
 #![warn(missing_docs)]
 
-pub mod message;
-pub mod stream;
+mod message;
+pub use message::*;
+mod ws_stream;
+pub use ws_stream::*;
 
 mod frame;

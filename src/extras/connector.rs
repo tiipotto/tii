@@ -1,4 +1,4 @@
-use crate::tii_builder::ThreadAdapterJoinHandle;
+use crate::tii_builder::TiiThreadAdapterJoinHandle;
 use crate::tii_server::ConnectionStreamMetadata;
 use std::any::Any;
 use std::fmt::{Display, Formatter};
@@ -20,7 +20,7 @@ use std::time::Duration;
 pub(crate) const CONNECTOR_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Trait that defines all fn's that each connector implemented by tii::extras has.
-pub trait Connector {
+pub trait TiiConnector {
   /// Request a shutdown.
   /// This will not interrupt/stop open connections.
   fn shutdown(&self);
@@ -81,7 +81,7 @@ impl Display for ConnectorMeta {
 #[derive(Debug)]
 pub(crate) struct ActiveConnection {
   pub(crate) id: u128,
-  pub(crate) hdl: Option<ThreadAdapterJoinHandle>,
+  pub(crate) hdl: Option<TiiThreadAdapterJoinHandle>,
   pub(crate) done_flag: Arc<AtomicBool>,
 }
 

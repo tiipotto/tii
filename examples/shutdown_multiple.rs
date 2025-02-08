@@ -6,15 +6,15 @@ use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 use tii::extras;
-use tii::extras::Connector;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::extras::TiiConnector;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
-fn hello(_: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
+fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
 }
 
 fn main() -> TiiResult<()> {
@@ -40,9 +40,9 @@ fn main() -> TiiResult<()> {
       .ok()
   })?;
 
-  let c1 = extras::TcpConnector::start_unpooled("0.0.0.0:28080", tii_server.clone())?;
-  let c2 = extras::TcpConnector::start_unpooled("0.0.0.0:28081", tii_server.clone())?;
-  let c3 = extras::TcpConnector::start_unpooled("0.0.0.0:28082", tii_server.clone())?;
+  let c1 = extras::TiiTcpConnector::start_unpooled("0.0.0.0:28080", tii_server.clone())?;
+  let c2 = extras::TiiTcpConnector::start_unpooled("0.0.0.0:28081", tii_server.clone())?;
+  let c3 = extras::TiiTcpConnector::start_unpooled("0.0.0.0:28082", tii_server.clone())?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:28080")?, Duration::from_secs(30))?;

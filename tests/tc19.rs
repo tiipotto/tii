@@ -1,16 +1,16 @@
 use crate::mock_stream::MockStream;
-use tii::http::request_context::RequestContext;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiRequestContext;
+use tii::TiiResult;
+use tii::{TiiResponse, TiiStatusCode};
 
 mod mock_stream;
 
-fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let body = ctx.request_body().unwrap();
   let mut data = vec![];
   body.read_to_end(&mut data)?;
-  Response::new(StatusCode::OK).with_body(data).into()
+  TiiResponse::new(TiiStatusCode::OK).with_body(data).into()
 }
 
 #[test]

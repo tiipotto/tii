@@ -1,13 +1,13 @@
 use std::net::TcpListener;
 use std::time::Duration;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
 
-fn hello_world(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().path());
-  Response::ok(response_body, MimeType::TextPlain)
+fn hello_world(request: &TiiRequestContext) -> TiiResponse {
+  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  TiiResponse::ok(response_body, TiiMimeType::TextPlain)
 }
 fn main() {
   let tii_server = TiiBuilder::builder(|builder| {

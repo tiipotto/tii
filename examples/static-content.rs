@@ -4,10 +4,10 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use tii::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::extras::{builtin_endpoints, TiiConnector, TiiTcpConnector};
 
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiResult;
 
 fn main() -> TiiResult<()> {
   let tii_server = TiiBuilder::builder_arc(|builder| {
@@ -24,7 +24,7 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }

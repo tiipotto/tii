@@ -1,13 +1,13 @@
 use crate::mock_stream::MockStream;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::{RequestHeadParsingError, TiiResult};
+use tii::TiiBuilder;
 use tii::TiiError;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::{RequestHeadParsingError, TiiResult};
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(_ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   unreachable!()
 }
 

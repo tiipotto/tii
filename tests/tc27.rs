@@ -1,23 +1,23 @@
 use crate::mock_stream::MockStream;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::response_body::ResponseBody;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiHttpVersion;
+use tii::TiiRequestContext;
+use tii::TiiResponseBody;
+use tii::TiiResult;
+use tii::{TiiResponse, TiiStatusCode};
 
 mod mock_stream;
 
-fn add_header_filter(request: &mut RequestContext) -> TiiResult<()> {
+fn add_header_filter(request: &mut TiiRequestContext) -> TiiResult<()> {
   request.request_head_mut().set_header("custom-header-name", "custom-header-value")
 }
 
-fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   assert_eq!(ctx.request_head().get_header("custom-header-name"), Some("custom-header-value"));
 
-  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
+  Ok(TiiResponse::new(TiiStatusCode::OK).with_body(TiiResponseBody::from_slice("Okay!")))
 }
 
 #[test]

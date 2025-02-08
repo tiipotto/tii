@@ -5,33 +5,33 @@ use crate::default_functions::{
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
 };
 use crate::functional_traits::{
-  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
+  TiiHttpEndpoint, TiiRequestFilter, TiiResponseFilter, TiiRouterFilter, TiiWebsocketEndpoint,
 };
-use crate::http::method::Method;
-use crate::http::mime::AcceptMimeType;
-use crate::http::request_context::RequestContext;
-use crate::http::Response;
-use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
-use crate::tii_error::TiiResult;
-use crate::tii_router::{HttpRoute, TiiRouter, WebSocketRoute};
-use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
+use crate::TiiAcceptMimeType;
+use crate::TiiHttpMethod;
+use crate::TiiRequestContext;
+use crate::TiiResult;
+use crate::{BasicRouter, TiiResponse, TiiRouter};
+use crate::{ErrorHandler, NotRouteableHandler};
+use crate::{HttpRoute, WebSocketRoute};
+use crate::{TiiWebsocketReceiver, TiiWebsocketSender};
 use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Represents a sub-app to run for a specific host.
 pub struct TiiRouterBuilder {
   /// This filter/predicate will decide if the router should even serve the request at all
-  router_filter: Box<dyn RouterFilter>,
+  router_filter: Box<dyn TiiRouterFilter>,
 
   /// Filters that run before the route is matched.
   /// These filters may modify the path of the request to affect routing decision.
-  pre_routing_filters: Vec<Box<dyn RequestFilter>>,
+  pre_routing_filters: Vec<Box<dyn TiiRequestFilter>>,
   /// Filters that run once the routing decision has been made.
   /// These filters only run if there is an actual endpoint.
-  routing_filters: Vec<Box<dyn RequestFilter>>,
+  routing_filters: Vec<Box<dyn TiiRequestFilter>>,
 
   /// These filters run on the response after the actual endpoint (or the error handler) has been called.
-  response_filters: Vec<Box<dyn ResponseFilter>>,
+  response_filters: Vec<Box<dyn TiiResponseFilter>>,
 
   /// The routes to process requests for and their handlers.
   routes: Vec<HttpRoute>,
@@ -52,14 +52,14 @@ pub struct TiiRouterBuilder {
 
 /// For multi method routes!
 #[derive(Debug)]
-struct RouteWrapper<T: HttpEndpoint + 'static>(Arc<T>);
-impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
-  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
+struct RouteWrapper<T: TiiHttpEndpoint + 'static>(Arc<T>);
+impl<T: TiiHttpEndpoint + 'static> TiiHttpEndpoint for RouteWrapper<T> {
+  fn serve(&self, request: &TiiRequestContext) -> TiiResult<TiiResponse> {
     self.0.serve(request)
   }
 }
 
-impl<T: HttpEndpoint + 'static> Clone for RouteWrapper<T> {
+impl<T: TiiHttpEndpoint + 'static> Clone for RouteWrapper<T> {
   fn clone(&self) -> Self {
     Self(Arc::clone(&self.0))
   }
@@ -67,19 +67,19 @@ impl<T: HttpEndpoint + 'static> Clone for RouteWrapper<T> {
 
 /// For multi method routes!
 #[derive(Debug)]
-struct WsRouteWrapper<T: WebsocketEndpoint + 'static>(Arc<T>);
-impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WsRouteWrapper<T> {
+struct WsRouteWrapper<T: TiiWebsocketEndpoint + 'static>(Arc<T>);
+impl<T: TiiWebsocketEndpoint + 'static> TiiWebsocketEndpoint for WsRouteWrapper<T> {
   fn serve(
     &self,
-    request: &RequestContext,
-    receiver: WebsocketReceiver,
-    sender: WebsocketSender,
+    request: &TiiRequestContext,
+    receiver: TiiWebsocketReceiver,
+    sender: TiiWebsocketSender,
   ) -> TiiResult<()> {
     self.0.serve(request, receiver, sender)
   }
 }
 
-impl<T: WebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
+impl<T: TiiWebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
   fn clone(&self) -> Self {
     Self(Arc::clone(&self.0))
   }
@@ -89,15 +89,15 @@ impl<T: WebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
 pub struct TiiRouteBuilder {
   inner: TiiRouterBuilder,
   route: String,
-  method: Method,
-  consumes: HashSet<AcceptMimeType>,
-  produces: HashSet<AcceptMimeType>,
+  method: TiiHttpMethod,
+  consumes: HashSet<TiiAcceptMimeType>,
+  produces: HashSet<TiiAcceptMimeType>,
 }
 
 impl TiiRouteBuilder {
   pub(crate) fn new(
     router_builder: TiiRouterBuilder,
-    method: Method,
+    method: TiiHttpMethod,
     route: String,
   ) -> TiiRouteBuilder {
     TiiRouteBuilder {
@@ -110,19 +110,22 @@ impl TiiRouteBuilder {
   }
 
   /// Add a mime type which the endpoint can consume.
-  pub fn consumes(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn consumes(mut self, mime: impl Into<TiiAcceptMimeType>) -> Self {
     self.consumes.insert(mime.into());
     self
   }
 
   /// Add a mime type which the endpoint may produce.
-  pub fn produces(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn produces(mut self, mime: impl Into<TiiAcceptMimeType>) -> Self {
     self.produces.insert(mime.into());
     self
   }
 
   /// Finish building the route by proving the route.
-  pub fn endpoint<T: HttpEndpoint + 'static>(mut self, handler: T) -> TiiResult<TiiRouterBuilder> {
+  pub fn endpoint<T: TiiHttpEndpoint + 'static>(
+    mut self,
+    handler: T,
+  ) -> TiiResult<TiiRouterBuilder> {
     self.inner.routes.push(HttpRoute::new(
       self.route,
       self.method,
@@ -163,7 +166,7 @@ impl TiiRouterBuilder {
   /// This filter gets called for every request, even those that later fail to find a handler.
   pub fn with_pre_routing_request_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
-    T: RequestFilter + 'static,
+    T: TiiRequestFilter + 'static,
   {
     self.pre_routing_filters.push(Box::new(filter));
     Ok(self)
@@ -174,7 +177,7 @@ impl TiiRouterBuilder {
   /// This filter is only called on requests that actually do have a handler.
   pub fn with_request_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
-    T: RequestFilter + 'static,
+    T: TiiRequestFilter + 'static,
   {
     self.routing_filters.push(Box::new(filter));
     Ok(self)
@@ -195,7 +198,7 @@ impl TiiRouterBuilder {
   /// to create a loop between response filter and error handler.
   pub fn with_response_filter<T>(mut self, filter: T) -> TiiResult<Self>
   where
-    T: ResponseFilter + 'static,
+    T: TiiResponseFilter + 'static,
   {
     self.response_filters.push(Box::new(filter));
     Ok(self)
@@ -212,7 +215,7 @@ impl TiiRouterBuilder {
   /// The endpoint will be called for any media type.
   pub fn route_any<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: HttpEndpoint + 'static,
+    T: TiiHttpEndpoint + 'static,
   {
     let wrapped = RouteWrapper(Arc::new(handler));
 
@@ -232,16 +235,16 @@ impl TiiRouterBuilder {
 
   /// Adds a route that will handle the given http method.
   /// The endpoint will be called for any media type.
-  pub fn route_method<T: HttpEndpoint + 'static>(
+  pub fn route_method<T: TiiHttpEndpoint + 'static>(
     mut self,
-    method: Method,
+    method: TiiHttpMethod,
     route: &str,
     handler: T,
   ) -> TiiResult<Self> {
     self.routes.push(HttpRoute::new(
       route,
       method,
-      HashSet::from([AcceptMimeType::Wildcard]),
+      HashSet::from([TiiAcceptMimeType::Wildcard]),
       HashSet::new(),
       handler,
     )?);
@@ -250,42 +253,54 @@ impl TiiRouterBuilder {
 
   /// Adds a route that will handle the GET http method.
   /// The endpoint will be called for any media type.
-  pub fn route_get<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
-    self.route_method(Method::Get, route, handler)
+  pub fn route_get<T: TiiHttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
+    self.route_method(TiiHttpMethod::Get, route, handler)
   }
 
   /// Adds a route that will handle the POST http method.
   /// The endpoint will be called for any media type.
-  pub fn route_post<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
-    self.route_method(Method::Post, route, handler)
-  }
-
-  /// Adds a route that will handle the PUT http method.
-  /// The endpoint will be called for any media type.
-  pub fn route_put<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
-    self.route_method(Method::Put, route, handler)
-  }
-
-  /// Adds a route that will handle the PATCH http method.
-  /// The endpoint will be called for any media type.
-  pub fn route_patch<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
-    self.route_method(Method::Patch, route, handler)
-  }
-
-  /// Adds a route that will handle the DELETE http method.
-  /// The endpoint will be called for any media type.
-  pub fn route_delete<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
-    self.route_method(Method::Delete, route, handler)
-  }
-
-  /// Adds a route that will handle the OPTIONS http method.
-  /// The endpoint will be called for any media type.
-  pub fn route_options<T: HttpEndpoint + 'static>(
+  pub fn route_post<T: TiiHttpEndpoint + 'static>(
     self,
     route: &str,
     handler: T,
   ) -> TiiResult<Self> {
-    self.route_method(Method::Options, route, handler)
+    self.route_method(TiiHttpMethod::Post, route, handler)
+  }
+
+  /// Adds a route that will handle the PUT http method.
+  /// The endpoint will be called for any media type.
+  pub fn route_put<T: TiiHttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
+    self.route_method(TiiHttpMethod::Put, route, handler)
+  }
+
+  /// Adds a route that will handle the PATCH http method.
+  /// The endpoint will be called for any media type.
+  pub fn route_patch<T: TiiHttpEndpoint + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> TiiResult<Self> {
+    self.route_method(TiiHttpMethod::Patch, route, handler)
+  }
+
+  /// Adds a route that will handle the DELETE http method.
+  /// The endpoint will be called for any media type.
+  pub fn route_delete<T: TiiHttpEndpoint + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> TiiResult<Self> {
+    self.route_method(TiiHttpMethod::Delete, route, handler)
+  }
+
+  /// Adds a route that will handle the OPTIONS http method.
+  /// The endpoint will be called for any media type.
+  pub fn route_options<T: TiiHttpEndpoint + 'static>(
+    self,
+    route: &str,
+    handler: T,
+  ) -> TiiResult<Self> {
+    self.route_method(TiiHttpMethod::Options, route, handler)
   }
 
   /// Helper fn that will just call the passed closure,
@@ -297,7 +312,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a GET http method.
   pub fn get(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Get, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Get, route.to_string())
   }
 
   /// Build an endpoint with a GET http method.
@@ -311,7 +326,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a POST http method.
   pub fn post(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Post, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Post, route.to_string())
   }
 
   /// Build an endpoint with a POST http method.
@@ -325,7 +340,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a PUT http method.
   pub fn put(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Put, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Put, route.to_string())
   }
 
   /// Build an endpoint with a PUT http method.
@@ -339,7 +354,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a PATCH http method.
   pub fn patch(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Patch, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Patch, route.to_string())
   }
 
   /// Build an endpoint with a PATCH http method.
@@ -353,7 +368,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a DELETE http method.
   pub fn delete(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Delete, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Delete, route.to_string())
   }
 
   /// Build an endpoint with a DELETE http method.
@@ -367,7 +382,7 @@ impl TiiRouterBuilder {
 
   /// Build an endpoint with a OPTIONS http method.
   pub fn options(self, route: &str) -> TiiRouteBuilder {
-    TiiRouteBuilder::new(self, Method::Options, route.to_string())
+    TiiRouteBuilder::new(self, TiiHttpMethod::Options, route.to_string())
   }
 
   /// Build an endpoint with a OPTIONS http method.
@@ -380,14 +395,14 @@ impl TiiRouterBuilder {
   }
 
   /// Build an endpoint with a less commonly used or custom http method.
-  pub fn method(self, method: Method, route: &str) -> TiiRouteBuilder {
+  pub fn method(self, method: TiiHttpMethod, route: &str) -> TiiRouteBuilder {
     TiiRouteBuilder::new(self, method, route.to_string())
   }
 
   /// Build an endpoint with a less commonly used or custom http method.
   pub fn begin_method<T: FnOnce(TiiRouteBuilder) -> TiiResult<Self>>(
     self,
-    method: Method,
+    method: TiiHttpMethod,
     route: &str,
     closure: T,
   ) -> TiiResult<Self> {
@@ -401,7 +416,7 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method.
   pub fn ws_route_any<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
     let wrapped = WsRouteWrapper(Arc::new(handler));
 
@@ -419,9 +434,9 @@ impl TiiRouterBuilder {
   /// The handler is passed a reading and writing end of the websocket.
   /// The endpoint will only listen for HTTP upgrade requests that use the specified HTTP method.
   /// Ordinary Web-Socket clients only use the GET Method.
-  pub fn ws_route_method<T: WebsocketEndpoint + 'static>(
+  pub fn ws_route_method<T: TiiWebsocketEndpoint + 'static>(
     mut self,
-    method: Method,
+    method: TiiHttpMethod,
     route: &str,
     handler: T,
   ) -> TiiResult<Self> {
@@ -442,9 +457,9 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will call this endpoint.
   pub fn ws_route_get<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Get, route, handler)
+    self.ws_route_method(TiiHttpMethod::Get, route, handler)
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
@@ -454,9 +469,9 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
   pub fn ws_route_post<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Post, route, handler)
+    self.ws_route_method(TiiHttpMethod::Post, route, handler)
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
@@ -466,9 +481,9 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
   pub fn ws_route_put<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Put, route, handler)
+    self.ws_route_method(TiiHttpMethod::Put, route, handler)
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
@@ -478,9 +493,9 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
   pub fn ws_route_options<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Options, route, handler)
+    self.ws_route_method(TiiHttpMethod::Options, route, handler)
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
@@ -490,9 +505,9 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
   pub fn ws_route_patch<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Patch, route, handler)
+    self.ws_route_method(TiiHttpMethod::Patch, route, handler)
   }
 
   /// Adds a WebSocket route and associated handler to the sub-app.
@@ -502,14 +517,14 @@ impl TiiRouterBuilder {
   /// Ordinary Web-Socket clients only use the GET Method and will NOT call this endpoint.
   pub fn ws_route_delete<T>(self, route: &str, handler: T) -> TiiResult<Self>
   where
-    T: WebsocketEndpoint + 'static,
+    T: TiiWebsocketEndpoint + 'static,
   {
-    self.ws_route_method(Method::Delete, route, handler)
+    self.ws_route_method(TiiHttpMethod::Delete, route, handler)
   }
 
   /// Build the router
-  pub fn build(self) -> TiiRouter {
-    TiiRouter::new(
+  pub fn build(self) -> impl TiiRouter + 'static {
+    BasicRouter::new(
       self.router_filter,
       self.pre_routing_filters,
       self.routing_filters,
@@ -525,7 +540,7 @@ impl TiiRouterBuilder {
   }
 
   /// Equivalent of calling Arc::new(builder.build())
-  pub fn build_arc(self) -> Arc<TiiRouter> {
+  pub fn build_arc(self) -> Arc<impl TiiRouter + 'static> {
     Arc::new(self.build())
   }
 }

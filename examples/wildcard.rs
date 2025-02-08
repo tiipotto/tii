@@ -1,9 +1,9 @@
-use tii::extras::{Connector, TcpConnector};
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::extras::{TiiConnector, TiiTcpConnector};
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
 const HTML: &str = r##"
 <html>
@@ -36,23 +36,23 @@ fn main() -> TiiResult<()> {
     builder.router(|router| router.route_any("/", home)?.route_any("/wildcard/*", wildcard))
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
-fn home(_: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok(HTML, MimeType::TextHtml))
+fn home(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  Ok(TiiResponse::ok(HTML, TiiMimeType::TextHtml))
 }
 
-fn wildcard(request: &RequestContext) -> TiiResult<Response> {
+fn wildcard(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let wildcard_path = request
     .request_head()
-    .path() // get the URI of the request
+    .get_path() // get the URI of the request
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option
 
   let html = format!("<html><body><h1>Wildcard Path: {}</h1></body></html>", wildcard_path);
 
-  Ok(Response::ok(html, MimeType::TextHtml))
+  Ok(TiiResponse::ok(html, TiiMimeType::TextHtml))
 }

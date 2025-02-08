@@ -1,4 +1,4 @@
-use tii::tii_error::TiiResult;
+use tii::TiiResult;
 
 #[cfg(unix)]
 mod unix {
@@ -7,15 +7,15 @@ mod unix {
   use std::os::unix::net::UnixStream;
   use std::thread::sleep;
   use std::time::Duration;
-  use tii::extras::{Connector, UnixConnector};
-  use tii::http::mime::MimeType;
-  use tii::http::request_context::RequestContext;
-  use tii::http::Response;
-  use tii::tii_builder::TiiBuilder;
-  use tii::tii_error::TiiResult;
+  use tii::extras::{TiiConnector, TiiUnixConnector};
+  use tii::TiiBuilder;
+  use tii::TiiMimeType;
+  use tii::TiiRequestContext;
+  use tii::TiiResponse;
+  use tii::TiiResult;
 
-  fn hello(_: &RequestContext) -> TiiResult<Response> {
-    Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
+  fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+    Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
   }
 
   pub fn unix_main() -> TiiResult<()> {
@@ -41,7 +41,7 @@ mod unix {
         .ok()
     })?;
 
-    let connector = UnixConnector::start_unpooled("/tmp/tii.sock", tii_server)?;
+    let connector = TiiUnixConnector::start_unpooled("/tmp/tii.sock", tii_server)?;
 
     let mut stream = UnixStream::connect("/tmp/tii.sock")?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;

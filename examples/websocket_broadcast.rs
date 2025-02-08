@@ -2,19 +2,19 @@ use std::error::Error;
 use std::thread::{self, spawn};
 use std::time::Duration;
 
-use tii::extras::{ws_link_hook, Connector, TcpConnector, WsBroadcastBuilder, WsHandle};
-use tii::tii_builder::TiiBuilder;
-use tii::websocket::message::WebsocketMessage;
+use tii::extras::{TiiConnector, TiiTcpConnector, TiiWsbAppBuilder, TiiWsbHandle};
+use tii::TiiBuilder;
+use tii::TiiWebsocketMessage;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let websocket_linker = WsBroadcastBuilder::default()
+  let websocket_linker = TiiWsbAppBuilder::default()
     .with_message_handler(message_handler)
     .with_connect_handler(connect_handler)
     .with_disconnect_handler(disconnect_handler);
 
   let tii_server = TiiBuilder::builder_arc(|builder| {
     builder
-      .router(|router| router.ws_route_any("/ws", ws_link_hook(websocket_linker.connect_hook())))?
+      .router(|router| router.ws_route_any("/ws", websocket_linker.endpoint()))?
       .with_connection_timeout(Some(Duration::from_secs(8)))
   })
   .unwrap();
@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     websocket_linker.finalize().run().unwrap();
   });
 
-  let app = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server).unwrap();
+  let app = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server).unwrap();
 
   // Send shutdown signal after 420 seconds. Override with command line args for valgrind.
   let dur: u64 = {
@@ -49,24 +49,24 @@ fn main() -> Result<(), Box<dyn Error>> {
 // Processes the input from the ws client and does a fizzbuzz-like return.
 // Each WS client has their own fizzbuzz state, but when any client triggers a "fizzbuzz",
 // it ends up being broadcast to all ws clients.
-fn message_handler(handle: WsHandle, message: WebsocketMessage) {
+fn message_handler(handle: TiiWsbHandle, message: TiiWebsocketMessage) {
   let ret = fizzbuzz(message.text().unwrap());
   if ret == "fizzbuzz" {
     println!("doing fizzbuzz broadcast");
-    handle.broadcast(WebsocketMessage::new_text(&ret));
+    handle.broadcast(TiiWebsocketMessage::new_text(&ret));
   } else {
-    handle.send(WebsocketMessage::new_text(&ret));
+    handle.send(TiiWebsocketMessage::new_text(&ret));
   }
 }
 
-fn connect_handler(handle: WsHandle) {
+fn connect_handler(handle: TiiWsbHandle) {
   println!("{}: Client connected!", handle.peer_addr());
 }
 
-fn disconnect_handler(handle: WsHandle) {
+fn disconnect_handler(handle: TiiWsbHandle) {
   let msg = format!("{}: Client disconnected", handle.peer_addr());
   println!("{msg}");
-  handle.broadcast(WebsocketMessage::new_text(&msg));
+  handle.broadcast(TiiWebsocketMessage::new_text(&msg));
 }
 
 fn fizzbuzz(s: &str) -> &str {

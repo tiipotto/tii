@@ -1,19 +1,19 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(_ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   unreachable!()
 }
 
-fn dummy_route2(ctx: &RequestContext) -> Response {
-  Response::ok(format!("{:?}", ctx.request_head().query()), MimeType::TextPlain)
+fn dummy_route2(ctx: &TiiRequestContext) -> TiiResponse {
+  TiiResponse::ok(format!("{:?}", ctx.request_head().get_query()), TiiMimeType::TextPlain)
 }
 
 #[test]

@@ -1,14 +1,14 @@
 use crate::mock_stream::MockStream;
 use std::io::ErrorKind;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let body = ctx.request_body().unwrap();
   assert_eq!(0, body.read(&mut [])?);
   let mut data = [0; 12];
@@ -29,7 +29,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   }
   let err = body.read_exact(data.as_mut()).unwrap_err();
   assert_eq!(ErrorKind::UnexpectedEof, err.kind());
-  Response::ok("Okay!", MimeType::TextPlain).into()
+  TiiResponse::ok("Okay!", TiiMimeType::TextPlain).into()
 }
 
 #[test]

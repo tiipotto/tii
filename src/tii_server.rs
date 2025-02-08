@@ -2,14 +2,14 @@
 //! It also handles http keep alive and rudimentary (fallback) error handling.
 //! If no router wants to handle the request it also has a 404 handler.
 
-use crate::functional_traits::Router;
-use crate::http::headers::HeaderName;
-use crate::http::request::HttpVersion;
-use crate::http::request_context::RequestContext;
-use crate::http::{Response, StatusCode};
-use crate::stream::{ConnectionStream, IntoConnectionStream};
-use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
+use crate::functional_traits::TiiRouter;
+use crate::http::{TiiResponse, TiiStatusCode};
+use crate::stream::{IntoTiiConnectionStream, TiiConnectionStream};
+use crate::tii_builder::{ErrorHandler, NotFoundHandler, TiiRouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
+use crate::TiiHttpHeaderName;
+use crate::TiiHttpVersion;
+use crate::TiiRequestContext;
 use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -45,7 +45,7 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 #[derive(Debug)]
 pub struct TiiServer {
   shutdown: AtomicBool,
-  routers: Vec<Box<dyn Router>>,
+  routers: Vec<Box<dyn TiiRouter>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
   max_head_buffer_size: usize,
@@ -74,7 +74,7 @@ impl Default for Hooks {
 impl TiiServer {
   #[expect(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
-    routers: Vec<Box<dyn Router>>,
+    routers: Vec<Box<dyn TiiRouter>>,
     error_handler: ErrorHandler,
     not_found_handler: NotFoundHandler,
     max_head_buffer_size: usize,
@@ -100,12 +100,12 @@ impl TiiServer {
   }
 
   /// Handles a connection without any metadata
-  pub fn handle_connection<S: IntoConnectionStream>(&self, stream: S) -> TiiResult<()> {
+  pub fn handle_connection<S: IntoTiiConnectionStream>(&self, stream: S) -> TiiResult<()> {
     self.handle_connection_inner::<S, PhantomStreamMetadata>(stream, None)
   }
 
   /// Handles a connection with arbitrary metadata
-  pub fn handle_connection_with_meta<S: IntoConnectionStream, M: ConnectionStreamMetadata>(
+  pub fn handle_connection_with_meta<S: IntoTiiConnectionStream, M: ConnectionStreamMetadata>(
     &self,
     stream: S,
     meta: M,
@@ -154,7 +154,7 @@ impl TiiServer {
   }
 
   /// Impl for handle connection.
-  fn handle_connection_inner<S: IntoConnectionStream, M: ConnectionStreamMetadata>(
+  fn handle_connection_inner<S: IntoTiiConnectionStream, M: ConnectionStreamMetadata>(
     &self,
     stream: S,
     meta: Option<M>,
@@ -183,14 +183,14 @@ impl TiiServer {
       stream.set_read_timeout(self.read_timeout)?;
 
       let mut context =
-        RequestContext::new(stream.as_ref(), meta.as_ref().cloned(), self.max_head_buffer_size)?;
+        TiiRequestContext::new(stream.as_ref(), meta.as_ref().cloned(), self.max_head_buffer_size)?;
       count += 1;
 
       stream.set_read_timeout(self.request_body_io_timeout)?;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
-      if context.request_head().version() == HttpVersion::Http11
-        && context.request_head().get_header(&HeaderName::Upgrade) == Some("websocket")
+      if context.request_head().get_version() == TiiHttpVersion::Http11
+        && context.request_head().get_header(&TiiHttpHeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -201,12 +201,12 @@ impl TiiServer {
           //We have got no clue if we actually already switched protocols or not in error case.
           //Best bail asap
           match router.serve_websocket(stream.as_ref(), &mut context)? {
-            RouterWebSocketServingResponse::HandledWithProtocolSwitch => return Ok(()),
-            RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(response) => {
+            TiiRouterWebSocketServingResponse::HandledWithProtocolSwitch => return Ok(()),
+            TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(response) => {
               self.write_response(stream.as_ref(), context, false, response)?;
               return Ok(());
             }
-            RouterWebSocketServingResponse::NotHandled => (), // Next router please
+            TiiRouterWebSocketServingResponse::NotHandled => (), // Next router please
           }
         }
 
@@ -224,13 +224,13 @@ impl TiiServer {
       // Will we do keep alive?
       let mut keep_alive = !self.is_shutdown()
           // is this http 1.1 because earlier does not support it.
-          && context.request_head().version() == HttpVersion::Http11
+          && context.request_head().get_version() == TiiHttpVersion::Http11
           // Do we have a keep alive timeout that is not zero?
           && self.keep_alive_timeout.as_ref().map(|a| !a.is_zero()).unwrap_or(true)
           // did the client tell us not to do keep alive?
           && context
             .request_head()
-            .get_header(&HeaderName::Connection)
+            .get_header(&TiiHttpHeaderName::Connection)
             .map(|e| e.eq_ignore_ascii_case("keep-alive"))
             .unwrap_or_default();
 
@@ -269,7 +269,7 @@ impl TiiServer {
     Ok(())
   }
 
-  fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> TiiResult<bool> {
+  fn handle_keep_alive(&self, stream: &dyn TiiConnectionStream) -> TiiResult<bool> {
     if self.is_shutdown() {
       trace_log!("Keep-alive server shutting down...");
       return Ok(false);
@@ -312,16 +312,16 @@ impl TiiServer {
 
   fn write_response(
     &self,
-    stream: &dyn ConnectionStream,
-    context: RequestContext,
+    stream: &dyn TiiConnectionStream,
+    context: TiiRequestContext,
     keep_alive: bool,
-    mut response: Response,
+    mut response: TiiResponse,
   ) -> TiiResult<()> {
-    if context.request_head().version() == HttpVersion::Http11 {
+    if context.request_head().get_version() == TiiHttpVersion::Http11 {
       let previous_headers = if keep_alive {
-        response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
+        response.headers.replace_all(TiiHttpHeaderName::Connection, "Keep-Alive")
       } else {
-        response.headers.replace_all(HeaderName::Connection, "Close")
+        response.headers.replace_all(TiiHttpHeaderName::Connection, "Close")
       };
 
       if !previous_headers.is_empty() {
@@ -335,7 +335,7 @@ impl TiiServer {
 
     trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
 
-    response.write_to(context.request_head().version(), stream.as_stream_write()).inspect_err(
+    response.write_to(context.request_head().get_version(), stream.as_stream_write()).inspect_err(
       |e| {
         trace_log!("response.write_to {}", e);
       },
@@ -347,17 +347,21 @@ impl TiiServer {
     Ok(())
   }
 
-  fn fallback_error_handler(&self, request: &mut RequestContext, error: TiiError) -> Response {
+  fn fallback_error_handler(
+    &self,
+    request: &mut TiiRequestContext,
+    error: TiiError,
+  ) -> TiiResponse {
     request.force_connection_close();
 
     error_log!(
       "Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
-      &request.request_head().method(),
-      request.request_head().path(),
+      &request.request_head().get_method(),
+      request.request_head().get_path(),
       error
     );
 
-    Response::new(StatusCode::InternalServerError)
+    TiiResponse::new(TiiStatusCode::InternalServerError)
   }
 }
 

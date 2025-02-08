@@ -1,6 +1,6 @@
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
 
 #[cfg(not(unix))]
 pub fn main() {
@@ -11,27 +11,27 @@ pub fn main() {
 pub fn main() {
   unix::work().expect("Error");
 }
-pub fn handle(ctx: &RequestContext) -> Response {
+pub fn handle(ctx: &TiiRequestContext) -> TiiResponse {
   if ctx.peer_address() == "unix" {
     //Hello unix->/tmp/tii.sock with GET /path HTTP/1.1
-    Response::ok(
+    TiiResponse::ok(
       format!(
         "Hello unix->{} with {}\n",
         ctx.local_address(),
-        ctx.request_head().raw_status_line()
+        ctx.request_head().get_raw_status_line()
       ),
-      MimeType::TextPlain,
+      TiiMimeType::TextPlain,
     )
   } else {
     //Hello tcp 127.0.0.1:37548->127.0.0.1:8080 with GET /some/path HTTP/1.1
-    Response::ok(
+    TiiResponse::ok(
       format!(
         "Hello tcp {}->{} with {}\n",
         ctx.peer_address(),
         ctx.local_address(),
-        ctx.request_head().raw_status_line()
+        ctx.request_head().get_raw_status_line()
       ),
-      MimeType::TextPlain,
+      TiiMimeType::TextPlain,
     )
   }
 }
@@ -40,9 +40,9 @@ pub fn handle(ctx: &RequestContext) -> Response {
 mod unix {
   use crate::handle;
   use tii::extras;
-  use tii::extras::Connector;
-  use tii::tii_builder::TiiBuilder;
-  use tii::tii_error::TiiResult;
+  use tii::extras::TiiConnector;
+  use tii::TiiBuilder;
+  use tii::TiiResult;
 
   pub fn work() -> TiiResult<()> {
     colog::default_builder().filter_level(log::LevelFilter::Trace).init();
@@ -56,11 +56,11 @@ mod unix {
 
     //HANDLE TCP CONNECTIONS
     //curl -X GET http://127.0.0.1:8080/some/path
-    let tcp = extras::TcpConnector::start_unpooled("0.0.0.0:8080", tii_server.clone())?;
+    let tcp = extras::TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server.clone())?;
 
     //HANDLE UNIX CONNECTIONS
     //curl -X GET --unix-socket /tmp/tii.sock http://unix/some/path
-    let unix = extras::UnixConnector::start_unpooled("/tmp/tii.sock", tii_server.clone())?;
+    let unix = extras::TiiUnixConnector::start_unpooled("/tmp/tii.sock", tii_server.clone())?;
 
     //Both of this will block forever
     unix.join(None);
