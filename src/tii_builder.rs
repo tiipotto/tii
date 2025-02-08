@@ -1,13 +1,13 @@
 //! Provides the core Tii app functionality.
 
-use crate::http::response::Response;
+use crate::TiiResponse;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Represents the Tii app.
 pub struct TiiBuilder {
-  routers: Vec<Box<dyn Router>>,
+  routers: Vec<Box<dyn TiiRouter>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
   max_head_buffer_size: usize,
@@ -20,11 +20,11 @@ pub struct TiiBuilder {
 
 use crate::default_functions::{default_error_handler, default_fallback_not_found_handler};
 pub use crate::functional_traits::*;
-use crate::http::request_context::RequestContext;
 use crate::tii_error::{TiiError, TiiResult, UserError};
-use crate::tii_router::Routeable;
+use crate::tii_router::TiiRouteable;
 use crate::tii_router_builder::TiiRouterBuilder;
 use crate::tii_server::TiiServer;
+use crate::TiiRequestContext;
 
 /// Represents a function able to handle an error.
 /// The first parameter of type `Option<Request>` will be `Some` if the request could be parsed.
@@ -33,13 +33,14 @@ use crate::tii_server::TiiServer;
 /// Every app has a default error handler, which simply displays the status code.
 /// The source code for this default error handler is copied below since it is a good example.
 ///
-pub type ErrorHandler = fn(&mut RequestContext, TiiError) -> TiiResult<Response>;
+pub type ErrorHandler = fn(&mut TiiRequestContext, TiiError) -> TiiResult<TiiResponse>;
 
 /// Handler for request that couldn't route for some reason.
-pub type NotRouteableHandler = fn(&mut RequestContext, &[Routeable]) -> TiiResult<Response>;
+pub type NotRouteableHandler =
+  fn(&mut TiiRequestContext, &[TiiRouteable]) -> TiiResult<TiiResponse>;
 
 /// Fallback handler if no router handled the request.
-pub type NotFoundHandler = fn(&mut RequestContext) -> TiiResult<Response>;
+pub type NotFoundHandler = fn(&mut TiiRequestContext) -> TiiResult<TiiResponse>;
 
 impl Default for TiiBuilder {
   /// Initialises a new Tii app.
@@ -99,7 +100,7 @@ impl TiiBuilder {
   /// ## Panics
   /// This function will panic if the host is equal to `*`, since this is the default host.
   /// If you want to add a route to every host, simply add it directly to the main app.
-  pub fn add_router<T: Router + 'static>(mut self, handler: T) -> Self {
+  pub fn add_router(mut self, handler: impl TiiRouter + 'static) -> Self {
     self.routers.push(Box::new(handler));
     self
   }

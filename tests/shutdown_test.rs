@@ -6,15 +6,15 @@ mod inner {
   use std::thread::sleep;
   use std::time::Duration;
   use tii::extras;
-  use tii::extras::Connector;
-  use tii::http::mime::MimeType;
-  use tii::http::request_context::RequestContext;
-  use tii::http::Response;
+  use tii::extras::TiiConnector;
+  use tii::http::mime::TiiMimeType;
+  use tii::http::request_context::TiiRequestContext;
+  use tii::http::TiiResponse;
   use tii::tii_builder::TiiBuilder;
   use tii::tii_error::TiiResult;
 
-  fn hello(_: &RequestContext) -> TiiResult<Response> {
-    Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
+  fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+    Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
   }
 
   pub(crate) fn work() -> TiiResult<()> {
@@ -25,7 +25,7 @@ mod inner {
         .ok()
     })?;
 
-    let connector = extras::TcpConnector::start_unpooled("0.0.0.0:28880", tii_server)?;
+    let connector = extras::TiiTcpConnector::start_unpooled("0.0.0.0:28880", tii_server)?;
 
     let mut stream = TcpStream::connect_timeout(
       &SocketAddr::from_str("127.0.0.1:28880")?,

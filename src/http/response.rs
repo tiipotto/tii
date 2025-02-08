@@ -1,280 +1,282 @@
 //! Provides functionality for handling HTTP responses.
 
-use crate::http::cookie::SetCookie;
-use crate::http::headers::{Header, HeaderName, Headers};
-use crate::http::status::StatusCode;
+use crate::http::cookie::TiiSetCookie;
+use crate::http::headers::{Headers, TiiHttpHeader, TiiHttpHeaderName};
+use crate::http::status::TiiStatusCode;
 
-use crate::http::method::Method;
-use crate::http::mime::MimeType;
-use crate::http::request::HttpVersion;
-use crate::http::response_body::{ReadAndSeek, ResponseBody};
-use crate::stream::ConnectionStreamWrite;
+use crate::http::method::TiiHttpMethod;
+use crate::http::mime::TiiMimeType;
+use crate::http::request::TiiHttpVersion;
+use crate::http::response_body::TiiResponseBody;
+use crate::stream::TiiConnectionStreamWrite;
 use crate::tii_error::{TiiResult, UserError};
 use std::io;
+use std::io::{Read, Seek};
 
 /// Represents a response from the server.
 /// Implements `Into<Vec<u8>>` so can be serialised into bytes to transmit.
 ///
 /// ## Simple Creation
 /// ```
-/// use tii::http::mime::MimeType;
-/// use tii::http::StatusCode;
-/// tii::http::Response::ok("Success", MimeType::TextPlain);
-/// tii::http::Response::new(StatusCode::NotFound);
+/// use tii::TiiMimeType;
+/// use tii::TiiStatusCode;
+/// tii::TiiResponse::ok("Success", TiiMimeType::TextPlain);
+/// tii::TiiResponse::new(TiiStatusCode::NotFound);
 /// ```
 ///
 /// ## Advanced Creation
 /// ```
-/// tii::http::Response::new(tii::http::StatusCode::OK)
+/// tii::TiiResponse::new(tii::TiiStatusCode::OK)
 ///     .with_body_slice(b"Success")
-///     .with_header(tii::http::headers::HeaderName::ContentType, "text/plain");
+///     .with_header(tii::TiiHttpHeaderName::ContentType, "text/plain");
 /// ```
 #[derive(Debug)]
-pub struct Response {
+pub struct TiiResponse {
   /// The status code of the response, for example 200 OK.
-  pub status_code: StatusCode,
+  pub status_code: TiiStatusCode,
   /// A list of the headers included in the response.
   pub(crate) headers: Headers,
   /// The body of the response.
-  pub body: Option<ResponseBody>,
+  pub body: Option<TiiResponseBody>,
 }
 
-/// An error which occurred during the parsing of a response.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ResponseError {
-  /// The response could not be parsed due to invalid data.
-  Response,
-  /// The response could not be parsed due to an issue with the stream.
-  Stream,
-}
-
-impl std::fmt::Display for ResponseError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "ResponseError")
-  }
-}
-
-impl std::error::Error for ResponseError {}
-
-impl Response {
+impl TiiResponse {
   /// Creates a new response object with the given status code.
   /// Automatically sets the HTTP version to "HTTP/1.1", sets no headers, and creates an empty body.
-  pub fn new(status_code: impl Into<StatusCode>) -> Self {
+  pub fn new(status_code: impl Into<TiiStatusCode>) -> Self {
     let status_code = status_code.into();
     Self { status_code, headers: Headers::new(), body: None }
   }
 
   /// HTTP 200 OK with body.
-  pub fn ok(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::OK)
+  pub fn ok(bytes: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> TiiResponse {
+    Self::new(TiiStatusCode::OK)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 201 Created with body.
-  pub fn created<T: Into<ResponseBody>>(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::Created)
+  pub fn created<T: Into<TiiResponseBody>>(
+    bytes: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 202 Accepted with body.
-  pub fn accepted<T: Into<ResponseBody>>(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::Created)
+  pub fn accepted<T: Into<TiiResponseBody>>(
+    bytes: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 203 Non-Authoritative Information with body
-  pub fn non_authoritative(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::NonAuthoritative)
+  pub fn non_authoritative(
+    bytes: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::NonAuthoritative)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 204 No Content
-  pub fn no_content() -> Response {
-    Self::new(StatusCode::NoContent)
+  pub fn no_content() -> TiiResponse {
+    Self::new(TiiStatusCode::NoContent)
   }
 
   /// HTTP 205 Reset Content
-  pub fn reset_content() -> Response {
-    Self::new(StatusCode::ResetContent)
+  pub fn reset_content() -> TiiResponse {
+    Self::new(TiiStatusCode::ResetContent)
   }
 
   /// HTTP 206 Partial Content
   /// Note: Content-Range header must still be set by the caller. TODO
-  pub fn partial_content(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::PartialContent)
+  pub fn partial_content(
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::PartialContent)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 300 Multiple Choices
-  pub fn multiple_choices(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::MultipleChoices)
+  pub fn multiple_choices(
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::MultipleChoices)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 300 Multiple Choices without body
-  pub fn multiple_choices_no_body() -> Response {
-    Self::new(StatusCode::MultipleChoices)
+  pub fn multiple_choices_no_body() -> TiiResponse {
+    Self::new(TiiStatusCode::MultipleChoices)
   }
 
   /// HTTP 301 Moved Permanently
   pub fn moved_permanently(
     location: impl AsRef<str>,
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::MovedPermanently)
-      .with_header_unchecked(HeaderName::Location, location)
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::MovedPermanently)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
       .with_body(body.into())
   }
 
   /// HTTP 301 Moved Permanently without body
-  pub fn moved_permanently_no_body(location: impl AsRef<str>) -> Response {
-    Self::new(StatusCode::MovedPermanently).with_header_unchecked(HeaderName::Location, location)
+  pub fn moved_permanently_no_body(location: impl AsRef<str>) -> TiiResponse {
+    Self::new(TiiStatusCode::MovedPermanently)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
   }
 
   /// HTTP 302 Found
   pub fn found(
     location: impl AsRef<str>,
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::Found)
-      .with_header_unchecked(HeaderName::Location, location)
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::Found)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
       .with_body(body.into())
   }
 
   /// HTTP 302 Found without body
-  pub fn found_no_body(location: impl AsRef<str>) -> Response {
-    Self::new(StatusCode::Found).with_header_unchecked(HeaderName::Location, location)
+  pub fn found_no_body(location: impl AsRef<str>) -> TiiResponse {
+    Self::new(TiiStatusCode::Found).with_header_unchecked(TiiHttpHeaderName::Location, location)
   }
 
   /// HTTP 303 See Other
   pub fn see_other(
     location: impl AsRef<str>,
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::SeeOther)
-      .with_header_unchecked(HeaderName::Location, location)
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::SeeOther)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
       .with_body(body.into())
   }
 
   /// HTTP 303 See Other without body
-  pub fn see_other_no_body(location: impl AsRef<str>) -> Response {
-    Self::new(StatusCode::SeeOther).with_header_unchecked(HeaderName::Location, location)
+  pub fn see_other_no_body(location: impl AsRef<str>) -> TiiResponse {
+    Self::new(TiiStatusCode::SeeOther).with_header_unchecked(TiiHttpHeaderName::Location, location)
   }
 
   /// HTTP 304 Not modified.
-  pub fn not_modified() -> Response {
-    Self::new(StatusCode::NotModified)
+  pub fn not_modified() -> TiiResponse {
+    Self::new(TiiStatusCode::NotModified)
   }
 
   /// HTTP 307 Temporary Redirect
   pub fn temporary_redirect(
     location: impl AsRef<str>,
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::TemporaryRedirect)
-      .with_header_unchecked(HeaderName::Location, location)
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::TemporaryRedirect)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
       .with_body(body.into())
   }
 
   /// HTTP 307 Temporary Redirect without body
-  pub fn temporary_redirect_no_body(location: impl AsRef<str>) -> Response {
-    Self::new(StatusCode::TemporaryRedirect).with_header_unchecked(HeaderName::Location, location)
+  pub fn temporary_redirect_no_body(location: impl AsRef<str>) -> TiiResponse {
+    Self::new(TiiStatusCode::TemporaryRedirect)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
   }
 
   /// HTTP 308 Permanent Redirect
   pub fn permanent_redirect(
     location: impl AsRef<str>,
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::PermanentRedirect)
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::PermanentRedirect)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::Location, location)
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 308 Permanent Redirect without body
-  pub fn permanent_redirect_no_body(location: impl AsRef<str>) -> Response {
-    Self::new(StatusCode::PermanentRedirect).with_header_unchecked(HeaderName::Location, location)
+  pub fn permanent_redirect_no_body(location: impl AsRef<str>) -> TiiResponse {
+    Self::new(TiiStatusCode::PermanentRedirect)
+      .with_header_unchecked(TiiHttpHeaderName::Location, location)
   }
 
   /// HTTP 400 Bad Request
-  pub fn bad_request(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::BadRequest)
+  pub fn bad_request(
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::BadRequest)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 400 Bad Request without body
-  pub fn bad_request_no_body() -> Response {
-    Self::new(StatusCode::BadRequest)
+  pub fn bad_request_no_body() -> TiiResponse {
+    Self::new(TiiStatusCode::BadRequest)
   }
 
   /// HTTP 401 Unauthorized
-  pub fn unauthorized() -> Response {
-    Self::new(StatusCode::Unauthorized)
+  pub fn unauthorized() -> TiiResponse {
+    Self::new(TiiStatusCode::Unauthorized)
   }
 
   /// HTTP 402 Payment Required with body
-  pub fn payment_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::PaymentRequired)
+  pub fn payment_required(
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::PaymentRequired)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 402 Payment Required without body
-  pub fn payment_required_no_body() -> Response {
-    Self::new(StatusCode::PaymentRequired)
+  pub fn payment_required_no_body() -> TiiResponse {
+    Self::new(TiiStatusCode::PaymentRequired)
   }
 
   /// HTTP 403 Forbidden
-  pub fn forbidden(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
-    Self::new(StatusCode::Forbidden)
+  pub fn forbidden(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> TiiResponse {
+    Self::new(TiiStatusCode::Forbidden)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 403 Forbidden
-  pub fn forbidden_no_body() -> Response {
-    Self::new(StatusCode::Forbidden)
+  pub fn forbidden_no_body() -> TiiResponse {
+    Self::new(TiiStatusCode::Forbidden)
   }
 
   /// HTTP 404 Not Found with body
-  pub fn not_found(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::NotFound)
+  pub fn not_found(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::NotFound)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 404 Not Found without body
   pub fn not_found_no_body() -> Self {
-    Self::new(StatusCode::NotFound)
+    Self::new(TiiStatusCode::NotFound)
   }
 
   /// HTTP 405 Method Not Allowed
-  pub fn method_not_allowed(allowed_methods: &[Method]) -> Self {
+  pub fn method_not_allowed(allowed_methods: &[TiiHttpMethod]) -> Self {
     if allowed_methods.is_empty() {
-      return Self::new(StatusCode::MethodNotAllowed);
+      return Self::new(TiiStatusCode::MethodNotAllowed);
     }
 
     let mut buf = String::new();
@@ -285,98 +287,99 @@ impl Response {
       buf += method.as_str();
     }
 
-    Self::new(StatusCode::MethodNotAllowed).with_header_unchecked(HeaderName::Allow, buf.as_str())
+    Self::new(TiiStatusCode::MethodNotAllowed)
+      .with_header_unchecked(TiiHttpHeaderName::Allow, buf.as_str())
   }
 
   /// HTTP 406 Not Acceptable
-  pub fn not_acceptable(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::NotAcceptable)
+  pub fn not_acceptable(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::NotAcceptable)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 406 Not Acceptable without body
   pub fn not_acceptable_no_body() -> Self {
-    Self::new(StatusCode::NotAcceptable)
+    Self::new(TiiStatusCode::NotAcceptable)
   }
 
   /// HTTP 407 Proxy Authentication Required
   pub fn proxy_authentication_required(authenticate: impl AsRef<str>) -> Self {
-    Self::new(StatusCode::ProxyAuthenticationRequired)
-      .with_header_unchecked(HeaderName::ProxyAuthenticate, authenticate)
+    Self::new(TiiStatusCode::ProxyAuthenticationRequired)
+      .with_header_unchecked(TiiHttpHeaderName::ProxyAuthenticate, authenticate)
   }
 
   /// HTTP 408 Request Timeout
   pub fn request_timeout() -> Self {
-    Self::new(StatusCode::RequestTimeout)
+    Self::new(TiiStatusCode::RequestTimeout)
   }
 
   /// HTTP 409 Conflict
-  pub fn conflict(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::Conflict)
+  pub fn conflict(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::Conflict)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 409 Conflict without body
   pub fn conflict_no_body() -> Self {
-    Self::new(StatusCode::Conflict)
+    Self::new(TiiStatusCode::Conflict)
   }
 
   /// HTTP 410 Gone
-  pub fn gone(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::Gone)
+  pub fn gone(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::Gone)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 410 Gone
   pub fn gone_no_body() -> Self {
-    Self::new(StatusCode::Gone)
+    Self::new(TiiStatusCode::Gone)
   }
 
   /// HTTP 411 Length Required
-  pub fn length_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::LengthRequired)
+  pub fn length_required(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::LengthRequired)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 411 Length Required without body
   pub fn length_required_no_body() -> Self {
-    Self::new(StatusCode::LengthRequired)
+    Self::new(TiiStatusCode::LengthRequired)
   }
 
   /// HTTP 412 Precondition Failed
   pub fn precondition_failed() -> Self {
-    Self::new(StatusCode::PreconditionFailed)
+    Self::new(TiiStatusCode::PreconditionFailed)
   }
 
   /// HTTP 413 Content Too Large
-  pub fn content_too_large(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
-    Self::new(StatusCode::ContentTooLarge)
+  pub fn content_too_large(body: impl Into<TiiResponseBody>, mime: impl Into<TiiMimeType>) -> Self {
+    Self::new(TiiStatusCode::ContentTooLarge)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 413 Content Too Large without body
   pub fn content_too_large_no_body() -> Self {
-    Self::new(StatusCode::ContentTooLarge)
+    Self::new(TiiStatusCode::ContentTooLarge)
   }
 
   /// HTTP 415 Unsupported Media Type with body
   pub fn unsupported_media_type(
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
-    Self::new(StatusCode::UnsupportedMediaType)
+    body: impl Into<TiiResponseBody>,
+    mime: impl Into<TiiMimeType>,
+  ) -> TiiResponse {
+    Self::new(TiiStatusCode::UnsupportedMediaType)
       .with_body(body.into())
-      .with_header_unchecked(HeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(TiiHttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 415 Unsupported Media Type without body
-  pub fn unsupported_media_type_no_body() -> Response {
-    Self::new(StatusCode::UnsupportedMediaType)
+  pub fn unsupported_media_type_no_body() -> TiiResponse {
+    Self::new(TiiStatusCode::UnsupportedMediaType)
   }
 
   ///Removes the body from the response
@@ -386,26 +389,26 @@ impl Response {
   }
 
   ///Set the body to use with the response
-  pub fn with_body(mut self, body: impl Into<ResponseBody>) -> Self {
+  pub fn with_body(mut self, body: impl Into<TiiResponseBody>) -> Self {
     self.body = Some(body.into());
     self
   }
 
   /// Use the string body as request body
   pub fn with_body_string<T: AsRef<str>>(mut self, body: T) -> Self {
-    self.body = Some(ResponseBody::FixedSizeTextData(body.as_ref().to_string()));
+    self.body = Some(TiiResponseBody::from_string(body.as_ref().to_string()));
     self
   }
 
   /// Use the binary body as request body
   pub fn with_body_vec(mut self, body: Vec<u8>) -> Self {
-    self.body = Some(ResponseBody::from_data(body));
+    self.body = Some(TiiResponseBody::from_data(body));
     self
   }
 
   /// Use the binary body as request body
   pub fn with_body_slice<T: AsRef<[u8]>>(mut self, body: T) -> Self {
-    self.body = Some(ResponseBody::from_slice(&body));
+    self.body = Some(TiiResponseBody::from_slice(&body));
     self
   }
 
@@ -413,8 +416,8 @@ impl Response {
   /// Note: this call fetches the file size which must not change afterward.
   /// This call uses seek to move the file pointer. Any seeking done prior to this call is ignored.
   /// The actual body will always contain the entire "file"
-  pub fn with_body_file<T: ReadAndSeek + 'static>(mut self, body: T) -> io::Result<Self> {
-    self.body = Some(ResponseBody::from_file(body)?);
+  pub fn with_body_file<T: Read + Seek + 'static>(mut self, body: T) -> io::Result<Self> {
+    self.body = Some(TiiResponseBody::from_file(body)?);
     Ok(self)
   }
 
@@ -434,13 +437,15 @@ impl Response {
   /// Adds the header to the Response.
   pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
-      HeaderName::ContentLength => {
-        UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
+      TiiHttpHeaderName::ContentLength => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::ContentLength).into()
       }
-      HeaderName::TransferEncoding => {
-        UserError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
+      TiiHttpHeaderName::TransferEncoding => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::TransferEncoding).into()
       }
-      HeaderName::Trailer => UserError::ImmutableResponseHeaderModified(HeaderName::Trailer).into(),
+      TiiHttpHeaderName::Trailer => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::Trailer).into()
+      }
       hdr => {
         self.headers.add(hdr, value);
         Ok(())
@@ -451,13 +456,15 @@ impl Response {
   /// Replace all header values in the Response
   pub fn set_header(&mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     match &header.as_ref().into() {
-      HeaderName::ContentLength => {
-        UserError::ImmutableResponseHeaderModified(HeaderName::ContentLength).into()
+      TiiHttpHeaderName::ContentLength => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::ContentLength).into()
       }
-      HeaderName::TransferEncoding => {
-        UserError::ImmutableResponseHeaderModified(HeaderName::TransferEncoding).into()
+      TiiHttpHeaderName::TransferEncoding => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::TransferEncoding).into()
       }
-      HeaderName::Trailer => UserError::ImmutableResponseHeaderModified(HeaderName::Trailer).into(),
+      TiiHttpHeaderName::Trailer => {
+        UserError::ImmutableResponseHeaderModified(TiiHttpHeaderName::Trailer).into()
+      }
       hdr => {
         self.headers.set(hdr, value);
         Ok(())
@@ -471,7 +478,7 @@ impl Response {
   }
 
   /// Returns an iterator over all headers.
-  pub fn get_all_headers(&self) -> impl Iterator<Item = &Header> {
+  pub fn get_all_headers(&self) -> impl Iterator<Item = &TiiHttpHeader> {
     self.headers.iter()
   }
 
@@ -487,25 +494,25 @@ impl Response {
 
   /// Adds the given cookie to the response in the `Set-Cookie` header.
   /// Returns itself for use in a builder pattern.
-  pub fn with_cookie(mut self, cookie: SetCookie) -> Self {
+  pub fn with_cookie(mut self, cookie: TiiSetCookie) -> Self {
     self.headers.push(cookie.into());
     self
   }
 
   /// Returns the body as text, if possible.
-  pub fn body(&self) -> Option<&ResponseBody> {
+  pub fn body(&self) -> Option<&TiiResponseBody> {
     self.body.as_ref()
   }
 
   ///
   /// Write the request to a streaming output. This consumes the request object.
   ///
-  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(
+  pub fn write_to<T: TiiConnectionStreamWrite + ?Sized>(
     mut self,
-    version: HttpVersion,
+    version: TiiHttpVersion,
     destination: &T,
   ) -> io::Result<()> {
-    if version == HttpVersion::Http09 {
+    if version == TiiHttpVersion::Http09 {
       if let Some(body) = self.body.as_mut() {
         body.write_to(destination)?;
       }
@@ -521,11 +528,11 @@ impl Response {
 
     for header in self.headers.iter() {
       // TODO should we even have these checks here? they should not be possible.
-      if header.name == HeaderName::ContentLength {
+      if header.name == TiiHttpHeaderName::ContentLength {
         crate::util::unreachable();
       }
 
-      if header.name == HeaderName::TransferEncoding {
+      if header.name == TiiHttpHeaderName::TransferEncoding {
         crate::util::unreachable();
       }
 

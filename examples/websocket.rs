@@ -1,13 +1,13 @@
-use tii::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::extras::{builtin_endpoints, TiiConnector, TiiTcpConnector};
 
 use log::{info, LevelFilter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use tii::http::request_context::RequestContext;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
-use tii::websocket::message::WebsocketMessage;
-use tii::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
+use tii::TiiBuilder;
+use tii::TiiRequestContext;
+use tii::TiiResult;
+use tii::TiiWebsocketMessage;
+use tii::{TiiReadMessageTimeoutResult, TiiWebsocketReceiver, TiiWebsocketSender};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -27,7 +27,7 @@ fn main() -> TiiResult<()> {
   })
   .expect("ERROR");
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
@@ -35,9 +35,9 @@ fn main() -> TiiResult<()> {
 /// Handler for WebSocket connections.
 /// This is wrapped in `websocket_handler` to manage the handshake for us using the `tii_ws` crate.
 fn echo_handler(
-  request: &RequestContext,
-  mut receiver: WebsocketReceiver,
-  sender: WebsocketSender,
+  request: &TiiRequestContext,
+  mut receiver: TiiWebsocketReceiver,
+  sender: TiiWebsocketSender,
 ) -> TiiResult<()> {
   // Get the address of the client.
   let addr = request.peer_address();
@@ -63,32 +63,32 @@ fn echo_handler(
     // Block up to 5s to receive the next web socket message.
     match receiver.read_message_timeout(Some(Duration::from_millis(5000))) {
       // If the message was received successfully, echo it back with an increasing number at the end.
-      Ok(ReadMessageTimeoutResult::Message(message)) => match message {
-        WebsocketMessage::Text(text) => {
+      Ok(TiiReadMessageTimeoutResult::Message(message)) => match message {
+        TiiWebsocketMessage::Text(text) => {
           let message = text;
           let count = COUNTER.fetch_add(1, Ordering::SeqCst);
           let response = format!("{} {}", message, count);
           sender.text(response)?;
           info!("Received message `{}` from {}, echoing with the number {}", message, addr, count)
         }
-        WebsocketMessage::Binary(binary) => {
+        TiiWebsocketMessage::Binary(binary) => {
           info!("Received binary data, echoing data back as is");
-          sender.send(WebsocketMessage::Binary(binary))?;
+          sender.send(TiiWebsocketMessage::Binary(binary))?;
         }
-        WebsocketMessage::Ping => {
+        TiiWebsocketMessage::Ping => {
           info!("Received ping, responding with pong");
-          sender.send(WebsocketMessage::Pong)?;
+          sender.send(TiiWebsocketMessage::Pong)?;
         }
-        WebsocketMessage::Pong => {
+        TiiWebsocketMessage::Pong => {
           info!("Received pong");
         }
       },
-      Ok(ReadMessageTimeoutResult::Timeout) => {
+      Ok(TiiReadMessageTimeoutResult::Timeout) => {
         info!("No message received in 5s sending ping...");
         sender.ping()?;
       }
       // If the connection was closed, break out of the loop.
-      Ok(ReadMessageTimeoutResult::Closed) => {
+      Ok(TiiReadMessageTimeoutResult::Closed) => {
         info!("Connection closed by {}", addr);
         return Ok(());
       }

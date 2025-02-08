@@ -2,7 +2,7 @@
 
 /// Represents a WebSocket message.
 #[derive(Debug, Clone)]
-pub enum WebsocketMessage {
+pub enum TiiWebsocketMessage {
   /// UTF-8 Text message
   Text(String),
   /// Binary data message
@@ -13,7 +13,7 @@ pub enum WebsocketMessage {
   Pong,
 }
 
-impl WebsocketMessage {
+impl TiiWebsocketMessage {
   /// Creates a new binary message with the given payload.
   pub fn new_binary<T>(payload: T) -> Self
   where
@@ -35,8 +35,8 @@ impl WebsocketMessage {
   /// Returns the payload as a string, if possible.
   pub fn text(&self) -> Option<&str> {
     match self {
-      WebsocketMessage::Text(txt) => Some(txt),
-      WebsocketMessage::Binary(bin) => std::str::from_utf8(bin.as_slice()).ok(),
+      TiiWebsocketMessage::Text(txt) => Some(txt),
+      TiiWebsocketMessage::Binary(bin) => std::str::from_utf8(bin.as_slice()).ok(),
       _ => None,
     }
   }
@@ -44,10 +44,10 @@ impl WebsocketMessage {
   /// Returns the payload as a slice of bytes.
   pub fn bytes(&self) -> Option<&[u8]> {
     match self {
-      WebsocketMessage::Text(txt) => Some(txt.as_bytes()),
-      WebsocketMessage::Binary(bin) => Some(bin.as_slice()),
-      WebsocketMessage::Ping => None,
-      WebsocketMessage::Pong => None,
+      TiiWebsocketMessage::Text(txt) => Some(txt.as_bytes()),
+      TiiWebsocketMessage::Binary(bin) => Some(bin.as_slice()),
+      TiiWebsocketMessage::Ping => None,
+      TiiWebsocketMessage::Pong => None,
     }
   }
 }

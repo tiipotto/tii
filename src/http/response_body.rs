@@ -2,13 +2,19 @@
 //! TODO docs before release
 #![allow(missing_docs)]
 
-use crate::stream::ConnectionStreamWrite;
+use crate::stream::TiiConnectionStreamWrite;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-pub type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()>;
-pub enum ResponseBody {
+pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn TiiResponseBodySink) -> io::Result<()>;
+
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct TiiResponseBody(TiiResponseBodyInner);
+
+// We don't want to expose this enum.
+enum TiiResponseBodyInner {
   //Fixed length data, content length header will be set automatically
   FixedSizeBinaryData(Vec<u8>),
 
@@ -30,67 +36,71 @@ pub enum ResponseBody {
   ChunkedStream(Option<Box<ResponseBodyHandler>>),
 }
 
-impl Debug for ResponseBody {
+impl Debug for TiiResponseBodyInner {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      ResponseBody::FixedSizeBinaryData(data) => {
+      TiiResponseBodyInner::FixedSizeBinaryData(data) => {
         f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({:?})", data))
       }
-      ResponseBody::FixedSizeTextData(data) => {
+      TiiResponseBodyInner::FixedSizeTextData(data) => {
         f.write_fmt(format_args!("ResponseBody::FixedSizeTextData({:?})", data))
       }
-      ResponseBody::FixedSizeFile(_, size) => {
+      TiiResponseBodyInner::FixedSizeFile(_, size) => {
         f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {})", size))
       }
-      ResponseBody::Stream(_) => f.write_str("ResponseBody::Stream(handler)"),
-      ResponseBody::ChunkedStream(_) => f.write_str("ResponseBody::ChunkedStream(handler)"),
+      TiiResponseBodyInner::Stream(_) => f.write_str("ResponseBody::Stream(handler)"),
+      TiiResponseBodyInner::ChunkedStream(_) => f.write_str("ResponseBody::ChunkedStream(handler)"),
     }
   }
 }
 
 // we don't really exactly need file. We need read+seek.
-pub trait ReadAndSeek: Read + Seek {}
+pub(crate) trait ReadAndSeek: Read + Seek {}
 
 impl<T> ReadAndSeek for T where T: Read + Seek {}
 
-pub trait ResponseBodySink: Write {
+pub trait TiiResponseBodySink: Write {
   fn write(&self, buffer: &[u8]) -> io::Result<usize>;
   fn write_all(&self, buffer: &[u8]) -> io::Result<()>;
 
   fn as_write(&self) -> &dyn Write;
 }
-impl ResponseBody {
+impl TiiResponseBody {
   pub fn from_data(data: Vec<u8>) -> Self {
-    Self::FixedSizeBinaryData(data)
+    Self(TiiResponseBodyInner::FixedSizeBinaryData(data))
+  }
+
+  pub fn from_string(data: String) -> Self {
+    Self(TiiResponseBodyInner::FixedSizeTextData(data))
   }
 
   pub fn from_slice<T: AsRef<[u8]> + ?Sized>(data: &T) -> Self {
-    Self::FixedSizeBinaryData(data.as_ref().to_vec())
+    Self(TiiResponseBodyInner::FixedSizeBinaryData(data.as_ref().to_vec()))
   }
 
-  pub fn from_file<T: ReadAndSeek + 'static>(mut file: T) -> io::Result<Self> {
+  pub fn from_file<T: Read + Seek + 'static>(mut file: T) -> io::Result<Self> {
     file.seek(SeekFrom::End(0))?;
     let size = file.stream_position()?;
-    Ok(ResponseBody::FixedSizeFile(Box::new(file), size))
+    Ok(Self(TiiResponseBodyInner::FixedSizeFile(Box::new(file), size)))
   }
 
-  pub fn chunked<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + 'static>(
+  pub fn chunked<T: FnOnce(&dyn TiiResponseBodySink) -> io::Result<()> + 'static>(
     streamer: T,
   ) -> Self {
-    Self::ChunkedStream(Some(Box::new(streamer)))
+    Self(TiiResponseBodyInner::ChunkedStream(Some(Box::new(streamer))))
   }
 
-  pub fn streamed<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + 'static>(
+  pub fn streamed<T: FnOnce(&dyn TiiResponseBodySink) -> io::Result<()> + 'static>(
     streamer: T,
   ) -> Self {
-    Self::Stream(Some(Box::new(streamer)))
+    Self(TiiResponseBodyInner::Stream(Some(Box::new(streamer))))
   }
 
-  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(&mut self, stream: &T) -> io::Result<()> {
-    match self {
-      ResponseBody::FixedSizeBinaryData(data) => stream.write_all(data.as_slice()),
-      ResponseBody::FixedSizeTextData(text) => stream.write_all(text.as_bytes()),
-      ResponseBody::FixedSizeFile(file, size) => {
+  pub fn write_to<T: TiiConnectionStreamWrite + ?Sized>(&mut self, stream: &T) -> io::Result<()> {
+    match &mut self.0 {
+      TiiResponseBodyInner::FixedSizeBinaryData(data) => stream.write_all(data.as_slice()),
+      TiiResponseBodyInner::FixedSizeTextData(text) => stream.write_all(text.as_bytes()),
+      TiiResponseBodyInner::FixedSizeFile(file, size) => {
         //TODO give option via cfg-if to move this to heap. Some unix systems only have 80kb stack and stuff like this has blown up in my face before.
         let mut io_buf = [0u8; 0x1_00_00];
         let mut written = 0u64;
@@ -120,11 +130,11 @@ impl ResponseBody {
             .ok_or(io::Error::new(io::ErrorKind::Other, "u64 overflow"))?;
         }
       }
-      ResponseBody::Stream(handler) => handler.take().ok_or_else(|| {
+      TiiResponseBodyInner::Stream(handler) => handler.take().ok_or_else(|| {
         io::Error::new(io::ErrorKind::UnexpectedEof, "stream can only be written once")
       })?(&StreamSink(stream.as_stream_write())),
 
-      ResponseBody::ChunkedStream(handler) => {
+      TiiResponseBodyInner::ChunkedStream(handler) => {
         let sink = ChunkedSink(stream.as_stream_write());
         handler.take().ok_or_else(|| {
           io::Error::new(io::ErrorKind::UnexpectedEof, "stream can only be written once")
@@ -135,20 +145,20 @@ impl ResponseBody {
   }
 
   pub fn is_chunked(&self) -> bool {
-    matches!(self, ResponseBody::ChunkedStream(_))
+    matches!(self.0, TiiResponseBodyInner::ChunkedStream(_))
   }
 
   pub fn content_length(&self) -> Option<u64> {
-    match self {
-      ResponseBody::FixedSizeBinaryData(data) => u64::try_from(data.len()).ok(),
-      ResponseBody::FixedSizeTextData(data) => u64::try_from(data.len()).ok(),
-      ResponseBody::FixedSizeFile(_, sz) => Some(*sz),
+    match &self.0 {
+      TiiResponseBodyInner::FixedSizeBinaryData(data) => u64::try_from(data.len()).ok(),
+      TiiResponseBodyInner::FixedSizeTextData(data) => u64::try_from(data.len()).ok(),
+      TiiResponseBodyInner::FixedSizeFile(_, sz) => Some(*sz),
       _ => None,
     }
   }
 }
 
-struct StreamSink<'a>(&'a dyn ConnectionStreamWrite);
+struct StreamSink<'a>(&'a dyn TiiConnectionStreamWrite);
 
 impl Write for StreamSink<'_> {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -161,7 +171,7 @@ impl Write for StreamSink<'_> {
   }
 }
 
-impl ResponseBodySink for StreamSink<'_> {
+impl TiiResponseBodySink for StreamSink<'_> {
   fn write(&self, buffer: &[u8]) -> io::Result<usize> {
     self.0.write(buffer)
   }
@@ -175,11 +185,11 @@ impl ResponseBodySink for StreamSink<'_> {
   }
 }
 
-struct ChunkedSink<'a>(&'a dyn ConnectionStreamWrite);
+struct ChunkedSink<'a>(&'a dyn TiiConnectionStreamWrite);
 
 impl Write for ChunkedSink<'_> {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    ResponseBodySink::write(self, buf)
+    TiiResponseBodySink::write(self, buf)
   }
 
   fn flush(&mut self) -> io::Result<()> {
@@ -188,7 +198,7 @@ impl Write for ChunkedSink<'_> {
   }
 }
 
-impl ResponseBodySink for ChunkedSink<'_> {
+impl TiiResponseBodySink for ChunkedSink<'_> {
   fn write(&self, buffer: &[u8]) -> io::Result<usize> {
     self.write_all(buffer)?;
     Ok(buffer.len())
@@ -217,26 +227,26 @@ impl ChunkedSink<'_> {
   }
 }
 
-impl From<Vec<u8>> for ResponseBody {
+impl From<Vec<u8>> for TiiResponseBody {
   fn from(value: Vec<u8>) -> Self {
-    ResponseBody::from_data(value)
+    TiiResponseBody::from_data(value)
   }
 }
 
-impl From<String> for ResponseBody {
+impl From<String> for TiiResponseBody {
   fn from(value: String) -> Self {
-    ResponseBody::from_data(value.into_bytes())
+    TiiResponseBody::from_data(value.into_bytes())
   }
 }
 
-impl From<&str> for ResponseBody {
+impl From<&str> for TiiResponseBody {
   fn from(value: &str) -> Self {
-    ResponseBody::from_slice(value)
+    TiiResponseBody::from_slice(value)
   }
 }
 
-impl From<&[u8]> for ResponseBody {
+impl From<&[u8]> for TiiResponseBody {
   fn from(value: &[u8]) -> Self {
-    ResponseBody::from_slice(value)
+    TiiResponseBody::from_slice(value)
   }
 }

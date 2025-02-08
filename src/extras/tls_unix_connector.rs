@@ -1,7 +1,7 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
-use crate::functional_traits::ThreadAdapter;
-use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
+use crate::extras::{ConnectorMeta, TiiConnector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::functional_traits::TiiThreadAdapter;
+use crate::tii_builder::{DefaultThreadAdapter, TiiThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::TiiServer;
 use crate::{error_log, info_log, trace_log, TiiTlsStream};
@@ -16,14 +16,14 @@ use std::time::Duration;
 
 /// Represents a handle to the simple Tls Unix Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
-pub struct TlsUnixConnector {
+pub struct TiiTlsUnixConnector {
   inner: Arc<TlsUnixConnectorInner>,
-  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
+  main_thread: Mutex<Option<TiiThreadAdapterJoinHandle>>,
 }
 
 #[derive(Debug)]
 struct TlsUnixConnectorInner {
-  thread_adapter: Arc<dyn ThreadAdapter>,
+  thread_adapter: Arc<dyn TiiThreadAdapter>,
   config: Arc<ServerConfig>,
   path: PathBuf,
   listener: UnixListener,
@@ -66,7 +66,7 @@ impl TlsUnixConnectorInner {
   }
 }
 
-impl Connector for TlsUnixConnector {
+impl TiiConnector for TiiTlsUnixConnector {
   fn shutdown(&self) {
     self.inner.shutdown();
   }
@@ -241,7 +241,7 @@ impl TlsUnixConnectorInner {
         }
 
         //Code for panic enjoyers
-        if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
+        if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
@@ -270,7 +270,7 @@ impl TlsUnixConnectorInner {
       }
 
       //Code for panic enjoyers
-      if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
+      if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
             "tls_unix_connector[{}]: connection {} thread panicked: {}",
@@ -286,7 +286,7 @@ impl TlsUnixConnectorInner {
   }
 }
 
-impl TlsUnixConnector {
+impl TiiTlsUnixConnector {
   /// Create a new UnixConnector.
   /// When this fn returns Ok() the socket is already listening in a background thread.
   /// Returns an io::Error if it was unable to bind to the socket.
@@ -294,7 +294,7 @@ impl TlsUnixConnector {
     addr: impl AsRef<Path>,
     tii_server: Arc<TiiServer>,
     config: Arc<ServerConfig>,
-    thread_adapter: impl ThreadAdapter + 'static,
+    thread_adapter: impl TiiThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     //Check if the rust-tls server config is "valid".
     let _ = ServerConnection::new(config.clone())?;

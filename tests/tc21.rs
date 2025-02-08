@@ -1,32 +1,32 @@
 use crate::mock_stream::MockStream;
 use std::io;
 use std::io::ErrorKind;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route_invalid_data(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route_invalid_data(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let body = ctx.request_body().unwrap();
   let mut data = vec![];
   //The body trailer is malformed, we will eat the error.
   //This MUST CAUSE error
   let err = body.read_to_end(&mut data).unwrap_err();
   assert_eq!(err.kind(), ErrorKind::InvalidData);
-  Response::ok("Okay!", MimeType::TextPlain).into()
+  TiiResponse::ok("Okay!", TiiMimeType::TextPlain).into()
 }
 
-fn dummy_route_eof(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route_eof(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let body = ctx.request_body().unwrap();
   let mut data = vec![];
   //The body trailer is malformed, we will eat the error.
   //This MUST CAUSE error
   let err = body.read_to_end(&mut data).unwrap_err();
   assert_eq!(err.kind(), ErrorKind::UnexpectedEof);
-  Response::ok("Okay!", MimeType::TextPlain).into()
+  TiiResponse::ok("Okay!", TiiMimeType::TextPlain).into()
 }
 
 #[test]

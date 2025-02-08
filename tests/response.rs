@@ -1,34 +1,34 @@
 mod mock_stream;
 
 use mock_stream::MockStream;
-use tii::http::cookie::{SameSite, SetCookie};
-use tii::http::headers::HeaderName;
-use tii::http::response::Response;
-use tii::http::status::StatusCode;
+use tii::TiiHttpHeaderName;
+use tii::TiiResponse;
+use tii::TiiStatusCode;
+use tii::{TiiSameSite, TiiSetCookie};
 
 use std::time::Duration;
-use tii::http::request::HttpVersion;
-use tii::http::response_body::{ResponseBody, ResponseBodySink};
-use tii::stream::IntoConnectionStream;
+use tii::IntoTiiConnectionStream;
+use tii::TiiHttpVersion;
+use tii::{TiiResponseBody, TiiResponseBodySink};
 
 #[test]
 fn test_response() {
-  let response = Response::new(StatusCode::OK)
+  let response = TiiResponse::new(TiiStatusCode::OK)
     .with_body_slice(b"<body>test</body>\r\n")
-    .with_header(HeaderName::ContentType, "text/html")
+    .with_header(TiiHttpHeaderName::ContentType, "text/html")
     .unwrap()
-    .with_header(HeaderName::ContentLanguage, "en-GB")
+    .with_header(TiiHttpHeaderName::ContentLanguage, "en-GB")
     .unwrap()
-    .with_header(HeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
+    .with_header(TiiHttpHeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
     .unwrap(); // this would never be manually set in prod, but is obviously required for testing
 
-  assert_eq!(response.get_header(&HeaderName::ContentType), Some("text/html"));
+  assert_eq!(response.get_header(&TiiHttpHeaderName::ContentType), Some("text/html"));
 
   let expected_bytes: Vec<u8> = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Language: en-GB\r\nDate: Thu, 1 Jan 1970 00:00:00 GMT\r\nContent-Length: 19\r\n\r\n<body>test</body>\r\n".to_vec();
   let stream = MockStream::without_data();
   let raw_stream = stream.clone().into_connection_stream();
 
-  response.write_to(HttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
+  response.write_to(TiiHttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
   assert_eq!(
     stream.copy_written_data(),
     expected_bytes,
@@ -40,7 +40,7 @@ fn test_response() {
 
 #[test]
 fn test_chunked_response() {
-  let chunker = move |sink: &dyn ResponseBodySink| {
+  let chunker = move |sink: &dyn TiiResponseBodySink| {
     sink.write_all(b"Hello")?;
     sink.write_all(b"World")?;
     sink.write_all(b"in")?;
@@ -48,22 +48,22 @@ fn test_chunked_response() {
     Ok(())
   };
 
-  let response = Response::new(StatusCode::OK)
-    .with_body(ResponseBody::chunked(chunker))
-    .with_header(HeaderName::ContentType, "text/html")
+  let response = TiiResponse::new(TiiStatusCode::OK)
+    .with_body(TiiResponseBody::chunked(chunker))
+    .with_header(TiiHttpHeaderName::ContentType, "text/html")
     .unwrap()
-    .with_header(HeaderName::ContentLanguage, "en-GB")
+    .with_header(TiiHttpHeaderName::ContentLanguage, "en-GB")
     .unwrap()
-    .with_header(HeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
+    .with_header(TiiHttpHeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
     .unwrap(); // this would never be manually set in prod, but is obviously required for testing
 
-  assert_eq!(response.get_header(&HeaderName::ContentType), Some("text/html"));
+  assert_eq!(response.get_header(&TiiHttpHeaderName::ContentType), Some("text/html"));
 
   let expected_bytes: Vec<u8> = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Language: en-GB\r\nDate: Thu, 1 Jan 1970 00:00:00 GMT\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n5\r\nWorld\r\n2\r\nin\r\n6\r\nchunks\r\n0\r\n\r\n".to_vec();
   let stream = MockStream::without_data();
   let raw_stream = stream.clone().into_connection_stream();
 
-  response.write_to(HttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
+  response.write_to(TiiHttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
   assert_eq!(
     stream.copy_written_data(),
     expected_bytes,
@@ -75,23 +75,23 @@ fn test_chunked_response() {
 
 #[test]
 fn test_cookie_response() {
-  let response = Response::new(StatusCode::OK)
+  let response = TiiResponse::new(TiiStatusCode::OK)
     .with_body_slice(b"Hello, world!\r\n")
     .with_cookie(
-      SetCookie::new("X-Example-Cookie", "example-value")
+      TiiSetCookie::new("X-Example-Cookie", "example-value")
         .with_path("/")
         .with_max_age(Duration::from_secs(3600))
         .with_secure(true),
     )
     .with_cookie(
-      SetCookie::new("X-Example-Token", "example-token")
+      TiiSetCookie::new("X-Example-Token", "example-token")
         .with_domain("example.com")
-        .with_same_site(SameSite::Strict)
+        .with_same_site(TiiSameSite::Strict)
         .with_secure(true),
     );
 
   assert_eq!(
-    response.get_headers(&HeaderName::SetCookie),
+    response.get_headers(&TiiHttpHeaderName::SetCookie),
     vec![
       "X-Example-Cookie=example-value; Max-Age=3600; Path=/; Secure",
       "X-Example-Token=example-token; Domain=example.com; SameSite=Strict; Secure"
@@ -105,7 +105,7 @@ fn test_cookie_response() {
   let stream = MockStream::without_data();
   let raw_stream = stream.clone().into_connection_stream();
 
-  response.write_to(HttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
+  response.write_to(TiiHttpVersion::Http11, raw_stream.as_stream_write()).expect("err");
 
   let bytes: Vec<u8> = stream.copy_written_data();
 

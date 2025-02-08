@@ -6,15 +6,15 @@ use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 use tii::extras;
-use tii::extras::Connector;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::extras::TiiConnector;
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
-fn hello(_: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
+fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
 }
 
 fn main() -> TiiResult<()> {
@@ -40,7 +40,7 @@ fn main() -> TiiResult<()> {
       .ok()
   })?;
 
-  let connector = extras::TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?;
+  let connector = extras::TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?;
 
   let mut stream =
     TcpStream::connect_timeout(&SocketAddr::from_str("127.0.0.1:8080")?, Duration::from_secs(30))?;

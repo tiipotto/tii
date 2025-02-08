@@ -5,12 +5,12 @@ use rustls_pemfile::{certs, private_key};
 use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 use tii::extras;
-use tii::extras::{Connector, ConnectorMeta};
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::extras::{ConnectorMeta, TiiConnector};
+use tii::TiiBuilder;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
 
 fn load_certs() -> Vec<CertificateDer<'static>> {
   let keyfile = include_bytes!("./ssl/cert.pem").to_vec(); //Use a real cert!
@@ -46,44 +46,51 @@ fn main() -> TiiResult<()> {
   //Non Tls connectors
 
   //curl -v http://localhost:8080/tls
-  let _tcp = extras::TcpConnector::start_unpooled("0.0.0.0:8080", app.clone())?;
+  let _tcp = extras::TiiTcpConnector::start_unpooled("0.0.0.0:8080", app.clone())?;
 
   //curl -v --unix-socket /tmp/tii.sock http://localhost:8080/tls
   #[cfg(unix)]
-  let _unix = extras::UnixConnector::start_unpooled("/tmp/tii.sock", app.clone())?;
+  let _unix = extras::TiiUnixConnector::start_unpooled("/tmp/tii.sock", app.clone())?;
 
   // TLS connectors
 
   //curl -k -v --unix-socket /tmp/tiitls.sock https://localhost:8443/tls
   #[cfg(unix)]
   let _unix_tls =
-    extras::TlsUnixConnector::start_unpooled("/tmp/tiitls.sock", config.clone(), app.clone())?;
+    extras::TiiTlsUnixConnector::start_unpooled("/tmp/tiitls.sock", config.clone(), app.clone())?;
 
   //curl -k -v https://localhost:8443/tls
-  extras::TlsTcpConnector::start_unpooled("0.0.0.0:8443", config, app)?.join(None);
+  extras::TiiTlsTcpConnector::start_unpooled("0.0.0.0:8443", config, app)?.join(None);
 
   Ok(())
 }
 
-fn tls_route(ctx: &RequestContext) -> Response {
+fn tls_route(ctx: &TiiRequestContext) -> TiiResponse {
   info!("/tls route called");
 
   match ctx.get_stream_meta::<ConnectorMeta>() {
     Some(meta) => match meta {
-      ConnectorMeta::TlsTcp => Response::ok("Tls Connection via Tcp socket", MimeType::TextPlain),
+      ConnectorMeta::TlsTcp => {
+        TiiResponse::ok("Tls Connection via Tcp socket", TiiMimeType::TextPlain)
+      }
       #[cfg(unix)]
-      ConnectorMeta::TlsUnix => Response::ok("Tls Connection via Unix socket", MimeType::TextPlain),
+      ConnectorMeta::TlsUnix => {
+        TiiResponse::ok("Tls Connection via Unix socket", TiiMimeType::TextPlain)
+      }
       ConnectorMeta::Tcp => {
-        Response::forbidden("Plain text Connection via Tcp socket", MimeType::TextPlain)
+        TiiResponse::forbidden("Plain text Connection via Tcp socket", TiiMimeType::TextPlain)
       }
 
       #[cfg(unix)]
       ConnectorMeta::Unix => {
-        Response::forbidden("Plain text Connection via Unix socket", MimeType::TextPlain)
+        TiiResponse::forbidden("Plain text Connection via Unix socket", TiiMimeType::TextPlain)
       }
 
-      _ => Response::forbidden(format!("Connection type {meta} is not known"), MimeType::TextPlain),
+      _ => TiiResponse::forbidden(
+        format!("Connection type {meta} is not known"),
+        TiiMimeType::TextPlain,
+      ),
     },
-    None => Response::forbidden("Connection type not known", MimeType::TextPlain),
+    None => TiiResponse::forbidden("Connection type not known", TiiMimeType::TextPlain),
   }
 }

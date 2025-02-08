@@ -2,7 +2,7 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tii::stream::{ConnectionStream, IntoConnectionStream};
+use tii::{IntoTiiConnectionStream, TiiConnectionStream};
 
 #[derive(Debug, Clone)]
 pub struct MockStream {
@@ -35,13 +35,13 @@ impl MockStream {
     String::from_utf8_lossy(self.copy_written_data().as_slice()).to_string()
   }
 
-  pub fn to_stream(&self) -> Box<dyn ConnectionStream> {
+  pub fn to_stream(&self) -> Box<dyn TiiConnectionStream> {
     self.clone().into_connection_stream()
   }
 }
 
-impl IntoConnectionStream for MockStream {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
+impl IntoTiiConnectionStream for MockStream {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
     let cl = self.clone();
     (Box::new(cl) as Box<dyn Read + Send>, Box::new(self) as Box<dyn Write + Send>)
       .into_connection_stream()

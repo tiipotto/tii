@@ -1,11 +1,11 @@
 use log::info;
-use tii::extras::{Connector, TcpConnector};
-use tii::http::method::Method;
-use tii::http::mime::{AcceptMimeType, MimeType};
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::extras::{TiiConnector, TiiTcpConnector};
+use tii::TiiBuilder;
+use tii::TiiHttpMethod;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResult;
+use tii::{TiiAcceptMimeType, TiiMimeType};
 
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
@@ -20,19 +20,19 @@ fn main() -> TiiResult<()> {
         .begin_get("/", |route| {
           route
             //
-            .produces(MimeType::TextHtml)
-            .produces(MimeType::TextPlain)
+            .produces(TiiMimeType::TextHtml)
+            .produces(TiiMimeType::TextPlain)
             .endpoint(home)
         })?
         //
         //build endpoint directly without any indents.
         .get("/contact")
-        .produces(MimeType::TextHtml)
+        .produces(TiiMimeType::TextHtml)
         .endpoint(contact)?
         // as you can see without this comment it would be hard to tell what belongs to which endpoint.
         .post("/ping")
-        .consumes(AcceptMimeType::Wildcard)
-        .produces(MimeType::ApplicationOctetStream)
+        .consumes(TiiAcceptMimeType::Wildcard)
+        .produces(TiiMimeType::ApplicationOctetStream)
         .endpoint(pong)?
         //If you do not desire any media type handling you can also use the "route" type of methods.
         // This endpoint is called for any normal http method and any media type.
@@ -40,7 +40,7 @@ fn main() -> TiiResult<()> {
         //Same but limited to http GET method
         .route_get("/only/get", echo_method)?
         // Tii also supports non-standard custom methods.
-        .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)?
+        .route_method(TiiHttpMethod::from("QUERY"), "/custom/stuff", echo_method)?
         // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
         .route_get("/path/param/{key1}/{key2}/{regex:.*}", path_param)?
@@ -50,14 +50,14 @@ fn main() -> TiiResult<()> {
             .get("/closure/*")
             //You don't have to pass a function pointer, if your endpoint is tiny you can also do it in a closure
             //You do have to explicitly write out "&RequestContext" tho otherwise rust gets confused.
-            .endpoint(|ctx: &RequestContext| {
-              Response::ok(
-                format!("This is a closure to {}!", ctx.request_head().path()),
-                MimeType::TextPlain,
+            .endpoint(|ctx: &TiiRequestContext| {
+              TiiResponse::ok(
+                format!("This is a closure to {}!", ctx.request_head().get_path()),
+                TiiMimeType::TextPlain,
               )
             })?
             .get("/*")
-            .produces(MimeType::TextHtml)
+            .produces(TiiMimeType::TextHtml)
             .endpoint(generic)
         })?
         // There 3 are not endpoints, they are filters etc.
@@ -68,45 +68,45 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
-fn pre_routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
+fn pre_routing(req: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
   info!("pre_routing {:?}", req);
   Ok(None)
 }
 
-fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
+fn routing(req: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
   info!("routing {:?}", req);
   Ok(None)
 }
 
-fn resp(req: &mut RequestContext, mut resp: Response) -> TiiResult<Response> {
+fn resp(req: &mut TiiRequestContext, mut resp: TiiResponse) -> TiiResult<TiiResponse> {
   info!("resp {:?}", req);
   resp.add_header("X-Magic", "true magic")?;
   Ok(resp)
 }
 
-fn home(_: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok("<html><body><h1>Home</h1></body></html>", MimeType::TextHtml))
+fn home(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  Ok(TiiResponse::ok("<html><body><h1>Home</h1></body></html>", TiiMimeType::TextHtml))
 }
 
-fn contact(_: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok("<html><body><h1>Contact</h1></body></html>", MimeType::TextHtml))
+fn contact(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  Ok(TiiResponse::ok("<html><body><h1>Contact</h1></body></html>", TiiMimeType::TextHtml))
 }
 
-fn generic(request: &RequestContext) -> TiiResult<Response> {
+fn generic(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let html = format!(
     "<html><body><h1>You just requested {}.</h1></body></html>",
-    request.request_head().path()
+    request.request_head().get_path()
   );
 
-  Ok(Response::ok(html, MimeType::TextHtml))
+  Ok(TiiResponse::ok(html, TiiMimeType::TextHtml))
 }
 
-fn pong(request: &RequestContext) -> TiiResult<Response> {
+fn pong(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
   let body = if let Some(body) = request.request_body() {
     let mut buffer = Vec::new();
     body.clone().read_to_end(&mut buffer)?;
@@ -115,17 +115,17 @@ fn pong(request: &RequestContext) -> TiiResult<Response> {
     b"No Body".to_vec()
   };
 
-  Ok(Response::ok(body, MimeType::ApplicationOctetStream))
+  Ok(TiiResponse::ok(body, TiiMimeType::ApplicationOctetStream))
 }
 
-fn echo_method(request: &RequestContext) -> Response {
-  Response::ok(request.request_head().method().as_str(), MimeType::TextPlain)
+fn echo_method(request: &TiiRequestContext) -> TiiResponse {
+  TiiResponse::ok(request.request_head().get_method().as_str(), TiiMimeType::TextPlain)
 }
 
-fn path_param(request: &RequestContext) -> Response {
+fn path_param(request: &TiiRequestContext) -> TiiResponse {
   for (key, value) in request.get_path_params() {
     info!("path_param {} {}", key, value);
   }
 
-  Response::no_content()
+  TiiResponse::no_content()
 }

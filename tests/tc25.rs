@@ -1,37 +1,37 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::http::mime::MimeType;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::response_body::ResponseBody;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::TiiBuilder;
+use tii::TiiHttpVersion;
+use tii::TiiMimeType;
+use tii::TiiRequestContext;
+use tii::TiiResponse;
+use tii::TiiResponseBody;
+use tii::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
   assert_eq!(body.as_slice(), b"ABCDEF");
 
-  Ok(Response::ok(ResponseBody::from_slice("Okay!"), MimeType::TextPlain))
+  Ok(TiiResponse::ok(TiiResponseBody::from_slice("Okay!"), TiiMimeType::TextPlain))
 }
 
 static COUNTER2: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
+fn dummy_route2(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   COUNTER2.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
   assert_eq!(body.as_slice(), b"ABCDEF");
 
-  Ok(Response::ok(ResponseBody::from_slice("Nice!"), MimeType::TextPlain))
+  Ok(TiiResponse::ok(TiiResponseBody::from_slice("Nice!"), TiiMimeType::TextPlain))
 }
 
 #[test]
@@ -39,12 +39,12 @@ pub fn tc25() {
   let server = TiiBuilder::default()
     .router(|rt| {
       rt.post("/dummy")
-        .consumes(MimeType::TextPlain)
-        .produces(MimeType::TextPlain)
+        .consumes(TiiMimeType::TextPlain)
+        .produces(TiiMimeType::TextPlain)
         .endpoint(dummy_route)?
         .post("/dummy")
-        .consumes(MimeType::TextCsv)
-        .produces(MimeType::TextPlain)
+        .consumes(TiiMimeType::TextCsv)
+        .produces(TiiMimeType::TextPlain)
         .endpoint(dummy_route2)
     })
     .expect("ERROR")

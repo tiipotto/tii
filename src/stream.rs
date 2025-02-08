@@ -24,14 +24,14 @@ use std::time::Duration;
 /// - set_read_timeout/set_write_timeout only applies for future invocations of read/write and current invocations are left as is and will keep blocking.
 ///
 ///
-pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
-  fn new_ref(&self) -> Box<dyn ConnectionStream>;
+pub trait TiiConnectionStream: TiiConnectionStreamRead + TiiConnectionStreamWrite {
+  fn new_ref(&self) -> Box<dyn TiiConnectionStream>;
 
   fn peer_addr(&self) -> io::Result<String>;
   fn local_addr(&self) -> io::Result<String>;
 }
 
-pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
+pub trait TiiConnectionStreamRead: Sync + Send + Debug + Read {
   ///De-mut of Read
   fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
 
@@ -62,16 +62,16 @@ pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
 
   fn new_ref_read(&self) -> Box<dyn Read + Send + Sync>;
 
-  fn as_stream_read(&self) -> &dyn ConnectionStreamRead;
+  fn as_stream_read(&self) -> &dyn TiiConnectionStreamRead;
 
-  fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead>;
+  fn new_ref_stream_read(&self) -> Box<dyn TiiConnectionStreamRead>;
 
   fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 
   fn get_read_timeout(&self) -> io::Result<Option<Duration>>;
 }
 
-pub trait ConnectionStreamWrite: Sync + Send + Debug + Write {
+pub trait TiiConnectionStreamWrite: Sync + Send + Debug + Write {
   ///De-mut of Write
   fn write(&self, buf: &[u8]) -> io::Result<usize>;
   ///De-mut of Write
@@ -86,34 +86,34 @@ pub trait ConnectionStreamWrite: Sync + Send + Debug + Write {
 
   fn new_ref_write(&self) -> Box<dyn Write + Send + Sync>;
 
-  fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite>;
-  fn as_stream_write(&self) -> &dyn ConnectionStreamWrite;
+  fn new_ref_stream_write(&self) -> Box<dyn TiiConnectionStreamWrite>;
+  fn as_stream_write(&self) -> &dyn TiiConnectionStreamWrite;
 }
 
-pub trait IntoConnectionStream {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream>;
+pub trait IntoTiiConnectionStream {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream>;
 }
 
-impl IntoConnectionStream for TcpStream {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
+impl IntoTiiConnectionStream for TcpStream {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
     tcp::new(self)
   }
 }
 
-impl IntoConnectionStream for Box<dyn ConnectionStream> {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
+impl IntoTiiConnectionStream for Box<dyn TiiConnectionStream> {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
     self
   }
 }
 
-impl IntoConnectionStream for (Box<dyn Read + Send>, Box<dyn Write + Send>) {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
+impl IntoTiiConnectionStream for (Box<dyn Read + Send>, Box<dyn Write + Send>) {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
     boxed::new(self.0, self.1)
   }
 }
 
 mod tcp {
-  use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
+  use crate::stream::{TiiConnectionStream, TiiConnectionStreamRead, TiiConnectionStreamWrite};
   use crate::util::unwrap_poison;
   use std::fmt::Debug;
   use std::io;
@@ -123,7 +123,7 @@ mod tcp {
   use std::time::Duration;
   use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
-  pub fn new(stream: TcpStream) -> Box<dyn ConnectionStream> {
+  pub fn new(stream: TcpStream) -> Box<dyn TiiConnectionStream> {
     Box::new(TcpStreamOuter(Arc::new(TcpStreamInner::new(stream))))
   }
 
@@ -148,11 +148,11 @@ mod tcp {
 
   impl Read for TcpStreamOuter {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-      ConnectionStreamRead::read(self, buf)
+      TiiConnectionStreamRead::read(self, buf)
     }
   }
 
-  impl ConnectionStreamRead for TcpStreamOuter {
+  impl TiiConnectionStreamRead for TcpStreamOuter {
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
@@ -183,12 +183,12 @@ mod tcp {
       Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
-    fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
+    fn as_stream_read(&self) -> &dyn TiiConnectionStreamRead {
       self
     }
 
-    fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamRead>
+    fn new_ref_stream_read(&self) -> Box<dyn TiiConnectionStreamRead> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamRead>
     }
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
@@ -200,7 +200,7 @@ mod tcp {
     }
   }
 
-  impl ConnectionStreamWrite for TcpStreamOuter {
+  impl TiiConnectionStreamWrite for TcpStreamOuter {
     fn write(&self, buf: &[u8]) -> io::Result<usize> {
       unwrap_poison(self.0.write_mutex.lock())?.write(&mut &self.0.stream, buf)
     }
@@ -225,28 +225,28 @@ mod tcp {
       Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
-    fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamWrite>
+    fn new_ref_stream_write(&self) -> Box<dyn TiiConnectionStreamWrite> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamWrite>
     }
 
-    fn as_stream_write(&self) -> &dyn ConnectionStreamWrite {
+    fn as_stream_write(&self) -> &dyn TiiConnectionStreamWrite {
       self
     }
   }
 
   impl Write for TcpStreamOuter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-      ConnectionStreamWrite::write(self, buf)
+      TiiConnectionStreamWrite::write(self, buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-      ConnectionStreamWrite::flush(self)
+      TiiConnectionStreamWrite::flush(self)
     }
   }
 
-  impl ConnectionStream for TcpStreamOuter {
-    fn new_ref(&self) -> Box<dyn ConnectionStream> {
-      Box::new(self.clone()) as Box<dyn ConnectionStream>
+  impl TiiConnectionStream for TcpStreamOuter {
+    fn new_ref(&self) -> Box<dyn TiiConnectionStream> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStream>
     }
 
     fn peer_addr(&self) -> io::Result<String> {
@@ -261,7 +261,7 @@ mod tcp {
 
 //TODO what about timeout?
 mod boxed {
-  use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
+  use crate::stream::{TiiConnectionStream, TiiConnectionStreamRead, TiiConnectionStreamWrite};
   use crate::util::unwrap_poison;
   use std::fmt::{Debug, Formatter};
   use std::io;
@@ -274,11 +274,11 @@ mod boxed {
   pub fn new(
     read: Box<dyn Read + Send>,
     write: Box<dyn Write + Send>,
-  ) -> Box<dyn ConnectionStream> {
+  ) -> Box<dyn TiiConnectionStream> {
     Box::new(BoxStreamOuter(Arc::new(BoxStreamInner {
       read_mutex: Mutex::new((UnownedReadBuffer::default(), read)),
       write_mutex: Mutex::new(BufWriter::new(write)),
-    }))) as Box<dyn ConnectionStream>
+    }))) as Box<dyn TiiConnectionStream>
   }
 
   #[derive(Debug, Clone)]
@@ -295,7 +295,7 @@ mod boxed {
     }
   }
 
-  impl ConnectionStreamRead for BoxStreamOuter {
+  impl TiiConnectionStreamRead for BoxStreamOuter {
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       let mut guard = unwrap_poison(self.0.read_mutex.lock())?;
       let (buffer, stream) = guard.deref_mut();
@@ -328,12 +328,12 @@ mod boxed {
       Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
-    fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
+    fn as_stream_read(&self) -> &dyn TiiConnectionStreamRead {
       self
     }
 
-    fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamRead>
+    fn new_ref_stream_read(&self) -> Box<dyn TiiConnectionStreamRead> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamRead>
     }
 
     fn set_read_timeout(&self, _dur: Option<Duration>) -> io::Result<()> {
@@ -347,11 +347,11 @@ mod boxed {
 
   impl Read for BoxStreamOuter {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-      ConnectionStreamRead::read(self, buf)
+      TiiConnectionStreamRead::read(self, buf)
     }
   }
 
-  impl ConnectionStreamWrite for BoxStreamOuter {
+  impl TiiConnectionStreamWrite for BoxStreamOuter {
     fn write(&self, buf: &[u8]) -> io::Result<usize> {
       unwrap_poison(self.0.write_mutex.lock())?.write(buf)
     }
@@ -376,28 +376,28 @@ mod boxed {
       Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
-    fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamWrite>
+    fn new_ref_stream_write(&self) -> Box<dyn TiiConnectionStreamWrite> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamWrite>
     }
 
-    fn as_stream_write(&self) -> &dyn ConnectionStreamWrite {
+    fn as_stream_write(&self) -> &dyn TiiConnectionStreamWrite {
       self
     }
   }
 
   impl io::Write for BoxStreamOuter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-      ConnectionStreamWrite::write(self, buf)
+      TiiConnectionStreamWrite::write(self, buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-      ConnectionStreamWrite::flush(self)
+      TiiConnectionStreamWrite::flush(self)
     }
   }
 
-  impl ConnectionStream for BoxStreamOuter {
-    fn new_ref(&self) -> Box<dyn ConnectionStream> {
-      Box::new(self.clone()) as Box<dyn ConnectionStream>
+  impl TiiConnectionStream for BoxStreamOuter {
+    fn new_ref(&self) -> Box<dyn TiiConnectionStream> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStream>
     }
 
     fn peer_addr(&self) -> io::Result<String> {
@@ -411,15 +411,15 @@ mod boxed {
 }
 
 #[cfg(unix)]
-impl IntoConnectionStream for std::os::unix::net::UnixStream {
-  fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
+impl IntoTiiConnectionStream for std::os::unix::net::UnixStream {
+  fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
     unix::new(self)
   }
 }
 
 #[cfg(unix)]
 mod unix {
-  use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
+  use crate::stream::{TiiConnectionStream, TiiConnectionStreamRead, TiiConnectionStreamWrite};
   use crate::util::unwrap_poison;
   use std::fmt::Debug;
   use std::io;
@@ -429,7 +429,7 @@ mod unix {
   use std::time::Duration;
   use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
-  pub fn new(stream: UnixStream) -> Box<dyn ConnectionStream> {
+  pub fn new(stream: UnixStream) -> Box<dyn TiiConnectionStream> {
     Box::new(UnixStreamOuter(Arc::new(UnixStreamInner::new(stream))))
   }
 
@@ -455,11 +455,11 @@ mod unix {
 
   impl Read for UnixStreamOuter {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-      ConnectionStreamRead::read(self, buf)
+      TiiConnectionStreamRead::read(self, buf)
     }
   }
 
-  impl ConnectionStreamRead for UnixStreamOuter {
+  impl TiiConnectionStreamRead for UnixStreamOuter {
     fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
       unwrap_poison(self.0.read_mutex.lock())?.read(&mut &self.0.stream, buf)
     }
@@ -490,12 +490,12 @@ mod unix {
       Box::new(self.clone()) as Box<dyn Read + Send + Sync>
     }
 
-    fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
+    fn as_stream_read(&self) -> &dyn TiiConnectionStreamRead {
       self
     }
 
-    fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamRead>
+    fn new_ref_stream_read(&self) -> Box<dyn TiiConnectionStreamRead> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamRead>
     }
 
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
@@ -507,7 +507,7 @@ mod unix {
     }
   }
 
-  impl ConnectionStreamWrite for UnixStreamOuter {
+  impl TiiConnectionStreamWrite for UnixStreamOuter {
     fn write(&self, buf: &[u8]) -> io::Result<usize> {
       unwrap_poison(self.0.write_mutex.lock())?.write(&mut &self.0.stream, buf)
     }
@@ -532,28 +532,28 @@ mod unix {
       Box::new(self.clone()) as Box<dyn Write + Send + Sync>
     }
 
-    fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
-      Box::new(self.clone()) as Box<dyn ConnectionStreamWrite>
+    fn new_ref_stream_write(&self) -> Box<dyn TiiConnectionStreamWrite> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStreamWrite>
     }
 
-    fn as_stream_write(&self) -> &dyn ConnectionStreamWrite {
+    fn as_stream_write(&self) -> &dyn TiiConnectionStreamWrite {
       self
     }
   }
 
   impl Write for UnixStreamOuter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-      ConnectionStreamWrite::write(self, buf)
+      TiiConnectionStreamWrite::write(self, buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-      ConnectionStreamWrite::flush(self)
+      TiiConnectionStreamWrite::flush(self)
     }
   }
 
-  impl ConnectionStream for UnixStreamOuter {
-    fn new_ref(&self) -> Box<dyn ConnectionStream> {
-      Box::new(self.clone()) as Box<dyn ConnectionStream>
+  impl TiiConnectionStream for UnixStreamOuter {
+    fn new_ref(&self) -> Box<dyn TiiConnectionStream> {
+      Box::new(self.clone()) as Box<dyn TiiConnectionStream>
     }
 
     fn peer_addr(&self) -> io::Result<String> {
