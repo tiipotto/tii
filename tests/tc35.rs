@@ -1,25 +1,25 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::TiiBuilder;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::ServerBuilder;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
   unreachable!()
 }
 
-fn dummy_route2(ctx: &TiiRequestContext) -> TiiResponse {
-  TiiResponse::ok(format!("{:?}", ctx.request_head().get_query()), TiiMimeType::TextPlain)
+fn dummy_route2(ctx: &RequestContext) -> Response {
+  Response::ok(format!("{:?}", ctx.request_head().get_query()), MimeType::TextPlain)
 }
 
 #[test]
 pub fn tc35_1() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?bla=xxxx=yyyy HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();
@@ -33,7 +33,7 @@ pub fn tc35_1() {
 #[test]
 pub fn tc35_2() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?&b HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();
@@ -47,7 +47,7 @@ pub fn tc35_2() {
 #[test]
 pub fn tc35_3() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?a=%BF HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();
@@ -61,7 +61,7 @@ pub fn tc35_3() {
 #[test]
 pub fn tc35_4() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?a=? HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();
@@ -75,7 +75,7 @@ pub fn tc35_4() {
 #[test]
 pub fn tc35_5() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?a=a&b=%BF HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();
@@ -89,7 +89,7 @@ pub fn tc35_5() {
 #[test]
 pub fn tc35_6() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route2)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route2)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy?a!=!&b!=a! HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();

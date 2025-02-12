@@ -1,5 +1,5 @@
-use crate::functional_traits::{DefaultThreadAdapter, TiiThreadAdapter};
-use crate::stream::{TiiConnectionStream, TiiConnectionStreamRead, TiiConnectionStreamWrite};
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter};
+use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
 use crate::util::unwrap_poison;
 use rust_tls_duplex_stream::RustTlsDuplexStream;
 use rustls::server::ServerConnectionData;
@@ -131,15 +131,15 @@ impl<T: TlsCapableStream + ?Sized> Write for StreamWrapper<T> {
 
 /// Wrapper struct that wraps a TLS Engine from RustTLS together with a read and write buffers.
 #[derive(Debug, Clone)]
-pub struct TiiTlsStream(Arc<TiiTlsWrapperInner>);
-impl TiiTlsStream {
+pub struct TlsStream(Arc<TlsWrapperInner>);
+impl TlsStream {
   /// Create a new TiiTlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using `thread::Builder::new()::spawn`
   /// The threads are automatically stopped if the returned ConnectionStream is dropped.
   pub fn create_unpooled<S: TlsCapableStream + 'static>(
     tcp: S,
     tls: ServerConnection,
-  ) -> io::Result<Box<dyn TiiConnectionStream>> {
+  ) -> io::Result<Box<dyn ConnectionStream>> {
     Self::create(tcp, tls, &DefaultThreadAdapter)
   }
 
@@ -149,8 +149,8 @@ impl TiiTlsStream {
   pub fn create<S: TlsCapableStream + 'static>(
     stream: S,
     tls: ServerConnection,
-    spawner: &dyn TiiThreadAdapter,
-  ) -> io::Result<Box<dyn TiiConnectionStream>> {
+    spawner: &dyn ThreadAdapter,
+  ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
     let local = stream.local_addr()?.to_string();
     let stream_wrapper = StreamWrapper(Arc::new(stream));
@@ -160,19 +160,19 @@ impl TiiTlsStream {
         Ok(())
       })?;
 
-    Ok(Box::new(Self(Arc::new(TiiTlsWrapperInner {
+    Ok(Box::new(Self(Arc::new(TlsWrapperInner {
       stream_ref: stream_wrapper.0 as Arc<_>,
       tls,
       read: Mutex::new(UnownedReadBuffer::new()),
       write: Mutex::new(UnownedWriteBuffer::new()),
       peer,
       local,
-    }))) as Box<dyn TiiConnectionStream>)
+    }))) as Box<dyn ConnectionStream>)
   }
 }
 
 #[derive(Debug)]
-struct TiiTlsWrapperInner {
+struct TlsWrapperInner {
   stream_ref: Arc<dyn TlsCapableStream>,
   tls: RustTlsDuplexStream<ServerConnection, ServerConnectionData>,
   read: Mutex<UnownedReadBuffer<0x4000>>,
@@ -181,13 +181,13 @@ struct TiiTlsWrapperInner {
   local: String,
 }
 
-impl Drop for TiiTlsWrapperInner {
+impl Drop for TlsWrapperInner {
   fn drop(&mut self) {
     self.stream_ref.shutdown()
   }
 }
 
-impl TiiConnectionStreamRead for TiiTlsStream {
+impl ConnectionStreamRead for TlsStream {
   fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
   }
@@ -212,12 +212,12 @@ impl TiiConnectionStreamRead for TiiTlsStream {
     Box::new(self.clone()) as Box<dyn Read + Send + Sync>
   }
 
-  fn as_stream_read(&self) -> &dyn TiiConnectionStreamRead {
+  fn as_stream_read(&self) -> &dyn ConnectionStreamRead {
     self
   }
 
-  fn new_ref_stream_read(&self) -> Box<dyn TiiConnectionStreamRead> {
-    Box::new(self.clone()) as Box<dyn TiiConnectionStreamRead>
+  fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead> {
+    Box::new(self.clone()) as Box<dyn ConnectionStreamRead>
   }
 
   fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
@@ -229,13 +229,13 @@ impl TiiConnectionStreamRead for TiiTlsStream {
   }
 }
 
-impl Read for TiiTlsStream {
+impl Read for TlsStream {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.read.lock())?.read(&mut &self.0.tls, buf)
   }
 }
 
-impl TiiConnectionStreamWrite for TiiTlsStream {
+impl ConnectionStreamWrite for TlsStream {
   fn write(&self, buf: &[u8]) -> io::Result<usize> {
     unwrap_poison(self.0.write.lock())?.write(&mut &self.0.tls, buf)
   }
@@ -260,16 +260,16 @@ impl TiiConnectionStreamWrite for TiiTlsStream {
     Box::new(self.clone()) as Box<dyn Write + Send + Sync>
   }
 
-  fn new_ref_stream_write(&self) -> Box<dyn TiiConnectionStreamWrite> {
-    Box::new(self.clone()) as Box<dyn TiiConnectionStreamWrite>
+  fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite> {
+    Box::new(self.clone()) as Box<dyn ConnectionStreamWrite>
   }
 
-  fn as_stream_write(&self) -> &dyn TiiConnectionStreamWrite {
+  fn as_stream_write(&self) -> &dyn ConnectionStreamWrite {
     self
   }
 }
 
-impl Write for TiiTlsStream {
+impl Write for TlsStream {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     unwrap_poison(self.0.write.lock())?.write(&mut &self.0.tls, buf)
   }
@@ -279,9 +279,9 @@ impl Write for TiiTlsStream {
   }
 }
 
-impl TiiConnectionStream for TiiTlsStream {
-  fn new_ref(&self) -> Box<dyn TiiConnectionStream> {
-    Box::new(self.clone()) as Box<dyn TiiConnectionStream>
+impl ConnectionStream for TlsStream {
+  fn new_ref(&self) -> Box<dyn ConnectionStream> {
+    Box::new(self.clone()) as Box<dyn ConnectionStream>
   }
 
   fn peer_addr(&self) -> io::Result<String> {

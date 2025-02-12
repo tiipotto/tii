@@ -4,13 +4,13 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use tii::extras::{builtin_endpoints, TiiConnector, TiiTcpConnector};
+use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 
-use tii::TiiBuilder;
+use tii::ServerBuilder;
 use tii::TiiResult;
 
 fn main() -> TiiResult<()> {
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/", builtin_endpoints::serve_file("./examples/static/pages/index.html"))?
@@ -24,7 +24,7 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }

@@ -1,10 +1,10 @@
 //! Contains all state that's needed to process a request.
 
-use crate::http::headers::TiiHttpHeaderName;
-use crate::http::request::TiiHttpVersion;
-use crate::http::request_body::TiiRequestBody;
-use crate::http::TiiRequestHead;
-use crate::stream::TiiConnectionStream;
+use crate::http::headers::HttpHeaderName;
+use crate::http::request::HttpVersion;
+use crate::http::request_body::RequestBody;
+use crate::http::RequestHead;
+use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util;
@@ -18,12 +18,12 @@ use std::sync::Arc;
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
 #[derive(Debug)]
-pub struct TiiRequestContext {
+pub struct RequestContext {
   id: u128,
   peer_address: String,
   local_address: String,
-  request: TiiRequestHead,
-  body: Option<TiiRequestBody>,
+  request: RequestHead,
+  body: Option<RequestBody>,
   force_connection_close: bool,
   stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
 
@@ -35,22 +35,22 @@ pub struct TiiRequestContext {
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
 }
 
-impl TiiRequestContext {
+impl RequestContext {
   /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
   /// Errors on IO-Error or malformed RequestHead.
   pub fn new(
-    stream: &dyn TiiConnectionStream,
+    stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     max_head_buffer_size: usize,
-  ) -> TiiResult<TiiRequestContext> {
+  ) -> TiiResult<RequestContext> {
     let id = util::next_id();
     let peer_address = stream.peer_addr()?;
     let local_address = stream.local_addr()?;
 
-    let req = TiiRequestHead::new(stream, max_head_buffer_size)?;
+    let req = RequestHead::new(stream, max_head_buffer_size)?;
 
-    if req.get_version() == TiiHttpVersion::Http09 {
-      return Ok(TiiRequestContext {
+    if req.get_version() == HttpVersion::Http09 {
+      return Ok(RequestContext {
         id,
         peer_address,
         local_address,
@@ -64,11 +64,11 @@ impl TiiRequestContext {
       });
     }
 
-    if req.get_version() == TiiHttpVersion::Http11 {
-      match req.get_header(&TiiHttpHeaderName::TransferEncoding) {
+    if req.get_version() == HttpVersion::Http11 {
+      match req.get_header(&HttpHeaderName::TransferEncoding) {
         Some("chunked") => {
-          let body = TiiRequestBody::new_chunked(stream.new_ref_read());
-          return Ok(TiiRequestContext {
+          let body = RequestBody::new_chunked(stream.new_ref_read());
+          return Ok(RequestContext {
             id,
             peer_address,
             local_address,
@@ -90,15 +90,15 @@ impl TiiRequestContext {
       }
     }
 
-    if let Some(content_length) = req.get_header(&TiiHttpHeaderName::ContentLength) {
+    if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
         TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
-      let is_http_10 = req.get_version() == TiiHttpVersion::Http10;
+      let is_http_10 = req.get_version() == HttpVersion::Http10;
 
       if content_length == 0 {
-        return Ok(TiiRequestContext {
+        return Ok(RequestContext {
           id,
           peer_address,
           local_address,
@@ -112,8 +112,8 @@ impl TiiRequestContext {
         });
       }
 
-      let body = TiiRequestBody::new_with_content_length(stream.new_ref_read(), content_length);
-      return Ok(TiiRequestContext {
+      let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
+      return Ok(RequestContext {
         id,
         peer_address,
         local_address,
@@ -127,7 +127,7 @@ impl TiiRequestContext {
       });
     }
 
-    Ok(TiiRequestContext {
+    Ok(RequestContext {
       id,
       peer_address,
       local_address,
@@ -226,17 +226,17 @@ impl TiiRequestContext {
   }
 
   /// Ref to request head.
-  pub fn request_head(&self) -> &TiiRequestHead {
+  pub fn request_head(&self) -> &RequestHead {
     &self.request
   }
 
   /// Ref to mutable request head.
-  pub fn request_head_mut(&mut self) -> &mut TiiRequestHead {
+  pub fn request_head_mut(&mut self) -> &mut RequestHead {
     &mut self.request
   }
 
   /// Ref to body.
-  pub fn request_body(&self) -> Option<&TiiRequestBody> {
+  pub fn request_body(&self) -> Option<&RequestBody> {
     self.body.as_ref()
   }
 
@@ -291,7 +291,7 @@ impl TiiRequestContext {
 
   /// Replaces the request body with a new one (or none).
   /// The old body if any is consumed/discarded.
-  pub fn set_body_consume_old(&mut self, body: Option<TiiRequestBody>) -> io::Result<()> {
+  pub fn set_body_consume_old(&mut self, body: Option<RequestBody>) -> io::Result<()> {
     if let Some(old_body) = self.body.as_ref() {
       consume_body(old_body)?
     }
@@ -322,7 +322,7 @@ impl TiiRequestContext {
 }
 
 /// utility ot consume the body.
-fn consume_body(body: &TiiRequestBody) -> io::Result<()> {
+fn consume_body(body: &RequestBody) -> io::Result<()> {
   let mut discarding_buffer = [0; 0x1_00_00]; //TODO heap alloc maybe? cfg-if!
   loop {
     let discarded = body.read(discarding_buffer.as_mut_slice()).or_else(|e| {

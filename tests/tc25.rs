@@ -1,50 +1,50 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::TiiBuilder;
-use tii::TiiHttpVersion;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
-use tii::TiiResponseBody;
+use tii::ServerBuilder;
+use tii::HttpVersion;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ResponseBody;
 use tii::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
   assert_eq!(body.as_slice(), b"ABCDEF");
 
-  Ok(TiiResponse::ok(TiiResponseBody::from_slice("Okay!"), TiiMimeType::TextPlain))
+  Ok(Response::ok(ResponseBody::from_slice("Okay!"), MimeType::TextPlain))
 }
 
 static COUNTER2: AtomicUsize = AtomicUsize::new(0);
-fn dummy_route2(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER2.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
   assert_eq!(body.as_slice(), b"ABCDEF");
 
-  Ok(TiiResponse::ok(TiiResponseBody::from_slice("Nice!"), TiiMimeType::TextPlain))
+  Ok(Response::ok(ResponseBody::from_slice("Nice!"), MimeType::TextPlain))
 }
 
 #[test]
 pub fn tc25() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| {
       rt.post("/dummy")
-        .consumes(TiiMimeType::TextPlain)
-        .produces(TiiMimeType::TextPlain)
+        .consumes(MimeType::TextPlain)
+        .produces(MimeType::TextPlain)
         .endpoint(dummy_route)?
         .post("/dummy")
-        .consumes(TiiMimeType::TextCsv)
-        .produces(TiiMimeType::TextPlain)
+        .consumes(MimeType::TextCsv)
+        .produces(MimeType::TextPlain)
         .endpoint(dummy_route2)
     })
     .expect("ERROR")

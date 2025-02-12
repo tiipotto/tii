@@ -10,29 +10,29 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
-pub struct TiiRequestBody(Arc<Mutex<RequestBodyInner>>);
+pub struct RequestBody(Arc<Mutex<RequestBodyInner>>);
 
-impl TiiRequestBody {
-  pub fn new_with_data_ref<T: AsRef<[u8]>>(data: T) -> TiiRequestBody {
+impl RequestBody {
+  pub fn new_with_data_ref<T: AsRef<[u8]>>(data: T) -> RequestBody {
     Self::new_with_data(data.as_ref().to_vec())
   }
 
-  pub fn new_with_data(data: Vec<u8>) -> TiiRequestBody {
+  pub fn new_with_data(data: Vec<u8>) -> RequestBody {
     let len = data.len() as u64;
     let cursor = Cursor::new(data);
     Self::new_with_content_length(Box::new(cursor) as Box<dyn Read + Send + 'static>, len)
   }
 
-  pub fn new_with_content_length<T: Read + Send + 'static>(read: T, len: u64) -> TiiRequestBody {
-    TiiRequestBody(Arc::new(Mutex::new(RequestBodyInner::WithContentLength(
+  pub fn new_with_content_length<T: Read + Send + 'static>(read: T, len: u64) -> RequestBody {
+    RequestBody(Arc::new(Mutex::new(RequestBodyInner::WithContentLength(
       RequestBodyWithContentLength {
         err: false,
         data: (Box::new(read) as Box<dyn Read + Send>).take(len),
       },
     ))))
   }
-  pub fn new_chunked<T: Read + Send + 'static>(read: T) -> TiiRequestBody {
-    TiiRequestBody(Arc::new(Mutex::new(RequestBodyInner::Chunked(RequestBodyChunked {
+  pub fn new_chunked<T: Read + Send + 'static>(read: T) -> RequestBody {
+    RequestBody(Arc::new(Mutex::new(RequestBodyInner::Chunked(RequestBodyChunked {
       read: Box::new(read) as Box<dyn Read + Send>,
       eof: false,
       err: false,
@@ -41,7 +41,7 @@ impl TiiRequestBody {
   }
 }
 
-impl TiiRequestBody {
+impl RequestBody {
   pub fn as_read(&self) -> impl Read + '_ {
     Box::new(self)
   }
@@ -75,9 +75,9 @@ impl TiiRequestBody {
   }
 }
 
-impl Read for &TiiRequestBody {
+impl Read for &RequestBody {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    TiiRequestBody::read(self, buf) //de-mut upcall
+    RequestBody::read(self, buf) //de-mut upcall
   }
 }
 

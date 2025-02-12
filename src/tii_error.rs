@@ -2,10 +2,10 @@
 //! TODO docs before release
 #![allow(missing_docs)]
 
-use crate::TiiHttpHeaderName;
-use crate::TiiHttpMethod;
-use crate::TiiHttpVersion;
-use crate::TiiResponse;
+use crate::HttpHeaderName;
+use crate::HttpMethod;
+use crate::HttpVersion;
+use crate::Response;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -14,13 +14,13 @@ use std::io::ErrorKind;
 
 pub type TiiResult<T> = Result<T, TiiError>;
 
-impl From<TiiResponse> for TiiResult<TiiResponse> {
-  fn from(value: TiiResponse) -> Self {
+impl From<Response> for TiiResult<Response> {
+  fn from(value: Response) -> Self {
     Ok(value)
   }
 }
 
-impl From<TiiError> for TiiResult<TiiResponse> {
+impl From<TiiError> for TiiResult<Response> {
   fn from(value: TiiError) -> Self {
     Err(value)
   }
@@ -35,7 +35,7 @@ pub enum RequestHeadParsingError {
   StatusLineTooManyWhitespaces,
   StatusLineTooLong(Vec<u8>),
   PathInvalidUrlEncoding(String),
-  MethodNotSupportedByHttpVersion(TiiHttpVersion, TiiHttpMethod),
+  MethodNotSupportedByHttpVersion(HttpVersion, HttpMethod),
   HeaderLineIsNotUsAscii,
   HeaderLineNoCRLF,
   HeaderNameEmpty,
@@ -70,9 +70,9 @@ pub enum UserError {
   IllegalAcceptHeaderValueSet(String),
   MultipleAcceptHeaderValuesSet(String, String),
   MultipleContentTypeHeaderValuesSet(String, String),
-  ImmutableRequestHeaderModified(TiiHttpHeaderName, String),
-  ImmutableRequestHeaderRemoved(TiiHttpHeaderName),
-  ImmutableResponseHeaderModified(TiiHttpHeaderName),
+  ImmutableRequestHeaderModified(HttpHeaderName, String),
+  ImmutableRequestHeaderRemoved(HttpHeaderName),
+  ImmutableResponseHeaderModified(HttpHeaderName),
   RequestHeadBufferTooSmall(usize),
 }
 

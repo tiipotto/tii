@@ -1,21 +1,21 @@
 //! Defines traits for handler and filter functions.
 
-use crate::TiiConnectionStream;
-use crate::TiiRequestContext;
-use crate::TiiResponse;
+use crate::ConnectionStream;
+use crate::RequestContext;
+use crate::Response;
 use crate::TiiResult;
-use crate::{TiiWebsocketReceiver, TiiWebsocketSender};
+use crate::{WebsocketReceiver, WebsocketSender};
 use std::fmt::{Debug, Formatter};
 use std::thread;
 use std::thread::JoinHandle;
 
 /// Represents an opaque join handle
-pub struct TiiThreadAdapterJoinHandle(Box<dyn FnOnce() -> thread::Result<()> + Send>);
+pub struct ThreadAdapterJoinHandle(Box<dyn FnOnce() -> thread::Result<()> + Send>);
 
-impl TiiThreadAdapterJoinHandle {
+impl ThreadAdapterJoinHandle {
   /// Constructor
   pub fn new(inner: Box<dyn FnOnce() -> thread::Result<()> + Send>) -> Self {
-    TiiThreadAdapterJoinHandle(inner)
+    ThreadAdapterJoinHandle(inner)
   }
 
   /// Calls the join fn
@@ -24,42 +24,42 @@ impl TiiThreadAdapterJoinHandle {
   }
 }
 
-impl Debug for TiiThreadAdapterJoinHandle {
+impl Debug for ThreadAdapterJoinHandle {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str("ThreadAdapterJoinHandle")
   }
 }
 
-impl Default for TiiThreadAdapterJoinHandle {
+impl Default for ThreadAdapterJoinHandle {
   fn default() -> Self {
     Self(Box::new(|| Ok(())))
   }
 }
 
 /// Trait that represents a user implemented opaque thread starting/pooling mechanism.
-pub trait TiiThreadAdapter: Send + Sync + Debug {
+pub trait ThreadAdapter: Send + Sync + Debug {
   /// Spawns executes the given task immediately in the thread. like "thread::spawn".
-  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<TiiThreadAdapterJoinHandle>;
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle>;
 }
 
 #[allow(dead_code)] //This is not used in all feature combinations.
 #[derive(Debug)]
 pub(crate) struct DefaultThreadAdapter;
-impl TiiThreadAdapter for DefaultThreadAdapter {
-  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<TiiThreadAdapterJoinHandle> {
+impl ThreadAdapter for DefaultThreadAdapter {
+  fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle> {
     let hdl: JoinHandle<()> = thread::Builder::new().spawn(task)?;
-    Ok(TiiThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
+    Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
   }
 }
 
 /// Represents a function able to handle a WebSocket handshake and consequent data frames.
-pub trait TiiWebsocketEndpoint: Send + Sync {
+pub trait WebsocketEndpoint: Send + Sync {
   /// serve the web socket request.
   fn serve(
     &self,
-    request: &TiiRequestContext,
-    receiver: TiiWebsocketReceiver,
-    sender: TiiWebsocketSender,
+    request: &RequestContext,
+    receiver: WebsocketReceiver,
+    sender: WebsocketSender,
   ) -> TiiResult<()>;
 }
 
@@ -79,16 +79,16 @@ impl IntoWebsocketEndpointResponse for () {
   }
 }
 
-impl<F, R> TiiWebsocketEndpoint for F
+impl<F, R> WebsocketEndpoint for F
 where
   R: IntoWebsocketEndpointResponse,
-  F: Fn(&TiiRequestContext, TiiWebsocketReceiver, TiiWebsocketSender) -> R + Send + Sync,
+  F: Fn(&RequestContext, WebsocketReceiver, WebsocketSender) -> R + Send + Sync,
 {
   fn serve(
     &self,
-    request: &TiiRequestContext,
-    receiver: TiiWebsocketReceiver,
-    sender: TiiWebsocketSender,
+    request: &RequestContext,
+    receiver: WebsocketReceiver,
+    sender: WebsocketSender,
   ) -> TiiResult<()> {
     self(request, receiver, sender).into()
   }
@@ -100,23 +100,23 @@ where
 /// ## Example
 /// The most basic request handler would be as follows:
 /// ```
-/// use tii::TiiMimeType;
+/// use tii::MimeType;
 ///
-/// fn handler(_: tii::TiiRequestHead) -> tii::TiiResponse {
-///     tii::TiiResponse::ok("Success", TiiMimeType::TextPlain)
+/// fn handler(_: tii::RequestHead) -> tii::Response {
+///     tii::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```
-pub trait TiiHttpEndpoint: Send + Sync {
+pub trait HttpEndpoint: Send + Sync {
   /// Serve an ordinary http request.
-  fn serve(&self, request: &TiiRequestContext) -> TiiResult<TiiResponse>;
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response>;
 }
 
-impl<F, R> TiiHttpEndpoint for F
+impl<F, R> HttpEndpoint for F
 where
-  R: Into<TiiResult<TiiResponse>>,
-  F: Fn(&TiiRequestContext) -> R + Send + Sync,
+  R: Into<TiiResult<Response>>,
+  F: Fn(&RequestContext) -> R + Send + Sync,
 {
-  fn serve(&self, request: &TiiRequestContext) -> TiiResult<TiiResponse> {
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
     self(request).into()
   }
 }
@@ -124,42 +124,42 @@ where
 /// Trait for a "filter" that decide if a router is responsible for handling a request.
 /// Intended use is to do matching on things like base path, Host HTTP Header,
 /// some other magic header.
-pub trait TiiRouterFilter: Send + Sync {
+pub trait RouterFilter: Send + Sync {
   /// true -> the router should handle this one,
   /// false -> the router should not handle this one,
   //TODO make it impossible for this shit to read the body.
-  fn filter(&self, request: &TiiRequestContext) -> TiiResult<bool>;
+  fn filter(&self, request: &RequestContext) -> TiiResult<bool>;
 }
 
-impl<F: Fn(&TiiRequestContext) -> TiiResult<bool> + Send + Sync> TiiRouterFilter for F {
-  fn filter(&self, request: &TiiRequestContext) -> TiiResult<bool> {
+impl<F: Fn(&RequestContext) -> TiiResult<bool> + Send + Sync> RouterFilter for F {
+  fn filter(&self, request: &RequestContext) -> TiiResult<bool> {
     self(request)
   }
 }
 
-trait IntoTiiRequestFilterResult {
-  fn into(self) -> TiiResult<Option<TiiResponse>>;
+trait IntoRequestFilterResult {
+  fn into(self) -> TiiResult<Option<Response>>;
 }
 
-impl IntoTiiRequestFilterResult for Option<TiiResponse> {
-  fn into(self) -> TiiResult<Option<TiiResponse>> {
+impl IntoRequestFilterResult for Option<Response> {
+  fn into(self) -> TiiResult<Option<Response>> {
     Ok(self)
   }
 }
 
-impl IntoTiiRequestFilterResult for TiiResult<Option<TiiResponse>> {
-  fn into(self) -> TiiResult<Option<TiiResponse>> {
+impl IntoRequestFilterResult for TiiResult<Option<Response>> {
+  fn into(self) -> TiiResult<Option<Response>> {
     self
   }
 }
-impl IntoTiiRequestFilterResult for () {
-  fn into(self) -> TiiResult<Option<TiiResponse>> {
+impl IntoRequestFilterResult for () {
+  fn into(self) -> TiiResult<Option<Response>> {
     Ok(None)
   }
 }
 
-impl IntoTiiRequestFilterResult for TiiResult<()> {
-  fn into(self) -> TiiResult<Option<TiiResponse>> {
+impl IntoRequestFilterResult for TiiResult<()> {
+  fn into(self) -> TiiResult<Option<Response>> {
     self.map(|_| None)
   }
 }
@@ -171,20 +171,20 @@ impl IntoTiiRequestFilterResult for TiiResult<()> {
 /// - Transforming of the request entity. (I.e. transform json)
 /// - Logging of the request
 /// - "Rough" estimation of the time it takes for the endpoint to process things.
-pub trait TiiRequestFilter: Send + Sync {
+pub trait RequestFilter: Send + Sync {
   /// Called with the request context before the endpoint is called.
   /// Ok(None) -> proceed.
   /// Ok(Some) -> abort request with given response.
   /// Err -> Call error handler and proceed (endpoint won't be called)
-  fn filter(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>>;
+  fn filter(&self, request: &mut RequestContext) -> TiiResult<Option<Response>>;
 }
 
-impl<F, R> TiiRequestFilter for F
+impl<F, R> RequestFilter for F
 where
-  R: IntoTiiRequestFilterResult,
-  F: Fn(&mut TiiRequestContext) -> R + Send + Sync,
+  R: IntoRequestFilterResult,
+  F: Fn(&mut RequestContext) -> R + Send + Sync,
 {
-  fn filter(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+  fn filter(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     self(request).into()
   }
 }
@@ -195,27 +195,27 @@ where
 /// - Adding Various other headers
 /// - Logging of the response
 /// - "Rough" estimation of the time it takes for the endpoint to process things.
-pub trait TiiResponseFilter: Send + Sync {
+pub trait ResponseFilter: Send + Sync {
   /// Called with the request context adn response after the endpoint or error handler is called.
   /// Ok(...) -> proceed.
   /// Err -> Call error handler and proceed. (You cannot create a loop, a Response filter will only be called exactly once per RequestContext)
   fn filter(
     &self,
-    request: &mut TiiRequestContext,
-    response: TiiResponse,
-  ) -> TiiResult<TiiResponse>;
+    request: &mut RequestContext,
+    response: Response,
+  ) -> TiiResult<Response>;
 }
 
-impl<F, R> TiiResponseFilter for F
+impl<F, R> ResponseFilter for F
 where
-  R: Into<TiiResult<TiiResponse>>,
-  F: Fn(&mut TiiRequestContext, TiiResponse) -> R + Send + Sync,
+  R: Into<TiiResult<Response>>,
+  F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
 {
   fn filter(
     &self,
-    request: &mut TiiRequestContext,
-    response: TiiResponse,
-  ) -> TiiResult<TiiResponse> {
+    request: &mut RequestContext,
+    response: Response,
+  ) -> TiiResult<Response> {
     self(request, response).into()
   }
 }
@@ -224,24 +224,24 @@ where
 /// Or it may indicate that it hasn't handled the socket and signal that the next router should do it.
 /// This enum represents those 3 states
 #[derive(Debug)]
-pub enum TiiRouterWebSocketServingResponse {
+pub enum RouterWebSocketServingResponse {
   /// Handled with protocol switch to WS
   HandledWithProtocolSwitch,
   /// Handled using HTTP protocol
-  HandledWithoutProtocolSwitch(TiiResponse),
+  HandledWithoutProtocolSwitch(Response),
   /// Not handled, next router should do it.
   NotHandled,
 }
 
 /// Trait for a router.
-pub trait TiiRouter: Debug + Send + Sync {
+pub trait Router: Debug + Send + Sync {
   /// Handle an ordinary http request
   /// Ok(Some) -> request was handled
   /// Ok(None) -> request was not handled and should be handled by the next router
   /// Err -> abort
   ///
   /// Note: If the request body is read then returning Ok(None) will most likely result in unintended behavior in the next Router.
-  fn serve(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>>;
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>>;
 
   /// Handle a web socket request.
   /// Ok(true) -> request was handled
@@ -251,7 +251,7 @@ pub trait TiiRouter: Debug + Send + Sync {
   /// Note: If the stream is read or written to then returning Ok(false) will most likely result in unintended behavior in the next Router.
   fn serve_websocket(
     &self,
-    stream: &dyn TiiConnectionStream,
-    request: &mut TiiRequestContext,
-  ) -> TiiResult<TiiRouterWebSocketServingResponse>;
+    stream: &dyn ConnectionStream,
+    request: &mut RequestContext,
+  ) -> TiiResult<RouterWebSocketServingResponse>;
 }

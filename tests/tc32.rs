@@ -1,34 +1,34 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::TiiBuilder;
-use tii::TiiHttpHeaderName;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::ServerBuilder;
+use tii::HttpHeaderName;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
-use tii::{TiiAcceptQualityMimeType, TiiMimeType};
+use tii::{AcceptQualityMimeType, MimeType};
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn filter_set_accept(request: &mut TiiRequestContext) -> TiiResult<()> {
+fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
   if request.request_head().get_path() == "/" {
-    request.request_head_mut().set_header(TiiHttpHeaderName::Accept, "*/*")?;
+    request.request_head_mut().set_header(HttpHeaderName::Accept, "*/*")?;
   }
   Ok(())
 }
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(ctx.request_head().get_accept()[0], TiiAcceptQualityMimeType::default());
-  Ok(TiiResponse::no_content())
+  assert_eq!(ctx.request_head().get_accept()[0], AcceptQualityMimeType::default());
+  Ok(Response::no_content())
 }
 
 #[test]
 pub fn tc32() {
-  let server = TiiBuilder::builder(|builder| {
+  let server = ServerBuilder::builder(|builder| {
     builder
       .router(|rt| {
         rt.get("/*")
-          .produces(TiiMimeType::TextPlain)
+          .produces(MimeType::TextPlain)
           .endpoint(dummy_route)?
           .with_pre_routing_request_filter(filter_set_accept)
       })?

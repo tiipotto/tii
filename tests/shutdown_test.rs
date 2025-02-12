@@ -6,26 +6,26 @@ mod inner {
   use std::thread::sleep;
   use std::time::Duration;
   use tii::extras;
-  use tii::extras::TiiConnector;
-  use tii::TiiBuilder;
-  use tii::TiiMimeType;
-  use tii::TiiRequestContext;
-  use tii::TiiResponse;
+  use tii::extras::Connector;
+  use tii::ServerBuilder;
+  use tii::MimeType;
+  use tii::RequestContext;
+  use tii::Response;
   use tii::TiiResult;
 
-  fn hello(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
-    Ok(TiiResponse::ok("<html><body><h1>Hello</h1></body></html>", TiiMimeType::TextHtml))
+  fn hello(_: &RequestContext) -> TiiResult<Response> {
+    Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
   }
 
   pub(crate) fn work() -> TiiResult<()> {
-    let tii_server = TiiBuilder::builder_arc(|builder| {
+    let tii_server = ServerBuilder::builder_arc(|builder| {
       builder
         .router(|router| router.route_any("/*", hello))?
         .with_connection_timeout(Some(Duration::from_secs(5)))?
         .ok()
     })?;
 
-    let connector = extras::TiiTcpConnector::start_unpooled("0.0.0.0:28880", tii_server)?;
+    let connector = extras::TcpConnector::start_unpooled("0.0.0.0:28880", tii_server)?;
 
     let mut stream = TcpStream::connect_timeout(
       &SocketAddr::from_str("127.0.0.1:28880")?,

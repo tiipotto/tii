@@ -1,21 +1,21 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::TiiCookie;
-use crate::TiiHttpMethod;
-use crate::{Headers, TiiHttpHeader, TiiHttpHeaderName};
+use crate::Cookie;
+use crate::HttpMethod;
+use crate::{Headers, HttpHeader, HttpHeaderName};
 
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult, UserError};
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
-use crate::TiiConnectionStream;
-use crate::{TiiAcceptQualityMimeType, TiiMimeType, TiiQValue};
+use crate::ConnectionStream;
+use crate::{AcceptQualityMimeType, MimeType, QValue};
 use std::fmt::{Display, Formatter};
 use std::io::ErrorKind;
 
 /// Enum for http versions tii supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[non_exhaustive] //Not sure but I don't want to close the door on http 2 shut!
-pub enum TiiHttpVersion {
+pub enum HttpVersion {
   /// Earliest http version. Has no concept of request bodies or headers. to trigger a request run `echo -ne 'GET /path/goes/here\r\n' | nc 127.0.0.1 8080`
   /// Responses are just the body, no headers, no nothing.
   Http09,
@@ -25,45 +25,45 @@ pub enum TiiHttpVersion {
   Http11,
 }
 
-impl TiiHttpVersion {
+impl HttpVersion {
   /// returns the printable name of the http version.
   /// This is not always equivalent to how its appears in binary on the status line.
   pub fn as_str(&self) -> &'static str {
     match self {
-      TiiHttpVersion::Http09 => "HTTP/0.9",
-      TiiHttpVersion::Http10 => "HTTP/1.0",
-      TiiHttpVersion::Http11 => "HTTP/1.1",
+      HttpVersion::Http09 => "HTTP/0.9",
+      HttpVersion::Http10 => "HTTP/1.0",
+      HttpVersion::Http11 => "HTTP/1.1",
     }
   }
   /// returns the network bytes in the status line for the http version.
   pub fn as_net_str(&self) -> &'static str {
     match self {
-      TiiHttpVersion::Http09 => "",
-      TiiHttpVersion::Http10 => "HTTP/1.0",
-      TiiHttpVersion::Http11 => "HTTP/1.1",
+      HttpVersion::Http09 => "",
+      HttpVersion::Http10 => "HTTP/1.0",
+      HttpVersion::Http11 => "HTTP/1.1",
     }
   }
 }
 
-impl Display for TiiHttpVersion {
+impl Display for HttpVersion {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      TiiHttpVersion::Http09 => f.write_str("HTTP/0.9"),
-      TiiHttpVersion::Http10 => f.write_str("HTTP/1.0"),
-      TiiHttpVersion::Http11 => f.write_str("HTTP/1.1"),
+      HttpVersion::Http09 => f.write_str("HTTP/0.9"),
+      HttpVersion::Http10 => f.write_str("HTTP/1.0"),
+      HttpVersion::Http11 => f.write_str("HTTP/1.1"),
     }
   }
 }
 
-impl TiiHttpVersion {
+impl HttpVersion {
   /// Tries to parse the http version part of the status line to a http version.
   /// empty string is treated as http09 because http09 doesn't have a version in its status line.
   /// Returns input on error.
   pub fn try_from_net_str<T: AsRef<str>>(value: T) -> Result<Self, T> {
     match value.as_ref() {
-      "HTTP/1.0" => Ok(TiiHttpVersion::Http10),
-      "HTTP/1.1" => Ok(TiiHttpVersion::Http11),
-      "" => Ok(TiiHttpVersion::Http09),
+      "HTTP/1.0" => Ok(HttpVersion::Http10),
+      "HTTP/1.1" => Ok(HttpVersion::Http11),
+      "" => Ok(HttpVersion::Http09),
       _ => Err(value),
     }
   }
@@ -71,9 +71,9 @@ impl TiiHttpVersion {
   /// Tries to parse the http version from the printable name. This was most likely returned by a call to `HttpVersion::as_str`
   pub fn try_from_str<T: AsRef<str>>(value: T) -> Result<Self, T> {
     match value.as_ref() {
-      "HTTP/1.0" => Ok(TiiHttpVersion::Http10),
-      "HTTP/1.1" => Ok(TiiHttpVersion::Http11),
-      "HTTP/0.9" => Ok(TiiHttpVersion::Http09),
+      "HTTP/1.0" => Ok(HttpVersion::Http10),
+      "HTTP/1.1" => Ok(HttpVersion::Http11),
+      "HTTP/0.9" => Ok(HttpVersion::Http09),
       _ => Err(value),
     }
   }
@@ -82,12 +82,12 @@ impl TiiHttpVersion {
 /// Represents a request to the server.
 /// Contains parsed information about the request's data.
 #[derive(Clone, Debug)]
-pub struct TiiRequestHead {
+pub struct RequestHead {
   /// The method used in making the request, e.g. "GET".
-  method: TiiHttpMethod,
+  method: HttpMethod,
 
   /// The HTTP version of the request.
-  version: TiiHttpVersion,
+  version: HttpVersion,
 
   /// The status line as is.
   /// For example "GET /index.html HTTP1.1"
@@ -100,9 +100,9 @@ pub struct TiiRequestHead {
   /// Vec of query parameters, key=value in order of appearance.
   query: Vec<(String, String)>,
 
-  accept: Vec<TiiAcceptQualityMimeType>,
+  accept: Vec<AcceptQualityMimeType>,
 
-  content_type: Option<TiiMimeType>,
+  content_type: Option<MimeType>,
 
   /// A list of headers included in the request.
   headers: Headers,
@@ -234,9 +234,9 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
   Ok(query)
 }
 
-impl TiiRequestHead {
+impl RequestHead {
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn new(stream: &dyn TiiConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
+  pub fn new(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
     let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
@@ -255,15 +255,15 @@ impl TiiRequestHead {
 
     let mut start_line = status_line.split(' ');
 
-    let method = TiiHttpMethod::from(unwrap_some(start_line.next()));
+    let method = HttpMethod::from(unwrap_some(start_line.next()));
 
     let mut uri_iter =
       start_line.next().ok_or(RequestHeadParsingError::StatusLineNoWhitespace)?.splitn(2, '?');
 
     let version = start_line
       .next()
-      .map(TiiHttpVersion::try_from_net_str)
-      .unwrap_or(Ok(TiiHttpVersion::Http09)) //Http 0.9 has no suffix
+      .map(HttpVersion::try_from_net_str)
+      .unwrap_or(Ok(HttpVersion::Http09)) //Http 0.9 has no suffix
       .map_err(|version| RequestHeadParsingError::HttpVersionNotSupported(version.to_string()))?;
 
     if start_line.next().is_some() {
@@ -283,8 +283,8 @@ impl TiiRequestHead {
 
     let mut headers = Headers::new();
 
-    if version == TiiHttpVersion::Http09 {
-      if method != TiiHttpMethod::Get {
+    if version == HttpVersion::Http09 {
+      if method != HttpMethod::Get {
         return Err(TiiError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(
           version, method,
         )));
@@ -297,9 +297,9 @@ impl TiiRequestHead {
         version,
         headers,
         content_type: None,
-        accept: vec![TiiAcceptQualityMimeType::from_mime(
-          TiiMimeType::TextHtml,
-          TiiQValue::default(),
+        accept: vec![AcceptQualityMimeType::from_mime(
+          MimeType::TextHtml,
+          QValue::default(),
         )], // Http 0.9 only accepts html.
         status_line: status_line.to_string(),
       });
@@ -335,11 +335,11 @@ impl TiiRequestHead {
         return Err(TiiError::from(RequestHeadParsingError::HeaderValueEmpty));
       }
 
-      headers.add(TiiHttpHeaderName::from(name), value);
+      headers.add(HttpHeaderName::from(name), value);
     }
 
-    let accept_hdr = headers.get(TiiHttpHeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
-    let accept = TiiAcceptQualityMimeType::parse(accept_hdr);
+    let accept_hdr = headers.get(HttpHeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
+    let accept = AcceptQualityMimeType::parse(accept_hdr);
     if accept.is_none() {
       // TODO should this be a hard error?
       warn_log!(
@@ -349,10 +349,10 @@ impl TiiRequestHead {
       );
     }
 
-    let accept = accept.unwrap_or_else(|| vec![TiiAcceptQualityMimeType::default()]);
+    let accept = accept.unwrap_or_else(|| vec![AcceptQualityMimeType::default()]);
 
-    let content_type = headers.get(TiiHttpHeaderName::ContentType).map(|ctype_raw| {
-      let ctype = TiiMimeType::parse_from_content_type_header(ctype_raw);
+    let content_type = headers.get(HttpHeaderName::ContentType).map(|ctype_raw| {
+      let ctype = MimeType::parse_from_content_type_header(ctype_raw);
       if ctype.is_none() {
         warn_log!(
          "Request to '{}' has invalid Content-Type header '{}' will assume 'Content-Type: application/octet-stream'",
@@ -361,7 +361,7 @@ impl TiiRequestHead {
         );
       }
 
-      ctype.unwrap_or(TiiMimeType::ApplicationOctetStream)
+      ctype.unwrap_or(MimeType::ApplicationOctetStream)
     });
 
     Ok(Self {
@@ -377,7 +377,7 @@ impl TiiRequestHead {
   }
 
   /// get the http version this request was made in by the client.
-  pub fn get_version(&self) -> TiiHttpVersion {
+  pub fn get_version(&self) -> HttpVersion {
     self.version
   }
 
@@ -497,26 +497,26 @@ impl TiiRequestHead {
   }
 
   /// gets the method of the request.
-  pub fn get_method(&self) -> &TiiHttpMethod {
+  pub fn get_method(&self) -> &HttpMethod {
     &self.method
   }
 
   /// Changes the method of the request
-  pub fn set_method(&mut self, method: TiiHttpMethod) {
+  pub fn set_method(&mut self, method: HttpMethod) {
     self.method = method;
   }
 
   /// Get the cookies from the request.
-  pub fn get_cookies(&self) -> Vec<TiiCookie> {
+  pub fn get_cookies(&self) -> Vec<Cookie> {
     self
       .headers
-      .get(TiiHttpHeaderName::Cookie)
+      .get(HttpHeaderName::Cookie)
       .map(|cookies| {
         cookies
           .split(';')
           .filter_map(|cookie| {
             let (k, v) = cookie.split_once('=')?;
-            Some(TiiCookie::new(k.trim(), v.trim()))
+            Some(Cookie::new(k.trim(), v.trim()))
           })
           .collect()
       })
@@ -524,15 +524,15 @@ impl TiiRequestHead {
   }
 
   /// Attempts to get a specific cookie from the request.
-  pub fn get_cookie(&self, name: impl AsRef<str>) -> Option<TiiCookie> {
+  pub fn get_cookie(&self, name: impl AsRef<str>) -> Option<Cookie> {
     self.get_cookies().into_iter().find(|cookie| cookie.name == name.as_ref())
   }
 
   /// Manipulates the accept header values.
   /// This also overwrites the actual accept header!
-  pub fn set_accept(&mut self, types: Vec<TiiAcceptQualityMimeType>) {
-    let hdr_value = TiiAcceptQualityMimeType::elements_to_header_value(&types);
-    self.headers.set(TiiHttpHeaderName::Accept, hdr_value);
+  pub fn set_accept(&mut self, types: Vec<AcceptQualityMimeType>) {
+    let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
+    self.headers.set(HttpHeaderName::Accept, hdr_value);
     self.accept = types;
   }
 
@@ -542,30 +542,30 @@ impl TiiRequestHead {
   /// this value is ApplicationOctetStream even tho the raw header value is different.
   /// This returns none if the Content-Type header was not present at all.
   /// (For example ordinary GET requests do not have this header)
-  pub fn get_content_type(&self) -> Option<&TiiMimeType> {
+  pub fn get_content_type(&self) -> Option<&MimeType> {
     self.content_type.as_ref()
   }
 
   /// sets the content type header to given MimeType.
   /// This will affect both the header and the return value of get_content_type.
-  pub fn set_content_type(&mut self, content_type: TiiMimeType) {
-    self.headers.set(TiiHttpHeaderName::ContentType, content_type.as_str());
+  pub fn set_content_type(&mut self, content_type: MimeType) {
+    self.headers.set(HttpHeaderName::ContentType, content_type.as_str());
     self.content_type = Some(content_type);
   }
 
   /// Removes the content type header. get_content_type will return None after this call.
-  pub fn remove_content_type(&mut self) -> Option<TiiMimeType> {
-    self.headers.remove(TiiHttpHeaderName::ContentType);
+  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+    self.headers.remove(HttpHeaderName::ContentType);
     self.content_type.take()
   }
 
   /// Returns the acceptable mime types
-  pub fn get_accept(&self) -> &[TiiAcceptQualityMimeType] {
+  pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
     self.accept.as_slice()
   }
 
   /// Returns an iterator over all headers.
-  pub fn iter_headers(&self) -> impl Iterator<Item = &TiiHttpHeader> {
+  pub fn iter_headers(&self) -> impl Iterator<Item = &HttpHeader> {
     self.headers.iter()
   }
 
@@ -582,21 +582,21 @@ impl TiiRequestHead {
   /// Removes all instances of a particular header.
   pub fn remove_headers(&mut self, hdr: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
-      TiiHttpHeaderName::Accept => {
-        self.accept = vec![TiiAcceptQualityMimeType::default()];
+      HttpHeaderName::Accept => {
+        self.accept = vec![AcceptQualityMimeType::default()];
         self.headers.set(hdr, "*/*");
         Ok(())
       }
-      TiiHttpHeaderName::ContentType => {
+      HttpHeaderName::ContentType => {
         self.headers.remove(hdr);
         self.content_type = None;
         Ok(())
       }
-      TiiHttpHeaderName::TransferEncoding => {
-        UserError::ImmutableRequestHeaderRemoved(TiiHttpHeaderName::TransferEncoding).into()
+      HttpHeaderName::TransferEncoding => {
+        UserError::ImmutableRequestHeaderRemoved(HttpHeaderName::TransferEncoding).into()
       }
-      TiiHttpHeaderName::ContentLength => {
-        UserError::ImmutableRequestHeaderRemoved(TiiHttpHeaderName::ContentLength).into()
+      HttpHeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderRemoved(HttpHeaderName::ContentLength).into()
       }
       _ => {
         self.headers.remove(hdr);
@@ -610,8 +610,8 @@ impl TiiRequestHead {
   pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
-      TiiHttpHeaderName::Accept => {
-        if let Some(accept) = TiiAcceptQualityMimeType::parse(hdr_value) {
+      HttpHeaderName::Accept => {
+        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           self.accept = accept;
           self.headers.set(hdr, value);
           return Ok(());
@@ -619,20 +619,20 @@ impl TiiRequestHead {
 
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      TiiHttpHeaderName::ContentType => {
-        let mime = TiiMimeType::parse(hdr_value)
+      HttpHeaderName::ContentType => {
+        let mime = MimeType::parse(hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
-        self.headers.set(TiiHttpHeaderName::ContentType, hdr_value);
+        self.headers.set(HttpHeaderName::ContentType, hdr_value);
         self.content_type = Some(mime);
         Ok(())
       }
-      TiiHttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
-        TiiHttpHeaderName::TransferEncoding,
+      HttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      TiiHttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
-        TiiHttpHeaderName::ContentLength,
+      HttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::ContentLength,
         hdr_value.to_string(),
       )
       .into(),
@@ -647,8 +647,8 @@ impl TiiRequestHead {
   pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
-      TiiHttpHeaderName::Accept => {
-        if let Some(accept) = TiiAcceptQualityMimeType::parse(hdr_value) {
+      HttpHeaderName::Accept => {
+        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
             return UserError::MultipleAcceptHeaderValuesSet(
               old_value.to_string(),
@@ -661,8 +661,8 @@ impl TiiRequestHead {
         }
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      TiiHttpHeaderName::ContentType => {
-        let mime = TiiMimeType::parse(hdr_value)
+      HttpHeaderName::ContentType => {
+        let mime = MimeType::parse(hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
         if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
           return UserError::MultipleContentTypeHeaderValuesSet(
@@ -674,13 +674,13 @@ impl TiiRequestHead {
         self.content_type = Some(mime);
         Ok(())
       }
-      TiiHttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
-        TiiHttpHeaderName::TransferEncoding,
+      HttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      TiiHttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
-        TiiHttpHeaderName::ContentLength,
+      HttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::ContentLength,
         hdr_value.to_string(),
       )
       .into(),

@@ -11,13 +11,13 @@ use std::fmt::Display;
 /// Anywhere where you would specify the header type, e.g. `HeaderType::ContentType`, you can replace it
 ///   with the string name of the header, e.g. `Content-Type`, since both these types implement `HeaderLike`.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub(crate) struct Headers(Vec<TiiHttpHeader>);
+pub(crate) struct Headers(Vec<HttpHeader>);
 
 /// Represents an individual header.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TiiHttpHeader {
+pub struct HttpHeader {
   /// The name of the header.
-  pub name: TiiHttpHeaderName,
+  pub name: HttpHeaderName,
   /// The value of the header.
   pub value: String,
 }
@@ -36,11 +36,11 @@ impl Headers {
 
   /// Create and add a new header with the given name and value.
   pub fn add(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
-    self.0.push(TiiHttpHeader::new(name, value));
+    self.0.push(HttpHeader::new(name, value));
   }
 
   /// Add an existing header to the collection.
-  pub fn push(&mut self, header: TiiHttpHeader) {
+  pub fn push(&mut self, header: HttpHeader) {
     self.0.push(header);
   }
 
@@ -66,7 +66,7 @@ impl Headers {
     if self.get(&header).is_some() {
       return self.get(header);
     }
-    self.0.push(TiiHttpHeader::new(header, value));
+    self.0.push(HttpHeader::new(header, value));
     None
   }
 
@@ -76,7 +76,7 @@ impl Headers {
     &mut self,
     name: impl AsRef<str>,
     value: impl AsRef<str>,
-  ) -> Vec<TiiHttpHeader> {
+  ) -> Vec<HttpHeader> {
     let mut hcopy = Vec::with_capacity(self.len());
     let mut hrem = Vec::new();
     std::mem::swap(&mut self.0, &mut hcopy);
@@ -89,7 +89,7 @@ impl Headers {
       self.0.push(h);
     }
 
-    self.0.push(TiiHttpHeader::new(name, value));
+    self.0.push(HttpHeader::new(name, value));
     hrem
   }
 
@@ -105,18 +105,18 @@ impl Headers {
   }
 
   /// Return an iterator over the headers in the collection.
-  pub fn iter(&self) -> impl Iterator<Item = &TiiHttpHeader> {
+  pub fn iter(&self) -> impl Iterator<Item = &HttpHeader> {
     self.0.iter()
   }
 }
 
-impl TiiHttpHeader {
+impl HttpHeader {
   /// Create a new header with the given name and value.
   ///
   /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
   ///   a string, e.g. `Content-Type`.
   pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-    Self { name: TiiHttpHeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
+    Self { name: HttpHeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
   }
 }
 
@@ -124,7 +124,7 @@ impl TiiHttpHeader {
 ///TODO implement to &str fn to prevent clone on serialization!
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum TiiHttpHeaderName {
+pub enum HttpHeaderName {
   /// Informs the server about the types of data that can be sent back.
   Accept,
   /// Informs the server about the accepted character encodings.
@@ -222,58 +222,58 @@ pub enum TiiHttpHeaderName {
 }
 
 /// Contains a list of all well known headers.
-static WELL_KNOWN: &[TiiHttpHeaderName] = &[
-  TiiHttpHeaderName::Accept,
-  TiiHttpHeaderName::Accept,
-  TiiHttpHeaderName::AcceptCharset,
-  TiiHttpHeaderName::AcceptEncoding,
-  TiiHttpHeaderName::AcceptLanguage,
-  TiiHttpHeaderName::AccessControlRequestMethod,
-  TiiHttpHeaderName::AccessControlRequestHeaders,
-  TiiHttpHeaderName::Authorization,
-  TiiHttpHeaderName::CacheControl,
-  TiiHttpHeaderName::Connection,
-  TiiHttpHeaderName::ContentEncoding,
-  TiiHttpHeaderName::ContentLength,
-  TiiHttpHeaderName::ContentType,
-  TiiHttpHeaderName::Cookie,
-  TiiHttpHeaderName::Date,
-  TiiHttpHeaderName::Expect,
-  TiiHttpHeaderName::Forwarded,
-  TiiHttpHeaderName::From,
-  TiiHttpHeaderName::Host,
-  TiiHttpHeaderName::Origin,
-  TiiHttpHeaderName::Pragma,
-  TiiHttpHeaderName::Referer,
-  TiiHttpHeaderName::Upgrade,
-  TiiHttpHeaderName::UserAgent,
-  TiiHttpHeaderName::Via,
-  TiiHttpHeaderName::Warning,
-  TiiHttpHeaderName::AccessControlAllowOrigin,
-  TiiHttpHeaderName::AccessControlAllowHeaders,
-  TiiHttpHeaderName::AccessControlAllowMethods,
-  TiiHttpHeaderName::Age,
-  TiiHttpHeaderName::Allow,
-  TiiHttpHeaderName::ContentDisposition,
-  TiiHttpHeaderName::ContentLanguage,
-  TiiHttpHeaderName::ContentLocation,
-  TiiHttpHeaderName::ETag,
-  TiiHttpHeaderName::Expires,
-  TiiHttpHeaderName::LastModified,
-  TiiHttpHeaderName::Link,
-  TiiHttpHeaderName::Location,
-  TiiHttpHeaderName::Server,
-  TiiHttpHeaderName::SetCookie,
-  TiiHttpHeaderName::TransferEncoding,
-  TiiHttpHeaderName::Trailer,
-  TiiHttpHeaderName::TE,
-  TiiHttpHeaderName::ProxyAuthenticate,
+static WELL_KNOWN: &[HttpHeaderName] = &[
+  HttpHeaderName::Accept,
+  HttpHeaderName::Accept,
+  HttpHeaderName::AcceptCharset,
+  HttpHeaderName::AcceptEncoding,
+  HttpHeaderName::AcceptLanguage,
+  HttpHeaderName::AccessControlRequestMethod,
+  HttpHeaderName::AccessControlRequestHeaders,
+  HttpHeaderName::Authorization,
+  HttpHeaderName::CacheControl,
+  HttpHeaderName::Connection,
+  HttpHeaderName::ContentEncoding,
+  HttpHeaderName::ContentLength,
+  HttpHeaderName::ContentType,
+  HttpHeaderName::Cookie,
+  HttpHeaderName::Date,
+  HttpHeaderName::Expect,
+  HttpHeaderName::Forwarded,
+  HttpHeaderName::From,
+  HttpHeaderName::Host,
+  HttpHeaderName::Origin,
+  HttpHeaderName::Pragma,
+  HttpHeaderName::Referer,
+  HttpHeaderName::Upgrade,
+  HttpHeaderName::UserAgent,
+  HttpHeaderName::Via,
+  HttpHeaderName::Warning,
+  HttpHeaderName::AccessControlAllowOrigin,
+  HttpHeaderName::AccessControlAllowHeaders,
+  HttpHeaderName::AccessControlAllowMethods,
+  HttpHeaderName::Age,
+  HttpHeaderName::Allow,
+  HttpHeaderName::ContentDisposition,
+  HttpHeaderName::ContentLanguage,
+  HttpHeaderName::ContentLocation,
+  HttpHeaderName::ETag,
+  HttpHeaderName::Expires,
+  HttpHeaderName::LastModified,
+  HttpHeaderName::Link,
+  HttpHeaderName::Location,
+  HttpHeaderName::Server,
+  HttpHeaderName::SetCookie,
+  HttpHeaderName::TransferEncoding,
+  HttpHeaderName::Trailer,
+  HttpHeaderName::TE,
+  HttpHeaderName::ProxyAuthenticate,
 ];
 
-impl TiiHttpHeaderName {
+impl HttpHeaderName {
   /// Returns a static array of all well known header types
   #[must_use]
-  pub fn well_known() -> &'static [TiiHttpHeaderName] {
+  pub fn well_known() -> &'static [HttpHeaderName] {
     WELL_KNOWN
   }
 
@@ -295,51 +295,51 @@ impl TiiHttpHeaderName {
   #[must_use]
   pub fn to_str(&self) -> &str {
     match self {
-      TiiHttpHeaderName::Accept => "Accept",
-      TiiHttpHeaderName::AcceptCharset => "Accept-Charset",
-      TiiHttpHeaderName::AcceptEncoding => "Accept-Encoding",
-      TiiHttpHeaderName::AcceptLanguage => "Accept-Language",
-      TiiHttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
-      TiiHttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
-      TiiHttpHeaderName::Authorization => "Authorization",
-      TiiHttpHeaderName::CacheControl => "Cache-Control",
-      TiiHttpHeaderName::Connection => "Connection",
-      TiiHttpHeaderName::ContentEncoding => "Content-Encoding",
-      TiiHttpHeaderName::ContentLength => "Content-Length",
-      TiiHttpHeaderName::ContentType => "Content-Type",
-      TiiHttpHeaderName::Cookie => "Cookie",
-      TiiHttpHeaderName::Date => "Date",
-      TiiHttpHeaderName::Expect => "Expect",
-      TiiHttpHeaderName::Forwarded => "Forwarded",
-      TiiHttpHeaderName::From => "From",
-      TiiHttpHeaderName::Host => "Host",
-      TiiHttpHeaderName::Origin => "Origin",
-      TiiHttpHeaderName::Pragma => "Pragma",
-      TiiHttpHeaderName::Referer => "Referer",
-      TiiHttpHeaderName::Upgrade => "Upgrade",
-      TiiHttpHeaderName::UserAgent => "User-Agent",
-      TiiHttpHeaderName::Via => "Via",
-      TiiHttpHeaderName::Warning => "Warning",
-      TiiHttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
-      TiiHttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
-      TiiHttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
-      TiiHttpHeaderName::Age => "Age",
-      TiiHttpHeaderName::Allow => "Allow",
-      TiiHttpHeaderName::ContentDisposition => "Content-Disposition",
-      TiiHttpHeaderName::ContentLanguage => "Content-Language",
-      TiiHttpHeaderName::ContentLocation => "Content-Location",
-      TiiHttpHeaderName::ETag => "ETag",
-      TiiHttpHeaderName::Expires => "Expires",
-      TiiHttpHeaderName::LastModified => "Last-Modified",
-      TiiHttpHeaderName::Link => "Link",
-      TiiHttpHeaderName::Location => "Location",
-      TiiHttpHeaderName::Server => "Server",
-      TiiHttpHeaderName::SetCookie => "Set-Cookie",
-      TiiHttpHeaderName::TransferEncoding => "Transfer-Encoding",
-      TiiHttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
-      TiiHttpHeaderName::TE => "TE",
-      TiiHttpHeaderName::Trailer => "Trailer",
-      TiiHttpHeaderName::Custom(name) => name.as_str(),
+      HttpHeaderName::Accept => "Accept",
+      HttpHeaderName::AcceptCharset => "Accept-Charset",
+      HttpHeaderName::AcceptEncoding => "Accept-Encoding",
+      HttpHeaderName::AcceptLanguage => "Accept-Language",
+      HttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HttpHeaderName::Authorization => "Authorization",
+      HttpHeaderName::CacheControl => "Cache-Control",
+      HttpHeaderName::Connection => "Connection",
+      HttpHeaderName::ContentEncoding => "Content-Encoding",
+      HttpHeaderName::ContentLength => "Content-Length",
+      HttpHeaderName::ContentType => "Content-Type",
+      HttpHeaderName::Cookie => "Cookie",
+      HttpHeaderName::Date => "Date",
+      HttpHeaderName::Expect => "Expect",
+      HttpHeaderName::Forwarded => "Forwarded",
+      HttpHeaderName::From => "From",
+      HttpHeaderName::Host => "Host",
+      HttpHeaderName::Origin => "Origin",
+      HttpHeaderName::Pragma => "Pragma",
+      HttpHeaderName::Referer => "Referer",
+      HttpHeaderName::Upgrade => "Upgrade",
+      HttpHeaderName::UserAgent => "User-Agent",
+      HttpHeaderName::Via => "Via",
+      HttpHeaderName::Warning => "Warning",
+      HttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HttpHeaderName::Age => "Age",
+      HttpHeaderName::Allow => "Allow",
+      HttpHeaderName::ContentDisposition => "Content-Disposition",
+      HttpHeaderName::ContentLanguage => "Content-Language",
+      HttpHeaderName::ContentLocation => "Content-Location",
+      HttpHeaderName::ETag => "ETag",
+      HttpHeaderName::Expires => "Expires",
+      HttpHeaderName::LastModified => "Last-Modified",
+      HttpHeaderName::Link => "Link",
+      HttpHeaderName::Location => "Location",
+      HttpHeaderName::Server => "Server",
+      HttpHeaderName::SetCookie => "Set-Cookie",
+      HttpHeaderName::TransferEncoding => "Transfer-Encoding",
+      HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HttpHeaderName::TE => "TE",
+      HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::Custom(name) => name.as_str(),
     }
   }
 
@@ -349,68 +349,68 @@ impl TiiHttpHeaderName {
   #[must_use]
   pub fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
-      TiiHttpHeaderName::Accept => "Accept",
-      TiiHttpHeaderName::AcceptCharset => "Accept-Charset",
-      TiiHttpHeaderName::AcceptEncoding => "Accept-Encoding",
-      TiiHttpHeaderName::AcceptLanguage => "Accept-Language",
-      TiiHttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
-      TiiHttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
-      TiiHttpHeaderName::Authorization => "Authorization",
-      TiiHttpHeaderName::CacheControl => "Cache-Control",
-      TiiHttpHeaderName::Connection => "Connection",
-      TiiHttpHeaderName::ContentEncoding => "Content-Encoding",
-      TiiHttpHeaderName::ContentLength => "Content-Length",
-      TiiHttpHeaderName::ContentType => "Content-Type",
-      TiiHttpHeaderName::Cookie => "Cookie",
-      TiiHttpHeaderName::Date => "Date",
-      TiiHttpHeaderName::Expect => "Expect",
-      TiiHttpHeaderName::Forwarded => "Forwarded",
-      TiiHttpHeaderName::From => "From",
-      TiiHttpHeaderName::Host => "Host",
-      TiiHttpHeaderName::Origin => "Origin",
-      TiiHttpHeaderName::Pragma => "Pragma",
-      TiiHttpHeaderName::Referer => "Referer",
-      TiiHttpHeaderName::Upgrade => "Upgrade",
-      TiiHttpHeaderName::UserAgent => "User-Agent",
-      TiiHttpHeaderName::Via => "Via",
-      TiiHttpHeaderName::Warning => "Warning",
-      TiiHttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
-      TiiHttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
-      TiiHttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
-      TiiHttpHeaderName::Age => "Age",
-      TiiHttpHeaderName::Allow => "Allow",
-      TiiHttpHeaderName::ContentDisposition => "Content-Disposition",
-      TiiHttpHeaderName::ContentLanguage => "Content-Language",
-      TiiHttpHeaderName::ContentLocation => "Content-Location",
-      TiiHttpHeaderName::ETag => "ETag",
-      TiiHttpHeaderName::Expires => "Expires",
-      TiiHttpHeaderName::LastModified => "Last-Modified",
-      TiiHttpHeaderName::Link => "Link",
-      TiiHttpHeaderName::Location => "Location",
-      TiiHttpHeaderName::Server => "Server",
-      TiiHttpHeaderName::SetCookie => "Set-Cookie",
-      TiiHttpHeaderName::TransferEncoding => "Transfer-Encoding",
-      TiiHttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
-      TiiHttpHeaderName::Trailer => "Trailer",
-      TiiHttpHeaderName::TE => "TE",
-      TiiHttpHeaderName::Custom(_) => return None,
+      HttpHeaderName::Accept => "Accept",
+      HttpHeaderName::AcceptCharset => "Accept-Charset",
+      HttpHeaderName::AcceptEncoding => "Accept-Encoding",
+      HttpHeaderName::AcceptLanguage => "Accept-Language",
+      HttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HttpHeaderName::Authorization => "Authorization",
+      HttpHeaderName::CacheControl => "Cache-Control",
+      HttpHeaderName::Connection => "Connection",
+      HttpHeaderName::ContentEncoding => "Content-Encoding",
+      HttpHeaderName::ContentLength => "Content-Length",
+      HttpHeaderName::ContentType => "Content-Type",
+      HttpHeaderName::Cookie => "Cookie",
+      HttpHeaderName::Date => "Date",
+      HttpHeaderName::Expect => "Expect",
+      HttpHeaderName::Forwarded => "Forwarded",
+      HttpHeaderName::From => "From",
+      HttpHeaderName::Host => "Host",
+      HttpHeaderName::Origin => "Origin",
+      HttpHeaderName::Pragma => "Pragma",
+      HttpHeaderName::Referer => "Referer",
+      HttpHeaderName::Upgrade => "Upgrade",
+      HttpHeaderName::UserAgent => "User-Agent",
+      HttpHeaderName::Via => "Via",
+      HttpHeaderName::Warning => "Warning",
+      HttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HttpHeaderName::Age => "Age",
+      HttpHeaderName::Allow => "Allow",
+      HttpHeaderName::ContentDisposition => "Content-Disposition",
+      HttpHeaderName::ContentLanguage => "Content-Language",
+      HttpHeaderName::ContentLocation => "Content-Location",
+      HttpHeaderName::ETag => "ETag",
+      HttpHeaderName::Expires => "Expires",
+      HttpHeaderName::LastModified => "Last-Modified",
+      HttpHeaderName::Link => "Link",
+      HttpHeaderName::Location => "Location",
+      HttpHeaderName::Server => "Server",
+      HttpHeaderName::SetCookie => "Set-Cookie",
+      HttpHeaderName::TransferEncoding => "Transfer-Encoding",
+      HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::TE => "TE",
+      HttpHeaderName::Custom(_) => return None,
     })
   }
 }
 
-impl PartialOrd for TiiHttpHeaderName {
+impl PartialOrd for HttpHeaderName {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for TiiHttpHeaderName {
+impl Ord for HttpHeaderName {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     self.to_str().cmp(other.to_str())
   }
 }
 
-impl From<&str> for TiiHttpHeaderName {
+impl From<&str> for HttpHeaderName {
   fn from(name: &str) -> Self {
     //TODO to_ascii_lowercase is a heap allocation...
     match name.to_ascii_lowercase().as_str() {
@@ -463,13 +463,13 @@ impl From<&str> for TiiHttpHeaderName {
   }
 }
 
-impl Display for TiiHttpHeaderName {
+impl Display for HttpHeaderName {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.to_str())
   }
 }
 
-impl AsRef<str> for TiiHttpHeaderName {
+impl AsRef<str> for HttpHeaderName {
   fn as_ref(&self) -> &str {
     self.to_str()
   }
@@ -484,22 +484,22 @@ fn test_header_replace_all() {
   n.add("Another", "Meep");
   n.add("Mop", "Dop");
   let mut it = n.iter();
-  assert_eq!(TiiHttpHeader::new("Some", "Header"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Another", "Value"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
   assert!(it.next().is_none());
   drop(it);
 
   let rmoved = n.replace_all("Another", "Friend");
   let mut it = n.iter();
-  assert_eq!(TiiHttpHeader::new("Some", "Header"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Another", "Friend"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Friend"), it.next().unwrap().clone());
   assert!(it.next().is_none());
 
   let mut it = rmoved.iter();
-  assert_eq!(TiiHttpHeader::new("Another", "Value"), it.next().unwrap().clone());
-  assert_eq!(TiiHttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
   assert!(it.next().is_none());
 }

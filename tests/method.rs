@@ -1,20 +1,20 @@
-use tii::TiiHttpMethod;
+use tii::HttpMethod;
 
 #[test]
 fn test_from_name() {
-  assert_eq!(TiiHttpMethod::from("GET"), TiiHttpMethod::Get);
-  assert_eq!(TiiHttpMethod::from("POST"), TiiHttpMethod::Post);
-  assert_eq!(TiiHttpMethod::from("PUT"), TiiHttpMethod::Put);
-  assert_eq!(TiiHttpMethod::from("DELETE"), TiiHttpMethod::Delete);
-  assert_eq!(TiiHttpMethod::from("Big"), TiiHttpMethod::Custom("BIG".to_string()));
-  assert_eq!(TiiHttpMethod::from("sadNess"), TiiHttpMethod::Custom("SADNESS".to_string()));
-  assert_eq!(TiiHttpMethod::from(""), TiiHttpMethod::Custom("".to_string()));
+  assert_eq!(HttpMethod::from("GET"), HttpMethod::Get);
+  assert_eq!(HttpMethod::from("POST"), HttpMethod::Post);
+  assert_eq!(HttpMethod::from("PUT"), HttpMethod::Put);
+  assert_eq!(HttpMethod::from("DELETE"), HttpMethod::Delete);
+  assert_eq!(HttpMethod::from("Big"), HttpMethod::Custom("BIG".to_string()));
+  assert_eq!(HttpMethod::from("sadNess"), HttpMethod::Custom("SADNESS".to_string()));
+  assert_eq!(HttpMethod::from(""), HttpMethod::Custom("".to_string()));
 }
 
 #[test]
 fn test_well_known() {
-  for n in TiiHttpMethod::well_known() {
-    let n2 = TiiHttpMethod::from(n.as_str());
+  for n in HttpMethod::well_known() {
+    let n2 = HttpMethod::from(n.as_str());
     assert_eq!(n, &n2);
     assert!(n.is_well_known());
     assert!(!n.is_custom());
@@ -29,8 +29,8 @@ fn test_well_known() {
 
 #[test]
 fn test_well_custom() {
-  let n = TiiHttpMethod::from("sadNess");
-  let n2 = TiiHttpMethod::from(n.as_str());
+  let n = HttpMethod::from("sadNess");
+  let n2 = HttpMethod::from(n.as_str());
   assert_eq!(n, n2);
   assert!(!n.is_well_known());
   assert!(n.is_custom());

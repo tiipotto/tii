@@ -1,12 +1,12 @@
 use crate::mock_stream::MockStream;
-use tii::TiiBuilder;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::ServerBuilder;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
 
 mod mock_stream;
 
-fn filter(ctx: &mut TiiRequestContext) -> TiiResult<()> {
+fn filter(ctx: &mut RequestContext) -> TiiResult<()> {
   ctx.request_head_mut().add_header("test", "testo")?;
   ctx.request_head_mut().add_header("test", "testo2")?;
 
@@ -36,7 +36,7 @@ fn filter(ctx: &mut TiiRequestContext) -> TiiResult<()> {
   Ok(())
 }
 
-fn route(ctx: &TiiRequestContext) -> TiiResponse {
+fn route(ctx: &RequestContext) -> Response {
   assert_eq!(Some("testo"), ctx.request_head().get_header("test"));
   assert_eq!(Some("xxxx"), ctx.request_head().get_query_param("bla"));
 
@@ -63,12 +63,12 @@ fn route(ctx: &TiiRequestContext) -> TiiResponse {
   assert_eq!(ctx.request_head().get_query_param("rm"), None);
   assert_eq!(ctx.request_head().get_query_params("rm").len(), 0);
 
-  TiiResponse::no_content()
+  Response::no_content()
 }
 
 #[test]
 pub fn tc36() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.with_request_filter(filter)?.route_any("/dummy", route))
     .expect("ERR")
     .build();

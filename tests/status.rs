@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-  use tii::TiiStatusCode;
+  use tii::StatusCode;
 
   #[test]
   fn test_from_code() {
@@ -11,25 +11,25 @@ mod test {
     ];
 
     for code in valid_codes {
-      assert!(TiiStatusCode::from_well_known_code(code).is_some(), "{}", code);
+      assert!(StatusCode::from_well_known_code(code).is_some(), "{}", code);
     }
 
-    assert!(TiiStatusCode::from_well_known_code(69).is_none());
-    assert!(TiiStatusCode::from_well_known_code(420).is_none());
-    assert!(TiiStatusCode::from_well_known_code(1337).is_none());
+    assert!(StatusCode::from_well_known_code(69).is_none());
+    assert!(StatusCode::from_well_known_code(420).is_none());
+    assert!(StatusCode::from_well_known_code(1337).is_none());
   }
 
   #[test]
   fn test_into_code() {
-    assert!(TiiStatusCode::from_well_known_code(200u16).is_some());
-    assert!(TiiStatusCode::from_well_known_code(404u16).is_some());
-    assert!(TiiStatusCode::from_well_known_code(1337u16).is_none());
+    assert!(StatusCode::from_well_known_code(200u16).is_some());
+    assert!(StatusCode::from_well_known_code(404u16).is_some());
+    assert!(StatusCode::from_well_known_code(1337u16).is_none());
   }
 
   #[test]
   fn test_into_string() {
-    assert_eq!(TiiStatusCode::OK.status_line(), "OK");
-    assert_eq!(TiiStatusCode::NotFound.status_line(), "Not Found");
-    assert_eq!(TiiStatusCode::BadGateway.status_line(), "Bad Gateway");
+    assert_eq!(StatusCode::OK.status_line(), "OK");
+    assert_eq!(StatusCode::NotFound.status_line(), "Not Found");
+    assert_eq!(StatusCode::BadGateway.status_line(), "Bad Gateway");
   }
 }

@@ -1,10 +1,10 @@
 //! Provides a number of useful handlers for Tii apps.
-use crate::TiiHttpHeaderName;
-use crate::TiiResponseBody;
-use crate::{TiiResponse, TiiStatusCode};
+use crate::HttpHeaderName;
+use crate::ResponseBody;
+use crate::{Response, StatusCode};
 
-use crate::TiiMimeType;
-use crate::TiiRequestContext;
+use crate::MimeType;
+use crate::RequestContext;
 use crate::TiiResult;
 use std::fs::{metadata, File};
 use std::io::ErrorKind;
@@ -20,17 +20,17 @@ pub enum LocatedPath {
   File(PathBuf),
 }
 
-fn try_file_open(path: &PathBuf) -> TiiResult<TiiResponse> {
-  let mime = TiiMimeType::from_extension(
+fn try_file_open(path: &PathBuf) -> TiiResult<Response> {
+  let mime = MimeType::from_extension(
     path.extension().map(|a| a.to_string_lossy().to_string()).unwrap_or("".to_string()).as_str(),
   );
   Ok(
     File::open(path)
-      .and_then(TiiResponseBody::from_file)
-      .map(|a| TiiResponse::ok(a, mime))
+      .and_then(ResponseBody::from_file)
+      .map(|a| Response::ok(a, mime))
       .or_else(|e| {
         if e.kind() == ErrorKind::NotFound {
-          Ok(TiiResponse::not_found_no_body())
+          Ok(Response::not_found_no_body())
         } else {
           Err(e)
         }
@@ -41,7 +41,7 @@ fn try_file_open(path: &PathBuf) -> TiiResult<TiiResponse> {
 /// Serve the specified file, or a default error 404 if not found.
 pub fn serve_file(
   file_path: &'static str,
-) -> impl Fn(&TiiRequestContext) -> TiiResult<TiiResponse> {
+) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   let path_buf = PathBuf::from(file_path);
 
   move |_| try_file_open(&path_buf)
@@ -57,8 +57,8 @@ pub fn serve_file(
 /// This is **not** equivalent to `serve_dir`, as `serve_dir` respects index files within nested directories.
 pub fn serve_as_file_path(
   directory_path: &'static str,
-) -> impl Fn(&TiiRequestContext) -> TiiResult<TiiResponse> {
-  move |request: &TiiRequestContext| {
+) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+  move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
     let file_path = request
       .request_head()
@@ -80,8 +80,8 @@ pub fn serve_as_file_path(
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
 pub fn serve_dir(
   directory_path: &'static str,
-) -> impl Fn(&TiiRequestContext) -> TiiResult<TiiResponse> {
-  move |request: &TiiRequestContext| {
+) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+  move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
     let uri_without_route = request
@@ -95,15 +95,15 @@ pub fn serve_dir(
     if let Some(located) = located {
       match located {
         LocatedPath::Directory => {
-          Ok(TiiResponse::new(TiiStatusCode::MovedPermanently).with_header(
-            TiiHttpHeaderName::Location,
+          Ok(Response::new(StatusCode::MovedPermanently).with_header(
+            HttpHeaderName::Location,
             format!("{}/", &request.request_head().get_path()),
           )?)
         }
         LocatedPath::File(path) => try_file_open(&path),
       }
     } else {
-      Ok(TiiResponse::new(TiiStatusCode::NotFound))
+      Ok(Response::new(StatusCode::NotFound))
     }
   }
 }
@@ -145,6 +145,6 @@ fn try_find_path(directory: &str, request_path: &str, index_files: &[&str]) -> O
 }
 
 /// Redirects requests to the given location with status code 301.
-pub fn redirect(location: &'static str) -> impl Fn(&TiiRequestContext) -> TiiResult<TiiResponse> {
-  move |_| Ok(TiiResponse::permanent_redirect_no_body(location))
+pub fn redirect(location: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+  move |_| Ok(Response::permanent_redirect_no_body(location))
 }

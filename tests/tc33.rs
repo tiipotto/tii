@@ -1,23 +1,23 @@
 use crate::mock_stream::MockStream;
 use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::TiiBuilder;
-use tii::TiiHttpHeaderName;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::ServerBuilder;
+use tii::HttpHeaderName;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn filter_set_accept(request: &mut TiiRequestContext) -> TiiResult<()> {
+fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
   if request.request_head().get_path() == "/" {
-    request.request_head_mut().set_header(TiiHttpHeaderName::ContentType, "text/plain")?;
+    request.request_head_mut().set_header(HttpHeaderName::ContentType, "text/plain")?;
   }
   Ok(())
 }
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   let mut r = ctx.request_body().unwrap().as_read();
   let mut v = Vec::new();
   r.read_to_end(&mut v)?;
@@ -25,17 +25,17 @@ fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   assert_eq!(String::from_utf8(v).unwrap(), "{}");
 
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(ctx.request_head().get_content_type().unwrap(), &TiiMimeType::TextPlain);
-  Ok(TiiResponse::no_content())
+  assert_eq!(ctx.request_head().get_content_type().unwrap(), &MimeType::TextPlain);
+  Ok(Response::no_content())
 }
 
 #[test]
 pub fn tc33() {
-  let server = TiiBuilder::builder(|builder| {
+  let server = ServerBuilder::builder(|builder| {
     builder
       .router(|rt| {
         rt.get("/*")
-          .consumes(TiiMimeType::TextPlain)
+          .consumes(MimeType::TextPlain)
           .endpoint(dummy_route)?
           .with_pre_routing_request_filter(filter_set_accept)
       })?

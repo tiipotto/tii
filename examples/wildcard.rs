@@ -1,8 +1,8 @@
-use tii::extras::{TiiConnector, TiiTcpConnector};
-use tii::TiiBuilder;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::extras::{Connector, TcpConnector};
+use tii::ServerBuilder;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
 
 const HTML: &str = r##"
@@ -32,20 +32,20 @@ const HTML: &str = r##"
 </html>"##;
 
 fn main() -> TiiResult<()> {
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| router.route_any("/", home)?.route_any("/wildcard/*", wildcard))
   })?;
 
-  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
-fn home(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  Ok(TiiResponse::ok(HTML, TiiMimeType::TextHtml))
+fn home(_: &RequestContext) -> TiiResult<Response> {
+  Ok(Response::ok(HTML, MimeType::TextHtml))
 }
 
-fn wildcard(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn wildcard(request: &RequestContext) -> TiiResult<Response> {
   let wildcard_path = request
     .request_head()
     .get_path() // get the URI of the request
@@ -54,5 +54,5 @@ fn wildcard(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
 
   let html = format!("<html><body><h1>Wildcard Path: {}</h1></body></html>", wildcard_path);
 
-  Ok(TiiResponse::ok(html, TiiMimeType::TextHtml))
+  Ok(Response::ok(html, MimeType::TextHtml))
 }

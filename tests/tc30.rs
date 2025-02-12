@@ -1,19 +1,19 @@
 use crate::mock_stream::MockStream;
-use tii::TiiBuilder;
+use tii::ServerBuilder;
 use tii::TiiError;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::RequestContext;
+use tii::Response;
 use tii::{RequestHeadParsingError, TiiResult};
 
 mod mock_stream;
 
-fn dummy_route(_ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
   unreachable!()
 }
 
 #[test]
 pub fn tc30() {
-  let server = TiiBuilder::builder(|builder| {
+  let server = ServerBuilder::builder(|builder| {
     builder.router(|rt| rt.route_any("/*", dummy_route))?.with_max_head_buffer_size(512)?.ok()
   })
   .expect("ERROR");

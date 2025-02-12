@@ -1,13 +1,13 @@
 //! Provides the core Tii app functionality.
 
-use crate::TiiResponse;
+use crate::Response;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Represents the Tii app.
-pub struct TiiBuilder {
-  routers: Vec<Box<dyn TiiRouter>>,
+pub struct ServerBuilder {
+  routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
   max_head_buffer_size: usize,
@@ -21,10 +21,10 @@ pub struct TiiBuilder {
 use crate::default_functions::{default_error_handler, default_fallback_not_found_handler};
 pub use crate::functional_traits::*;
 use crate::tii_error::{TiiError, TiiResult, UserError};
-use crate::tii_router::TiiRouteable;
-use crate::tii_router_builder::TiiRouterBuilder;
-use crate::tii_server::TiiServer;
-use crate::TiiRequestContext;
+use crate::tii_router::Routeable;
+use crate::tii_router_builder::RouterBuilder;
+use crate::tii_server::Server;
+use crate::RequestContext;
 
 /// Represents a function able to handle an error.
 /// The first parameter of type `Option<Request>` will be `Some` if the request could be parsed.
@@ -33,16 +33,16 @@ use crate::TiiRequestContext;
 /// Every app has a default error handler, which simply displays the status code.
 /// The source code for this default error handler is copied below since it is a good example.
 ///
-pub type ErrorHandler = fn(&mut TiiRequestContext, TiiError) -> TiiResult<TiiResponse>;
+pub type ErrorHandler = fn(&mut RequestContext, TiiError) -> TiiResult<Response>;
 
 /// Handler for request that couldn't route for some reason.
 pub type NotRouteableHandler =
-  fn(&mut TiiRequestContext, &[TiiRouteable]) -> TiiResult<TiiResponse>;
+  fn(&mut RequestContext, &[Routeable]) -> TiiResult<Response>;
 
 /// Fallback handler if no router handled the request.
-pub type NotFoundHandler = fn(&mut TiiRequestContext) -> TiiResult<TiiResponse>;
+pub type NotFoundHandler = fn(&mut RequestContext) -> TiiResult<Response>;
 
-impl Default for TiiBuilder {
+impl Default for ServerBuilder {
   /// Initialises a new Tii app.
   fn default() -> Self {
     Self {
@@ -59,24 +59,24 @@ impl Default for TiiBuilder {
   }
 }
 
-impl TiiBuilder {
+impl ServerBuilder {
   /// Build TiiServer using a closure or fn which receives the builder
-  pub fn builder<T: FnOnce(TiiBuilder) -> TiiResult<TiiBuilder>>(
+  pub fn builder<T: FnOnce(ServerBuilder) -> TiiResult<ServerBuilder>>(
     closure: T,
-  ) -> TiiResult<TiiServer> {
-    closure(TiiBuilder::default()).map(|builder| builder.build())
+  ) -> TiiResult<Server> {
+    closure(ServerBuilder::default()).map(|builder| builder.build())
   }
 
   /// Build `Arc<TiiServer>` using a closure or fn which receives the builder
-  pub fn builder_arc<T: FnOnce(TiiBuilder) -> TiiResult<TiiBuilder>>(
+  pub fn builder_arc<T: FnOnce(ServerBuilder) -> TiiResult<ServerBuilder>>(
     closure: T,
-  ) -> TiiResult<Arc<TiiServer>> {
-    closure(TiiBuilder::default()).map(|builder| builder.build_arc())
+  ) -> TiiResult<Arc<Server>> {
+    closure(ServerBuilder::default()).map(|builder| builder.build_arc())
   }
 
   /// This method creates the HttpServer from the builder.
-  pub fn build(self) -> TiiServer {
-    TiiServer::new(
+  pub fn build(self) -> Server {
+    Server::new(
       self.routers,
       self.error_handler,
       self.not_found_handler,
@@ -90,7 +90,7 @@ impl TiiBuilder {
   }
 
   /// This method is equivalent to calling `Arc::new(builder.build())`
-  pub fn build_arc(self) -> Arc<TiiServer> {
+  pub fn build_arc(self) -> Arc<Server> {
     Arc::new(self.build())
   }
 
@@ -100,17 +100,17 @@ impl TiiBuilder {
   /// ## Panics
   /// This function will panic if the host is equal to `*`, since this is the default host.
   /// If you want to add a route to every host, simply add it directly to the main app.
-  pub fn add_router(mut self, handler: impl TiiRouter + 'static) -> Self {
+  pub fn add_router(mut self, handler: impl Router + 'static) -> Self {
     self.routers.push(Box::new(handler));
     self
   }
 
   /// Adds a new router to the server and calls the closure with the new router so it can be configured.
-  pub fn router<T: FnOnce(TiiRouterBuilder) -> TiiResult<TiiRouterBuilder>>(
+  pub fn router<T: FnOnce(RouterBuilder) -> TiiResult<RouterBuilder>>(
     self,
     builder: T,
   ) -> TiiResult<Self> {
-    Ok(self.add_router(builder(TiiRouterBuilder::default())?.build()))
+    Ok(self.add_router(builder(RouterBuilder::default())?.build()))
   }
 
   /// Sets the error handler for the server.

@@ -1,9 +1,9 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{ConnectorMeta, TiiConnector, CONNECTOR_SHUTDOWN_TIMEOUT};
-use crate::functional_traits::TiiThreadAdapter;
-use crate::tii_builder::{DefaultThreadAdapter, TiiThreadAdapterJoinHandle};
+use crate::extras::{ConnectorMeta, Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::functional_traits::ThreadAdapter;
+use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
+use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
 use std::os::fd::AsRawFd;
@@ -15,19 +15,19 @@ use std::time::Duration;
 
 /// Represents a handle to the simple Unix Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
-pub struct TiiUnixConnector {
+pub struct UnixConnector {
   inner: Arc<UnixConnectorInner>,
-  main_thread: Mutex<Option<TiiThreadAdapterJoinHandle>>,
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
 }
 
 #[derive(Debug)]
 struct UnixConnectorInner {
-  thread_adapter: Arc<dyn TiiThreadAdapter>,
+  thread_adapter: Arc<dyn ThreadAdapter>,
   path: PathBuf,
   listener: UnixListener,
   waiter: ConnWait,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl UnixConnectorInner {
@@ -64,7 +64,7 @@ impl UnixConnectorInner {
   }
 }
 
-impl TiiConnector for TiiUnixConnector {
+impl Connector for UnixConnector {
   fn shutdown(&self) {
     self.inner.shutdown();
   }
@@ -205,7 +205,7 @@ impl UnixConnectorInner {
         }
 
         //Code for panic enjoyers
-        if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+        if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
@@ -234,7 +234,7 @@ impl UnixConnectorInner {
       }
 
       //Code for panic enjoyers
-      if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+      if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
             "tls_unix_connector[{}]: connection {} thread panicked: {}",
@@ -250,14 +250,14 @@ impl UnixConnectorInner {
   }
 }
 
-impl TiiUnixConnector {
+impl UnixConnector {
   /// Create a new UnixConnector.
   /// When this fn returns Ok() the socket is already listening in a background thread.
   /// Returns an io::Error if it was unable to bind to the socket.
   pub fn start(
     addr: impl AsRef<Path>,
-    tii_server: Arc<TiiServer>,
-    thread_adapter: impl TiiThreadAdapter + 'static,
+    tii_server: Arc<Server>,
+    thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     let path = addr.as_ref();
     if std::fs::exists(path)? {
@@ -300,7 +300,7 @@ impl TiiUnixConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl AsRef<Path>, tii_server: Arc<TiiServer>) -> TiiResult<Self> {
+  pub fn start_unpooled(addr: impl AsRef<Path>, tii_server: Arc<Server>) -> TiiResult<Self> {
     Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }

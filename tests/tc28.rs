@@ -1,15 +1,15 @@
 use crate::mock_stream::MockStream;
-use tii::TiiBuilder;
-use tii::TiiHttpVersion;
-use tii::TiiRequestContext;
-use tii::TiiResponseBody;
+use tii::ServerBuilder;
+use tii::HttpVersion;
+use tii::RequestContext;
+use tii::ResponseBody;
 use tii::TiiResult;
-use tii::{TiiResponse, TiiStatusCode};
+use tii::{Response, StatusCode};
 
 mod mock_stream;
 
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.get_path_param("param1"), Some("p1"));
   assert_eq!(ctx.get_path_param("param2"), Some("p2"));
   let regex1 = ctx.get_path_param("regex1").unwrap();
@@ -19,14 +19,14 @@ fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   assert_eq!(ctx.get_path_param("regex2"), Some("hello/world"));
 
   Ok(
-    TiiResponse::new(TiiStatusCode::OK)
-      .with_body(TiiResponseBody::from(format!("Okay! {}", regex1))),
+    Response::new(StatusCode::OK)
+      .with_body(ResponseBody::from(format!("Okay! {}", regex1))),
   )
 }
 
 #[test]
 pub fn tc28() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| {
       rt.route_any("/dummy/{param1}/{param2}/{regex1:^([1-9][0-9]*)|0$}/{regex2:.*}", dummy_route)
     })

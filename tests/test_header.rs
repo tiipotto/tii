@@ -1,12 +1,12 @@
-use tii::TiiHttpHeaderName;
+use tii::HttpHeaderName;
 
 #[test]
 fn test_well_known_header_types() {
-  for n in TiiHttpHeaderName::well_known() {
+  for n in HttpHeaderName::well_known() {
     assert!(n.is_well_known());
     assert!(!n.is_custom());
     assert_eq!(n.to_str(), n.well_known_str().unwrap());
-    let hdr = TiiHttpHeaderName::from(n.to_str());
+    let hdr = HttpHeaderName::from(n.to_str());
     assert!(hdr.is_well_known(), "{}", n);
     assert!(!hdr.is_custom());
     assert_eq!(n, &hdr);
@@ -15,10 +15,10 @@ fn test_well_known_header_types() {
 
 #[test]
 fn test_custom_header() {
-  let hdr = TiiHttpHeaderName::from("X-Custom");
+  let hdr = HttpHeaderName::from("X-Custom");
   assert!(!hdr.is_well_known());
   assert!(hdr.is_custom());
-  let hdr2 = TiiHttpHeaderName::from(hdr.to_str());
+  let hdr2 = HttpHeaderName::from(hdr.to_str());
   assert!(!hdr2.is_well_known());
   assert!(hdr2.is_custom());
   assert_eq!(&hdr2, &hdr);
@@ -26,10 +26,10 @@ fn test_custom_header() {
 
 #[test]
 fn test_header_sort_by_name() {
-  let x = TiiHttpHeaderName::well_known();
+  let x = HttpHeaderName::well_known();
   let mut v = x.to_vec();
-  v.push(TiiHttpHeaderName::from("Baba-Yaga"));
-  v.push(TiiHttpHeaderName::from("Abc-Man"));
+  v.push(HttpHeaderName::from("Baba-Yaga"));
+  v.push(HttpHeaderName::from("Abc-Man"));
   v.sort();
 
   let mut v2: Vec<String> = x.iter().map(|x| x.to_str().to_string()).collect();

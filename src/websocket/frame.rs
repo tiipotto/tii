@@ -1,6 +1,6 @@
 //! Provides an implementation of WebSocket frames as specified in [RFC 6455 Section 5](https://datatracker.ietf.org/doc/html/rfc6455#section-5).
 
-use crate::stream::{TiiConnectionStreamRead, TiiConnectionStreamWrite};
+use crate::stream::{ConnectionStreamRead, ConnectionStreamWrite};
 use crate::tii_error::{RequestHeadParsingError, TiiResult};
 use crate::util;
 
@@ -59,7 +59,7 @@ impl Frame {
   }
 
   /// Directly writes a slice to an output connection without copying the buffer.
-  pub fn write_unowned_payload_frame<T: TiiConnectionStreamWrite + ?Sized>(
+  pub fn write_unowned_payload_frame<T: ConnectionStreamWrite + ?Sized>(
     write: &T,
     opcode: Opcode,
     payload: impl AsRef<[u8]>,
@@ -82,7 +82,7 @@ impl Frame {
   }
 
   /// Attempts to read a frame from the given stream, blocking until the frame is read.
-  pub fn from_stream<T: TiiConnectionStreamRead + ?Sized>(stream: &T) -> TiiResult<Self> {
+  pub fn from_stream<T: ConnectionStreamRead + ?Sized>(stream: &T) -> TiiResult<Self> {
     let mut header: [u8; 2] = [0; 2];
     stream.read_exact(&mut header)?;
 
@@ -125,13 +125,13 @@ impl Frame {
     Ok(Self { fin, rsv, opcode, mask, length, masking_key, payload })
   }
 
-  pub fn write_to<T: TiiConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
+  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
     self.write_to_no_flush(write)?;
     write.flush()?;
     Ok(())
   }
 
-  fn write_to_no_flush<T: TiiConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
+  fn write_to_no_flush<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {
     let mut buf = [0, 0];
 
     // Set the header bits
@@ -177,7 +177,7 @@ mod test {
   #![allow(clippy::unusual_byte_groupings)]
   #![allow(dead_code)]
 
-  use crate::stream::{IntoTiiConnectionStream, TiiConnectionStream};
+  use crate::stream::{IntoConnectionStream, ConnectionStream};
   use crate::websocket::frame::{Frame, Opcode};
   use std::collections::VecDeque;
   use std::io::{Read, Write};
@@ -202,8 +202,8 @@ mod test {
     }
   }
 
-  impl IntoTiiConnectionStream for MockStream {
-    fn into_connection_stream(self) -> Box<dyn TiiConnectionStream> {
+  impl IntoConnectionStream for MockStream {
+    fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
       let cl = self.clone();
       (Box::new(cl) as Box<dyn Read + Send>, Box::new(self) as Box<dyn Write + Send>)
         .into_connection_stream()

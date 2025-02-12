@@ -9,27 +9,27 @@ use std::fmt::{Debug, Display, Formatter};
 /// We represent this as an u16 from 0 to 1000.
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
 #[repr(transparent)]
-pub struct TiiQValue(u16);
+pub struct QValue(u16);
 
-impl TiiQValue {
+impl QValue {
   /// q=1.0
-  pub const MAX: TiiQValue = TiiQValue(1000);
+  pub const MAX: QValue = QValue(1000);
 
   /// q=0.0
-  pub const MIN: TiiQValue = TiiQValue(0);
+  pub const MIN: QValue = QValue(0);
 
   /// Parses the QValue in http header representation.
   /// Note: this is without the "q=" prefix!
   /// Returns none if the value is either out of bounds or otherwise invalid.
-  pub fn parse(qvalue: impl AsRef<str>) -> Option<TiiQValue> {
+  pub fn parse(qvalue: impl AsRef<str>) -> Option<QValue> {
     let qvalue = qvalue.as_ref();
     match qvalue.len() {
       1 => {
         if qvalue == "1" {
-          return Some(TiiQValue(1000));
+          return Some(QValue(1000));
         }
         if qvalue == "0" {
-          return Some(TiiQValue(0));
+          return Some(QValue(0));
         }
 
         None
@@ -38,13 +38,13 @@ impl TiiQValue {
       3 => {
         if !qvalue.starts_with("0.") {
           if qvalue == "1.0" {
-            return Some(TiiQValue(1000));
+            return Some(QValue(1000));
           }
           return None;
         }
 
         if let Ok(value) = qvalue[2..].parse::<u16>() {
-          return Some(TiiQValue(value * 100));
+          return Some(QValue(value * 100));
         }
 
         None
@@ -52,13 +52,13 @@ impl TiiQValue {
       4 => {
         if !qvalue.starts_with("0.") {
           if qvalue == "1.00" {
-            return Some(TiiQValue(1000));
+            return Some(QValue(1000));
           }
           return None;
         }
 
         if let Ok(value) = qvalue[2..].parse::<u16>() {
-          return Some(TiiQValue(value * 10));
+          return Some(QValue(value * 10));
         }
 
         None
@@ -66,13 +66,13 @@ impl TiiQValue {
       5 => {
         if !qvalue.starts_with("0.") {
           if qvalue == "1.000" {
-            return Some(TiiQValue(1000));
+            return Some(QValue(1000));
           }
           return None;
         }
 
         if let Ok(value) = qvalue[2..].parse::<u16>() {
-          return Some(TiiQValue(value));
+          return Some(QValue(value));
         }
 
         None
@@ -94,106 +94,106 @@ impl TiiQValue {
   }
 
   /// Returns a QValue from the given u16. Parameters greater than 1000 are clamped to 1000.
-  pub const fn from_clamped(qvalue: u16) -> TiiQValue {
+  pub const fn from_clamped(qvalue: u16) -> QValue {
     if qvalue > 1000 {
-      return TiiQValue(1000);
+      return QValue(1000);
     }
 
-    TiiQValue(qvalue)
+    QValue(qvalue)
   }
 }
 
-impl Display for TiiQValue {
+impl Display for QValue {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }
 }
-impl Default for TiiQValue {
+impl Default for QValue {
   fn default() -> Self {
-    TiiQValue(1000)
+    QValue(1000)
   }
 }
 
 /// Version of MimeType that can contain "*" symbols.
 #[derive(Clone, PartialEq, Debug, Eq, Hash)]
-pub enum TiiAcceptMimeType {
+pub enum AcceptMimeType {
   /// video/* or text/* or ...
-  GroupWildcard(TiiMimeGroup),
+  GroupWildcard(MimeGroup),
   /// text/html or application/json or ...
-  Specific(TiiMimeType),
+  Specific(MimeType),
   /// */*
   Wildcard,
 }
 
-impl AsRef<TiiAcceptMimeType> for TiiAcceptMimeType {
-  fn as_ref(&self) -> &TiiAcceptMimeType {
+impl AsRef<AcceptMimeType> for AcceptMimeType {
+  fn as_ref(&self) -> &AcceptMimeType {
     self
   }
 }
 
-impl TiiAcceptMimeType {
+impl AcceptMimeType {
   /// Parses an accept mime type.
-  pub fn parse(value: impl AsRef<str>) -> Option<TiiAcceptMimeType> {
+  pub fn parse(value: impl AsRef<str>) -> Option<AcceptMimeType> {
     let mime = value.as_ref();
     let mime = mime.split_once(";").map(|(mime, _)| mime).unwrap_or(mime);
 
     if mime == "*/*" {
-      return Some(TiiAcceptMimeType::Wildcard);
+      return Some(AcceptMimeType::Wildcard);
     }
-    match TiiMimeType::parse(mime) {
-      None => match TiiMimeGroup::parse(mime) {
+    match MimeType::parse(mime) {
+      None => match MimeGroup::parse(mime) {
         Some(group) => {
           if &mime[group.as_str().len()..] != "/*" {
             return None;
           }
 
-          Some(TiiAcceptMimeType::GroupWildcard(group))
+          Some(AcceptMimeType::GroupWildcard(group))
         }
         None => None,
       },
-      Some(mime) => Some(TiiAcceptMimeType::Specific(mime)),
+      Some(mime) => Some(AcceptMimeType::Specific(mime)),
     }
   }
 
   /// Returns true if this AcceptMimeType permits the given mime type.
-  pub fn permits_specific(&self, mime_type: impl AsRef<TiiMimeType>) -> bool {
+  pub fn permits_specific(&self, mime_type: impl AsRef<MimeType>) -> bool {
     match self {
-      TiiAcceptMimeType::GroupWildcard(group) => group == mime_type.as_ref().mime_group(),
-      TiiAcceptMimeType::Specific(mime) => mime == mime_type.as_ref(),
-      TiiAcceptMimeType::Wildcard => true,
+      AcceptMimeType::GroupWildcard(group) => group == mime_type.as_ref().mime_group(),
+      AcceptMimeType::Specific(mime) => mime == mime_type.as_ref(),
+      AcceptMimeType::Wildcard => true,
     }
   }
 
   /// Returns true if this AcceptMimeType will accept ANY mime from the given group.
-  pub fn permits_group(&self, mime_group: impl AsRef<TiiMimeGroup>) -> bool {
+  pub fn permits_group(&self, mime_group: impl AsRef<MimeGroup>) -> bool {
     match self {
-      TiiAcceptMimeType::GroupWildcard(group) => group == mime_group.as_ref(),
-      TiiAcceptMimeType::Specific(_) => false,
-      TiiAcceptMimeType::Wildcard => true,
+      AcceptMimeType::GroupWildcard(group) => group == mime_group.as_ref(),
+      AcceptMimeType::Specific(_) => false,
+      AcceptMimeType::Wildcard => true,
     }
   }
 
   /// Returns true if this AcceptMimeType will permit ANY mime type permitted by the other AcceptMimeType.
-  pub fn permits(&self, mime_type: impl AsRef<TiiAcceptMimeType>) -> bool {
+  pub fn permits(&self, mime_type: impl AsRef<AcceptMimeType>) -> bool {
     match mime_type.as_ref() {
-      TiiAcceptMimeType::GroupWildcard(group) => self.permits_group(group),
-      TiiAcceptMimeType::Specific(mime) => self.permits_specific(mime),
-      TiiAcceptMimeType::Wildcard => matches!(self, TiiAcceptMimeType::Wildcard),
+      AcceptMimeType::GroupWildcard(group) => self.permits_group(group),
+      AcceptMimeType::Specific(mime) => self.permits_specific(mime),
+      AcceptMimeType::Wildcard => matches!(self, AcceptMimeType::Wildcard),
     }
   }
 }
 
-impl Display for TiiAcceptMimeType {
+impl Display for AcceptMimeType {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      TiiAcceptMimeType::GroupWildcard(group) => {
+      AcceptMimeType::GroupWildcard(group) => {
         f.write_str(group.as_str())?;
         f.write_str("/*")?;
       }
-      TiiAcceptMimeType::Specific(mime) => {
+      AcceptMimeType::Specific(mime) => {
         f.write_str(mime.as_str())?;
       }
-      TiiAcceptMimeType::Wildcard => f.write_str("*/*")?,
+      AcceptMimeType::Wildcard => f.write_str("*/*")?,
     }
 
     Ok(())
@@ -205,24 +205,24 @@ impl Display for TiiAcceptMimeType {
 /// # See
 /// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept>
 #[derive(Clone, PartialEq, Debug, Eq)]
-pub struct TiiAcceptQualityMimeType {
-  value: TiiAcceptMimeType,
-  q: TiiQValue,
+pub struct AcceptQualityMimeType {
+  value: AcceptMimeType,
+  q: QValue,
 }
 
-impl PartialOrd<Self> for TiiAcceptQualityMimeType {
+impl PartialOrd<Self> for AcceptQualityMimeType {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for TiiAcceptQualityMimeType {
+impl Ord for AcceptQualityMimeType {
   fn cmp(&self, other: &Self) -> Ordering {
     other.q.cmp(&self.q)
   }
 }
 
-impl TiiAcceptQualityMimeType {
+impl AcceptQualityMimeType {
   /// This fn parses an Accept header value from a client http request.
   /// The returned Vec is sorted in descending order of quality value q.
   pub fn parse(value: impl AsRef<str>) -> Option<Vec<Self>> {
@@ -237,57 +237,57 @@ impl TiiAcceptQualityMimeType {
           return None;
         }
 
-        let qvalue = TiiQValue::parse(&rawq[2..])?;
+        let qvalue = QValue::parse(&rawq[2..])?;
 
         if mime == "*/*" {
-          data.push(TiiAcceptQualityMimeType { value: TiiAcceptMimeType::Wildcard, q: qvalue });
+          data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: qvalue });
           continue;
         }
 
-        match TiiMimeType::parse(mime) {
-          None => match TiiMimeGroup::parse(mime) {
+        match MimeType::parse(mime) {
+          None => match MimeGroup::parse(mime) {
             Some(group) => {
               if &mime[group.as_str().len()..] != "/*" {
                 return None;
               }
-              data.push(TiiAcceptQualityMimeType {
-                value: TiiAcceptMimeType::GroupWildcard(group),
+              data.push(AcceptQualityMimeType {
+                value: AcceptMimeType::GroupWildcard(group),
                 q: qvalue,
               })
             }
             None => return None,
           },
           Some(mime) => data
-            .push(TiiAcceptQualityMimeType { value: TiiAcceptMimeType::Specific(mime), q: qvalue }),
+            .push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q: qvalue }),
         };
 
         continue;
       }
 
       if mime == "*/*" {
-        data.push(TiiAcceptQualityMimeType {
-          value: TiiAcceptMimeType::Wildcard,
-          q: TiiQValue::default(),
+        data.push(AcceptQualityMimeType {
+          value: AcceptMimeType::Wildcard,
+          q: QValue::default(),
         });
         continue;
       }
 
-      match TiiMimeType::parse(mime) {
-        None => match TiiMimeGroup::parse(mime) {
+      match MimeType::parse(mime) {
+        None => match MimeGroup::parse(mime) {
           Some(group) => {
             if &mime[group.as_str().len()..] != "/*" {
               return None;
             }
-            data.push(TiiAcceptQualityMimeType {
-              value: TiiAcceptMimeType::GroupWildcard(group),
-              q: TiiQValue::default(),
+            data.push(AcceptQualityMimeType {
+              value: AcceptMimeType::GroupWildcard(group),
+              q: QValue::default(),
             })
           }
           None => return None,
         },
-        Some(mime) => data.push(TiiAcceptQualityMimeType {
-          value: TiiAcceptMimeType::Specific(mime),
-          q: TiiQValue::default(),
+        Some(mime) => data.push(AcceptQualityMimeType {
+          value: AcceptMimeType::Specific(mime),
+          q: QValue::default(),
         }),
       };
     }
@@ -311,70 +311,70 @@ impl TiiAcceptQualityMimeType {
   }
 
   /// Gets the accept mime type without Q Value.
-  pub fn get_type(&self) -> &TiiAcceptMimeType {
+  pub fn get_type(&self) -> &AcceptMimeType {
     &self.value
   }
 
   /// Get the QValue of this accept mime.
-  pub const fn qvalue(&self) -> TiiQValue {
+  pub const fn qvalue(&self) -> QValue {
     self.q
   }
 
   /// Is this a */* accept?
   pub const fn is_wildcard(&self) -> bool {
-    matches!(self.value, TiiAcceptMimeType::Wildcard)
+    matches!(self.value, AcceptMimeType::Wildcard)
   }
 
   /// Is this a group wildcard? i.e: `video/*` or `text/*`
   pub const fn is_group_wildcard(&self) -> bool {
-    matches!(self.value, TiiAcceptMimeType::GroupWildcard(_))
+    matches!(self.value, AcceptMimeType::GroupWildcard(_))
   }
 
   /// Is this a non wildcard mime? i.e: `video/mp4`
   pub const fn is_specific(&self) -> bool {
-    matches!(self.value, TiiAcceptMimeType::Specific(_))
+    matches!(self.value, AcceptMimeType::Specific(_))
   }
 
   /// Get the mime type. returns none if this is any type of wildcard mime
-  pub const fn mime(&self) -> Option<&TiiMimeType> {
+  pub const fn mime(&self) -> Option<&MimeType> {
     match &self.value {
-      TiiAcceptMimeType::Specific(mime) => Some(mime),
+      AcceptMimeType::Specific(mime) => Some(mime),
       _ => None,
     }
   }
 
   /// Get the mime type. returns none if this is the `*/*` mime.
-  pub const fn group(&self) -> Option<&TiiMimeGroup> {
+  pub const fn group(&self) -> Option<&MimeGroup> {
     match &self.value {
-      TiiAcceptMimeType::Specific(mime) => Some(mime.mime_group()),
-      TiiAcceptMimeType::GroupWildcard(group) => Some(group),
+      AcceptMimeType::Specific(mime) => Some(mime.mime_group()),
+      AcceptMimeType::GroupWildcard(group) => Some(group),
       _ => None,
     }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `*/*`
-  pub const fn wildcard(q: TiiQValue) -> TiiAcceptQualityMimeType {
-    TiiAcceptQualityMimeType { value: TiiAcceptMimeType::Wildcard, q }
+  pub const fn wildcard(q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/*` depending on MimeGroup.
-  pub const fn from_group(group: TiiMimeGroup, q: TiiQValue) -> TiiAcceptQualityMimeType {
-    TiiAcceptQualityMimeType { value: TiiAcceptMimeType::GroupWildcard(group), q }
+  pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::GroupWildcard(group), q }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/type` depending on MimeType.
-  pub const fn from_mime(mime: TiiMimeType, q: TiiQValue) -> TiiAcceptQualityMimeType {
-    TiiAcceptQualityMimeType { value: TiiAcceptMimeType::Specific(mime), q }
+  pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q }
   }
 }
 
-impl Default for TiiAcceptQualityMimeType {
+impl Default for AcceptQualityMimeType {
   fn default() -> Self {
-    TiiAcceptQualityMimeType::wildcard(TiiQValue::default())
+    AcceptQualityMimeType::wildcard(QValue::default())
   }
 }
 
-impl Display for TiiAcceptQualityMimeType {
+impl Display for AcceptQualityMimeType {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     std::fmt::Display::fmt(&self.value, f)?;
     if self.q.as_u16() != 1000 {
@@ -388,7 +388,7 @@ impl Display for TiiAcceptQualityMimeType {
 /// Mime types are split into groups denoted by whatever is before of the "/"
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[non_exhaustive]
-pub enum TiiMimeGroup {
+pub enum MimeGroup {
   /// Fonts
   Font,
   /// Custom application specific things.
@@ -405,27 +405,27 @@ pub enum TiiMimeGroup {
   Other(String),
 }
 
-impl AsRef<TiiMimeGroup> for TiiMimeGroup {
-  fn as_ref(&self) -> &TiiMimeGroup {
+impl AsRef<MimeGroup> for MimeGroup {
+  fn as_ref(&self) -> &MimeGroup {
     self
   }
 }
 
-impl Display for TiiMimeGroup {
+impl Display for MimeGroup {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }
 }
 
-const WELL_KNOWN_GROUPS: &[TiiMimeGroup] = &[
-  TiiMimeGroup::Font,
-  TiiMimeGroup::Application,
-  TiiMimeGroup::Image,
-  TiiMimeGroup::Video,
-  TiiMimeGroup::Audio,
-  TiiMimeGroup::Text,
+const WELL_KNOWN_GROUPS: &[MimeGroup] = &[
+  MimeGroup::Font,
+  MimeGroup::Application,
+  MimeGroup::Image,
+  MimeGroup::Video,
+  MimeGroup::Audio,
+  MimeGroup::Text,
 ];
-impl TiiMimeGroup {
+impl MimeGroup {
   /// Parses a mime group from a str.
   /// This str can be either the mime group directly such as "video"
   /// or the full mime type such as "video/mp4"
@@ -448,19 +448,19 @@ impl TiiMimeGroup {
     }
 
     Some(match value {
-      "font" => TiiMimeGroup::Font,
-      "application" => TiiMimeGroup::Application,
-      "image" => TiiMimeGroup::Image,
-      "video" => TiiMimeGroup::Video,
-      "audio" => TiiMimeGroup::Audio,
-      "text" => TiiMimeGroup::Text,
-      _ => TiiMimeGroup::Other(value.to_string()),
+      "font" => MimeGroup::Font,
+      "application" => MimeGroup::Application,
+      "image" => MimeGroup::Image,
+      "video" => MimeGroup::Video,
+      "audio" => MimeGroup::Audio,
+      "text" => MimeGroup::Text,
+      _ => MimeGroup::Other(value.to_string()),
     })
   }
 
   /// returns a static array over all well known mime groups.
   #[must_use]
-  pub const fn well_known() -> &'static [TiiMimeGroup] {
+  pub const fn well_known() -> &'static [MimeGroup] {
     WELL_KNOWN_GROUPS
   }
 
@@ -479,13 +479,13 @@ impl TiiMimeGroup {
   /// Returns a static str of the mime group or None if the mime type is heap allocated.
   pub const fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
-      TiiMimeGroup::Font => "font",
-      TiiMimeGroup::Application => "application",
-      TiiMimeGroup::Image => "image",
-      TiiMimeGroup::Video => "video",
-      TiiMimeGroup::Audio => "audio",
-      TiiMimeGroup::Text => "text",
-      TiiMimeGroup::Other(_) => return None,
+      MimeGroup::Font => "font",
+      MimeGroup::Application => "application",
+      MimeGroup::Image => "image",
+      MimeGroup::Video => "video",
+      MimeGroup::Audio => "audio",
+      MimeGroup::Text => "text",
+      MimeGroup::Other(_) => return None,
     })
   }
 
@@ -493,13 +493,13 @@ impl TiiMimeGroup {
   /// This name can be fed back into parse to get the equivalent enum of self.
   pub fn as_str(&self) -> &str {
     match self {
-      TiiMimeGroup::Font => "font",
-      TiiMimeGroup::Application => "application",
-      TiiMimeGroup::Image => "image",
-      TiiMimeGroup::Video => "video",
-      TiiMimeGroup::Audio => "audio",
-      TiiMimeGroup::Text => "text",
-      TiiMimeGroup::Other(o) => o.as_str(),
+      MimeGroup::Font => "font",
+      MimeGroup::Application => "application",
+      MimeGroup::Image => "image",
+      MimeGroup::Video => "video",
+      MimeGroup::Audio => "audio",
+      MimeGroup::Text => "text",
+      MimeGroup::Other(o) => o.as_str(),
     }
   }
 }
@@ -515,7 +515,7 @@ impl TiiMimeGroup {
 /// and the suggested mime type can found on the internet.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[non_exhaustive]
-pub enum TiiMimeType {
+pub enum MimeType {
   ///////////////////////////////////////// FONT
   /// font/ttf
   FontTtf,
@@ -751,186 +751,186 @@ pub enum TiiMimeType {
   TextCalendar,
 
   ///Anything else
-  Other(TiiMimeGroup, String),
+  Other(MimeGroup, String),
 }
 
-impl AsRef<TiiMimeType> for TiiMimeType {
-  fn as_ref(&self) -> &TiiMimeType {
+impl AsRef<MimeType> for MimeType {
+  fn as_ref(&self) -> &MimeType {
     self
   }
 }
 
-const WELL_KNOWN_TYPES: &[TiiMimeType] = &[
-  TiiMimeType::FontTtf,
-  TiiMimeType::FontOtf,
-  TiiMimeType::FontWoff,
-  TiiMimeType::FontWoff2,
-  TiiMimeType::ApplicationAbiWord,
-  TiiMimeType::ApplicationFreeArc,
-  TiiMimeType::ApplicationAmazonEbook,
-  TiiMimeType::ApplicationBzip,
-  TiiMimeType::ApplicationBzip2,
-  TiiMimeType::ApplicationCDAudio,
-  TiiMimeType::ApplicationCShell,
-  TiiMimeType::ApplicationMicrosoftWord,
-  TiiMimeType::ApplicationMicrosoftWordXml,
-  TiiMimeType::ApplicationMicrosoftFont,
-  TiiMimeType::ApplicationEpub,
-  TiiMimeType::ApplicationGzip,
-  TiiMimeType::ApplicationJar,
-  TiiMimeType::ApplicationJavaClass,
-  TiiMimeType::ApplicationOctetStream,
-  TiiMimeType::ApplicationJson,
-  TiiMimeType::ApplicationJsonLd,
-  TiiMimeType::ApplicationPdf,
-  TiiMimeType::ApplicationZip,
-  TiiMimeType::ApplicationAppleInstallerPackage,
-  TiiMimeType::ApplicationOpenDocumentPresentation,
-  TiiMimeType::ApplicationOpenDocumentSpreadsheet,
-  TiiMimeType::ApplicationOpenDocumentText,
-  TiiMimeType::ApplicationOgg,
-  TiiMimeType::ApplicationPhp,
-  TiiMimeType::ApplicationMicrosoftPowerpoint,
-  TiiMimeType::ApplicationMicrosoftPowerpointXml,
-  TiiMimeType::ApplicationRar,
-  TiiMimeType::ApplicationRichText,
-  TiiMimeType::ApplicationBourneShell,
-  TiiMimeType::ApplicationTapeArchive,
-  TiiMimeType::ApplicationMicrosoftVisio,
-  TiiMimeType::ApplicationXHtml,
-  TiiMimeType::ApplicationMicrosoftExcel,
-  TiiMimeType::ApplicationMicrosoftExcelXml,
-  TiiMimeType::ApplicationXml,
-  TiiMimeType::ApplicationXul,
-  TiiMimeType::ApplicationDicom,
-  TiiMimeType::Application7Zip,
-  TiiMimeType::ApplicationWasm,
-  TiiMimeType::VideoMp4,
-  TiiMimeType::VideoOgg,
-  TiiMimeType::VideoWebm,
-  TiiMimeType::VideoAvi,
-  TiiMimeType::VideoMpeg,
-  TiiMimeType::VideoMpegTransportStream,
-  TiiMimeType::Video3gpp,
-  TiiMimeType::Video3gpp2,
-  TiiMimeType::ImageBmp,
-  TiiMimeType::ImageGif,
-  TiiMimeType::ImageJpeg,
-  TiiMimeType::ImageAvif,
-  TiiMimeType::ImagePng,
-  TiiMimeType::ImageApng,
-  TiiMimeType::ImageWebp,
-  TiiMimeType::ImageSvg,
-  TiiMimeType::ImageIcon,
-  TiiMimeType::ImageTiff,
-  TiiMimeType::AudioAac,
-  TiiMimeType::AudioMidi,
-  TiiMimeType::AudioMpeg,
-  TiiMimeType::AudioOgg,
-  TiiMimeType::AudioWaveform,
-  TiiMimeType::AudioWebm,
-  TiiMimeType::Audio3gpp,
-  TiiMimeType::Audio3gpp2,
-  TiiMimeType::TextCss,
-  TiiMimeType::TextHtml,
-  TiiMimeType::TextJavaScript,
-  TiiMimeType::TextPlain,
-  TiiMimeType::TextCsv,
-  TiiMimeType::TextCalendar,
-  TiiMimeType::ApplicationYaml,
-  TiiMimeType::TextLua,
-  TiiMimeType::ApplicationLuaBytecode,
-  TiiMimeType::ApplicationXz,
+const WELL_KNOWN_TYPES: &[MimeType] = &[
+  MimeType::FontTtf,
+  MimeType::FontOtf,
+  MimeType::FontWoff,
+  MimeType::FontWoff2,
+  MimeType::ApplicationAbiWord,
+  MimeType::ApplicationFreeArc,
+  MimeType::ApplicationAmazonEbook,
+  MimeType::ApplicationBzip,
+  MimeType::ApplicationBzip2,
+  MimeType::ApplicationCDAudio,
+  MimeType::ApplicationCShell,
+  MimeType::ApplicationMicrosoftWord,
+  MimeType::ApplicationMicrosoftWordXml,
+  MimeType::ApplicationMicrosoftFont,
+  MimeType::ApplicationEpub,
+  MimeType::ApplicationGzip,
+  MimeType::ApplicationJar,
+  MimeType::ApplicationJavaClass,
+  MimeType::ApplicationOctetStream,
+  MimeType::ApplicationJson,
+  MimeType::ApplicationJsonLd,
+  MimeType::ApplicationPdf,
+  MimeType::ApplicationZip,
+  MimeType::ApplicationAppleInstallerPackage,
+  MimeType::ApplicationOpenDocumentPresentation,
+  MimeType::ApplicationOpenDocumentSpreadsheet,
+  MimeType::ApplicationOpenDocumentText,
+  MimeType::ApplicationOgg,
+  MimeType::ApplicationPhp,
+  MimeType::ApplicationMicrosoftPowerpoint,
+  MimeType::ApplicationMicrosoftPowerpointXml,
+  MimeType::ApplicationRar,
+  MimeType::ApplicationRichText,
+  MimeType::ApplicationBourneShell,
+  MimeType::ApplicationTapeArchive,
+  MimeType::ApplicationMicrosoftVisio,
+  MimeType::ApplicationXHtml,
+  MimeType::ApplicationMicrosoftExcel,
+  MimeType::ApplicationMicrosoftExcelXml,
+  MimeType::ApplicationXml,
+  MimeType::ApplicationXul,
+  MimeType::ApplicationDicom,
+  MimeType::Application7Zip,
+  MimeType::ApplicationWasm,
+  MimeType::VideoMp4,
+  MimeType::VideoOgg,
+  MimeType::VideoWebm,
+  MimeType::VideoAvi,
+  MimeType::VideoMpeg,
+  MimeType::VideoMpegTransportStream,
+  MimeType::Video3gpp,
+  MimeType::Video3gpp2,
+  MimeType::ImageBmp,
+  MimeType::ImageGif,
+  MimeType::ImageJpeg,
+  MimeType::ImageAvif,
+  MimeType::ImagePng,
+  MimeType::ImageApng,
+  MimeType::ImageWebp,
+  MimeType::ImageSvg,
+  MimeType::ImageIcon,
+  MimeType::ImageTiff,
+  MimeType::AudioAac,
+  MimeType::AudioMidi,
+  MimeType::AudioMpeg,
+  MimeType::AudioOgg,
+  MimeType::AudioWaveform,
+  MimeType::AudioWebm,
+  MimeType::Audio3gpp,
+  MimeType::Audio3gpp2,
+  MimeType::TextCss,
+  MimeType::TextHtml,
+  MimeType::TextJavaScript,
+  MimeType::TextPlain,
+  MimeType::TextCsv,
+  MimeType::TextCalendar,
+  MimeType::ApplicationYaml,
+  MimeType::TextLua,
+  MimeType::ApplicationLuaBytecode,
+  MimeType::ApplicationXz,
 ];
 
-impl TiiMimeType {
+impl MimeType {
   /// Converts from a file extension without the `.` to the enum variant.
   /// If the MIME type cannot be inferred from the extension, returns `MimeType::ApplicationOctetStream`.
   pub fn from_extension(extension: impl AsRef<str>) -> Self {
     //TODO Heap allocation to_ascii_lowercase
     match extension.as_ref().to_ascii_lowercase().as_str() {
-      "css" => TiiMimeType::TextCss,
-      "html" => TiiMimeType::TextHtml,
-      "htm" => TiiMimeType::TextHtml,
-      "js" => TiiMimeType::TextJavaScript,
-      "mjs" => TiiMimeType::TextJavaScript,
-      "txt" => TiiMimeType::TextPlain,
-      "bmp" => TiiMimeType::ImageBmp,
-      "gif" => TiiMimeType::ImageGif,
-      "jpeg" => TiiMimeType::ImageJpeg,
-      "jpg" => TiiMimeType::ImageJpeg,
-      "png" => TiiMimeType::ImagePng,
-      "webp" => TiiMimeType::ImageWebp,
-      "svg" => TiiMimeType::ImageSvg,
-      "ico" => TiiMimeType::ImageIcon,
-      "json" => TiiMimeType::ApplicationJson,
-      "pdf" => TiiMimeType::ApplicationPdf,
-      "zip" => TiiMimeType::ApplicationZip,
-      "mp4" => TiiMimeType::VideoMp4,
-      "ogv" => TiiMimeType::VideoOgg,
-      "webm" => TiiMimeType::VideoWebm,
-      "ttf" => TiiMimeType::FontTtf,
-      "otf" => TiiMimeType::FontOtf,
-      "woff" => TiiMimeType::FontWoff,
-      "woff2" => TiiMimeType::FontWoff2,
-      "abw" => TiiMimeType::ApplicationAbiWord,
-      "arc" => TiiMimeType::ApplicationFreeArc,
-      "azw" => TiiMimeType::ApplicationAmazonEbook,
-      "bz" => TiiMimeType::ApplicationBzip,
-      "bz2" => TiiMimeType::ApplicationBzip2,
-      "cda" => TiiMimeType::ApplicationCDAudio,
-      "csh" => TiiMimeType::ApplicationCShell,
-      "doc" => TiiMimeType::ApplicationMicrosoftWord,
-      "docx" => TiiMimeType::ApplicationMicrosoftWordXml,
-      "eot" => TiiMimeType::ApplicationMicrosoftFont,
-      "epub" => TiiMimeType::ApplicationEpub,
-      "gz" => TiiMimeType::ApplicationGzip,
-      "jar" => TiiMimeType::ApplicationJar,
-      "class" => TiiMimeType::ApplicationJavaClass,
-      "bin" => TiiMimeType::ApplicationOctetStream,
-      "jsonld" => TiiMimeType::ApplicationJsonLd,
-      "mpkg" => TiiMimeType::ApplicationAppleInstallerPackage,
-      "odp" => TiiMimeType::ApplicationOpenDocumentPresentation,
-      "ods" => TiiMimeType::ApplicationOpenDocumentSpreadsheet,
-      "odt" => TiiMimeType::ApplicationOpenDocumentText,
-      "ogx" => TiiMimeType::ApplicationOgg,
-      "php" => TiiMimeType::ApplicationPhp,
-      "ppt" => TiiMimeType::ApplicationMicrosoftPowerpoint,
-      "pptx" => TiiMimeType::ApplicationMicrosoftPowerpointXml,
-      "rar" => TiiMimeType::ApplicationRar,
-      "rtf" => TiiMimeType::ApplicationRichText,
-      "sh" => TiiMimeType::ApplicationBourneShell,
-      "tar" => TiiMimeType::ApplicationTapeArchive,
-      "vsd" => TiiMimeType::ApplicationMicrosoftVisio,
-      "xhtml" => TiiMimeType::ApplicationXHtml,
-      "xls" => TiiMimeType::ApplicationMicrosoftExcel,
-      "xlsx" => TiiMimeType::ApplicationMicrosoftExcelXml,
-      "xml" => TiiMimeType::ApplicationXml,
-      "xul" => TiiMimeType::ApplicationXul,
-      "dcm" => TiiMimeType::ApplicationDicom,
-      "7z" => TiiMimeType::Application7Zip,
-      "wasm" => TiiMimeType::ApplicationWasm,
-      "avi" => TiiMimeType::VideoAvi,
-      "mpeg" => TiiMimeType::VideoMpeg,
-      "ts" => TiiMimeType::VideoMpegTransportStream,
-      "3gp" => TiiMimeType::Video3gpp,
-      "3g2" => TiiMimeType::Video3gpp2,
-      "avif" => TiiMimeType::ImageAvif,
-      "apng" => TiiMimeType::ImageApng,
-      "tif" => TiiMimeType::ImageTiff,
-      "aac" => TiiMimeType::AudioAac,
-      "mid" => TiiMimeType::AudioMidi,
-      "mp3" => TiiMimeType::AudioMpeg,
-      "oga" => TiiMimeType::AudioOgg,
-      "wav" => TiiMimeType::AudioWaveform,
-      "weba" => TiiMimeType::AudioWebm,
-      "csv" => TiiMimeType::TextCsv,
-      "cal" => TiiMimeType::TextCalendar,
-      "yaml" | "yml" => TiiMimeType::ApplicationYaml,
-      "lua" => TiiMimeType::TextLua,
-      "luac" => TiiMimeType::ApplicationLuaBytecode,
-      "xz" => TiiMimeType::ApplicationXz,
-      _ => TiiMimeType::ApplicationOctetStream,
+      "css" => MimeType::TextCss,
+      "html" => MimeType::TextHtml,
+      "htm" => MimeType::TextHtml,
+      "js" => MimeType::TextJavaScript,
+      "mjs" => MimeType::TextJavaScript,
+      "txt" => MimeType::TextPlain,
+      "bmp" => MimeType::ImageBmp,
+      "gif" => MimeType::ImageGif,
+      "jpeg" => MimeType::ImageJpeg,
+      "jpg" => MimeType::ImageJpeg,
+      "png" => MimeType::ImagePng,
+      "webp" => MimeType::ImageWebp,
+      "svg" => MimeType::ImageSvg,
+      "ico" => MimeType::ImageIcon,
+      "json" => MimeType::ApplicationJson,
+      "pdf" => MimeType::ApplicationPdf,
+      "zip" => MimeType::ApplicationZip,
+      "mp4" => MimeType::VideoMp4,
+      "ogv" => MimeType::VideoOgg,
+      "webm" => MimeType::VideoWebm,
+      "ttf" => MimeType::FontTtf,
+      "otf" => MimeType::FontOtf,
+      "woff" => MimeType::FontWoff,
+      "woff2" => MimeType::FontWoff2,
+      "abw" => MimeType::ApplicationAbiWord,
+      "arc" => MimeType::ApplicationFreeArc,
+      "azw" => MimeType::ApplicationAmazonEbook,
+      "bz" => MimeType::ApplicationBzip,
+      "bz2" => MimeType::ApplicationBzip2,
+      "cda" => MimeType::ApplicationCDAudio,
+      "csh" => MimeType::ApplicationCShell,
+      "doc" => MimeType::ApplicationMicrosoftWord,
+      "docx" => MimeType::ApplicationMicrosoftWordXml,
+      "eot" => MimeType::ApplicationMicrosoftFont,
+      "epub" => MimeType::ApplicationEpub,
+      "gz" => MimeType::ApplicationGzip,
+      "jar" => MimeType::ApplicationJar,
+      "class" => MimeType::ApplicationJavaClass,
+      "bin" => MimeType::ApplicationOctetStream,
+      "jsonld" => MimeType::ApplicationJsonLd,
+      "mpkg" => MimeType::ApplicationAppleInstallerPackage,
+      "odp" => MimeType::ApplicationOpenDocumentPresentation,
+      "ods" => MimeType::ApplicationOpenDocumentSpreadsheet,
+      "odt" => MimeType::ApplicationOpenDocumentText,
+      "ogx" => MimeType::ApplicationOgg,
+      "php" => MimeType::ApplicationPhp,
+      "ppt" => MimeType::ApplicationMicrosoftPowerpoint,
+      "pptx" => MimeType::ApplicationMicrosoftPowerpointXml,
+      "rar" => MimeType::ApplicationRar,
+      "rtf" => MimeType::ApplicationRichText,
+      "sh" => MimeType::ApplicationBourneShell,
+      "tar" => MimeType::ApplicationTapeArchive,
+      "vsd" => MimeType::ApplicationMicrosoftVisio,
+      "xhtml" => MimeType::ApplicationXHtml,
+      "xls" => MimeType::ApplicationMicrosoftExcel,
+      "xlsx" => MimeType::ApplicationMicrosoftExcelXml,
+      "xml" => MimeType::ApplicationXml,
+      "xul" => MimeType::ApplicationXul,
+      "dcm" => MimeType::ApplicationDicom,
+      "7z" => MimeType::Application7Zip,
+      "wasm" => MimeType::ApplicationWasm,
+      "avi" => MimeType::VideoAvi,
+      "mpeg" => MimeType::VideoMpeg,
+      "ts" => MimeType::VideoMpegTransportStream,
+      "3gp" => MimeType::Video3gpp,
+      "3g2" => MimeType::Video3gpp2,
+      "avif" => MimeType::ImageAvif,
+      "apng" => MimeType::ImageApng,
+      "tif" => MimeType::ImageTiff,
+      "aac" => MimeType::AudioAac,
+      "mid" => MimeType::AudioMidi,
+      "mp3" => MimeType::AudioMpeg,
+      "oga" => MimeType::AudioOgg,
+      "wav" => MimeType::AudioWaveform,
+      "weba" => MimeType::AudioWebm,
+      "csv" => MimeType::TextCsv,
+      "cal" => MimeType::TextCalendar,
+      "yaml" | "yml" => MimeType::ApplicationYaml,
+      "lua" => MimeType::TextLua,
+      "luac" => MimeType::ApplicationLuaBytecode,
+      "xz" => MimeType::ApplicationXz,
+      _ => MimeType::ApplicationOctetStream,
     }
   }
 
@@ -939,174 +939,174 @@ impl TiiMimeType {
   #[must_use]
   pub const fn extension(&self) -> &'static str {
     match self {
-      TiiMimeType::FontTtf => "ttf",
-      TiiMimeType::FontOtf => "otf",
-      TiiMimeType::FontWoff => "woff",
-      TiiMimeType::FontWoff2 => "woff2",
-      TiiMimeType::ApplicationAbiWord => "abw",
-      TiiMimeType::ApplicationFreeArc => "arc",
-      TiiMimeType::ApplicationAmazonEbook => "azw",
-      TiiMimeType::ApplicationBzip => "bz",
-      TiiMimeType::ApplicationBzip2 => "bz2",
-      TiiMimeType::ApplicationCDAudio => "cda",
-      TiiMimeType::ApplicationCShell => "csh",
-      TiiMimeType::ApplicationMicrosoftWord => "doc",
-      TiiMimeType::ApplicationMicrosoftWordXml => "docx",
-      TiiMimeType::ApplicationMicrosoftFont => "eot",
-      TiiMimeType::ApplicationEpub => "epub",
-      TiiMimeType::ApplicationGzip => "gz",
-      TiiMimeType::ApplicationJar => "jar",
-      TiiMimeType::ApplicationJavaClass => "class",
-      TiiMimeType::ApplicationOctetStream => "bin",
-      TiiMimeType::ApplicationJson => "json",
-      TiiMimeType::ApplicationJsonLd => "jsonld",
-      TiiMimeType::ApplicationPdf => "pdf",
-      TiiMimeType::ApplicationZip => "zip",
-      TiiMimeType::ApplicationAppleInstallerPackage => "mpkg",
-      TiiMimeType::ApplicationOpenDocumentPresentation => "odp",
-      TiiMimeType::ApplicationOpenDocumentSpreadsheet => "ods",
-      TiiMimeType::ApplicationOpenDocumentText => "odt",
-      TiiMimeType::ApplicationOgg => "ogx",
-      TiiMimeType::ApplicationPhp => "php",
-      TiiMimeType::ApplicationMicrosoftPowerpoint => "ppt",
-      TiiMimeType::ApplicationMicrosoftPowerpointXml => "pptx",
-      TiiMimeType::ApplicationRar => "rar",
-      TiiMimeType::ApplicationRichText => "rtf",
-      TiiMimeType::ApplicationBourneShell => "sh",
-      TiiMimeType::ApplicationTapeArchive => "tar",
-      TiiMimeType::ApplicationMicrosoftVisio => "vsd",
-      TiiMimeType::ApplicationXHtml => "xhtml",
-      TiiMimeType::ApplicationMicrosoftExcel => "xls",
-      TiiMimeType::ApplicationMicrosoftExcelXml => "xlsx",
-      TiiMimeType::ApplicationXml => "xml",
-      TiiMimeType::ApplicationXul => "xul",
-      TiiMimeType::ApplicationDicom => "dcm",
-      TiiMimeType::Application7Zip => "7z",
-      TiiMimeType::ApplicationWasm => "wasm",
-      TiiMimeType::VideoMp4 => "mp4",
-      TiiMimeType::VideoOgg => "ogv",
-      TiiMimeType::VideoWebm => "webm",
-      TiiMimeType::VideoAvi => "avi",
-      TiiMimeType::VideoMpeg => "mpeg",
-      TiiMimeType::VideoMpegTransportStream => "ts",
-      TiiMimeType::Video3gpp => "3gp",
-      TiiMimeType::Video3gpp2 => "3g2",
-      TiiMimeType::ImageBmp => "bmp",
-      TiiMimeType::ImageGif => "gif",
-      TiiMimeType::ImageJpeg => "jpg",
-      TiiMimeType::ImageAvif => "avif",
-      TiiMimeType::ImagePng => "png",
-      TiiMimeType::ImageApng => "apng",
-      TiiMimeType::ImageWebp => "webp",
-      TiiMimeType::ImageSvg => "svg",
-      TiiMimeType::ImageIcon => "ico",
-      TiiMimeType::ImageTiff => "tif",
-      TiiMimeType::AudioAac => "aac",
-      TiiMimeType::AudioMidi => "mid",
-      TiiMimeType::AudioMpeg => "mp3",
-      TiiMimeType::AudioOgg => "oga",
-      TiiMimeType::AudioWaveform => "wav",
-      TiiMimeType::AudioWebm => "weba",
-      TiiMimeType::Audio3gpp => "3gp",
-      TiiMimeType::Audio3gpp2 => "3g2",
-      TiiMimeType::TextCss => "css",
-      TiiMimeType::TextHtml => "html",
-      TiiMimeType::TextJavaScript => "js",
-      TiiMimeType::TextPlain => "txt",
-      TiiMimeType::TextCsv => "csv",
-      TiiMimeType::TextCalendar => "cal",
-      TiiMimeType::ApplicationYaml => "yaml",
-      TiiMimeType::TextLua => "lua",
-      TiiMimeType::ApplicationLuaBytecode => "luac",
-      TiiMimeType::ApplicationXz => "xz",
-      TiiMimeType::Other(_, _) => "bin",
+      MimeType::FontTtf => "ttf",
+      MimeType::FontOtf => "otf",
+      MimeType::FontWoff => "woff",
+      MimeType::FontWoff2 => "woff2",
+      MimeType::ApplicationAbiWord => "abw",
+      MimeType::ApplicationFreeArc => "arc",
+      MimeType::ApplicationAmazonEbook => "azw",
+      MimeType::ApplicationBzip => "bz",
+      MimeType::ApplicationBzip2 => "bz2",
+      MimeType::ApplicationCDAudio => "cda",
+      MimeType::ApplicationCShell => "csh",
+      MimeType::ApplicationMicrosoftWord => "doc",
+      MimeType::ApplicationMicrosoftWordXml => "docx",
+      MimeType::ApplicationMicrosoftFont => "eot",
+      MimeType::ApplicationEpub => "epub",
+      MimeType::ApplicationGzip => "gz",
+      MimeType::ApplicationJar => "jar",
+      MimeType::ApplicationJavaClass => "class",
+      MimeType::ApplicationOctetStream => "bin",
+      MimeType::ApplicationJson => "json",
+      MimeType::ApplicationJsonLd => "jsonld",
+      MimeType::ApplicationPdf => "pdf",
+      MimeType::ApplicationZip => "zip",
+      MimeType::ApplicationAppleInstallerPackage => "mpkg",
+      MimeType::ApplicationOpenDocumentPresentation => "odp",
+      MimeType::ApplicationOpenDocumentSpreadsheet => "ods",
+      MimeType::ApplicationOpenDocumentText => "odt",
+      MimeType::ApplicationOgg => "ogx",
+      MimeType::ApplicationPhp => "php",
+      MimeType::ApplicationMicrosoftPowerpoint => "ppt",
+      MimeType::ApplicationMicrosoftPowerpointXml => "pptx",
+      MimeType::ApplicationRar => "rar",
+      MimeType::ApplicationRichText => "rtf",
+      MimeType::ApplicationBourneShell => "sh",
+      MimeType::ApplicationTapeArchive => "tar",
+      MimeType::ApplicationMicrosoftVisio => "vsd",
+      MimeType::ApplicationXHtml => "xhtml",
+      MimeType::ApplicationMicrosoftExcel => "xls",
+      MimeType::ApplicationMicrosoftExcelXml => "xlsx",
+      MimeType::ApplicationXml => "xml",
+      MimeType::ApplicationXul => "xul",
+      MimeType::ApplicationDicom => "dcm",
+      MimeType::Application7Zip => "7z",
+      MimeType::ApplicationWasm => "wasm",
+      MimeType::VideoMp4 => "mp4",
+      MimeType::VideoOgg => "ogv",
+      MimeType::VideoWebm => "webm",
+      MimeType::VideoAvi => "avi",
+      MimeType::VideoMpeg => "mpeg",
+      MimeType::VideoMpegTransportStream => "ts",
+      MimeType::Video3gpp => "3gp",
+      MimeType::Video3gpp2 => "3g2",
+      MimeType::ImageBmp => "bmp",
+      MimeType::ImageGif => "gif",
+      MimeType::ImageJpeg => "jpg",
+      MimeType::ImageAvif => "avif",
+      MimeType::ImagePng => "png",
+      MimeType::ImageApng => "apng",
+      MimeType::ImageWebp => "webp",
+      MimeType::ImageSvg => "svg",
+      MimeType::ImageIcon => "ico",
+      MimeType::ImageTiff => "tif",
+      MimeType::AudioAac => "aac",
+      MimeType::AudioMidi => "mid",
+      MimeType::AudioMpeg => "mp3",
+      MimeType::AudioOgg => "oga",
+      MimeType::AudioWaveform => "wav",
+      MimeType::AudioWebm => "weba",
+      MimeType::Audio3gpp => "3gp",
+      MimeType::Audio3gpp2 => "3g2",
+      MimeType::TextCss => "css",
+      MimeType::TextHtml => "html",
+      MimeType::TextJavaScript => "js",
+      MimeType::TextPlain => "txt",
+      MimeType::TextCsv => "csv",
+      MimeType::TextCalendar => "cal",
+      MimeType::ApplicationYaml => "yaml",
+      MimeType::TextLua => "lua",
+      MimeType::ApplicationLuaBytecode => "luac",
+      MimeType::ApplicationXz => "xz",
+      MimeType::Other(_, _) => "bin",
     }
   }
 
   /// returns the MimeGroup of this mime type.
-  pub const fn mime_group(&self) -> &TiiMimeGroup {
+  pub const fn mime_group(&self) -> &MimeGroup {
     match self {
-      TiiMimeType::FontTtf => &TiiMimeGroup::Font,
-      TiiMimeType::FontOtf => &TiiMimeGroup::Font,
-      TiiMimeType::FontWoff => &TiiMimeGroup::Font,
-      TiiMimeType::FontWoff2 => &TiiMimeGroup::Font,
-      TiiMimeType::ApplicationAbiWord => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationFreeArc => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationAmazonEbook => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationBzip => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationBzip2 => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationCDAudio => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationCShell => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftWord => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftWordXml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftFont => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationEpub => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationGzip => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationJar => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationJavaClass => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationOctetStream => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationJson => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationJsonLd => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationYaml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationLuaBytecode => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationPdf => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationZip => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationAppleInstallerPackage => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationOpenDocumentPresentation => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationOpenDocumentSpreadsheet => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationOpenDocumentText => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationOgg => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationPhp => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftPowerpoint => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftPowerpointXml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationRar => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationRichText => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationBourneShell => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationTapeArchive => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftVisio => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationXHtml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftExcel => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationMicrosoftExcelXml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationXml => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationXul => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationDicom => &TiiMimeGroup::Application,
-      TiiMimeType::Application7Zip => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationXz => &TiiMimeGroup::Application,
-      TiiMimeType::ApplicationWasm => &TiiMimeGroup::Application,
-      TiiMimeType::VideoMp4 => &TiiMimeGroup::Video,
-      TiiMimeType::VideoOgg => &TiiMimeGroup::Video,
-      TiiMimeType::VideoWebm => &TiiMimeGroup::Video,
-      TiiMimeType::VideoAvi => &TiiMimeGroup::Video,
-      TiiMimeType::VideoMpeg => &TiiMimeGroup::Video,
-      TiiMimeType::VideoMpegTransportStream => &TiiMimeGroup::Video,
-      TiiMimeType::Video3gpp => &TiiMimeGroup::Video,
-      TiiMimeType::Video3gpp2 => &TiiMimeGroup::Video,
-      TiiMimeType::ImageBmp => &TiiMimeGroup::Image,
-      TiiMimeType::ImageGif => &TiiMimeGroup::Image,
-      TiiMimeType::ImageJpeg => &TiiMimeGroup::Image,
-      TiiMimeType::ImageAvif => &TiiMimeGroup::Image,
-      TiiMimeType::ImagePng => &TiiMimeGroup::Image,
-      TiiMimeType::ImageApng => &TiiMimeGroup::Image,
-      TiiMimeType::ImageWebp => &TiiMimeGroup::Image,
-      TiiMimeType::ImageSvg => &TiiMimeGroup::Image,
-      TiiMimeType::ImageIcon => &TiiMimeGroup::Image,
-      TiiMimeType::ImageTiff => &TiiMimeGroup::Image,
-      TiiMimeType::AudioAac => &TiiMimeGroup::Audio,
-      TiiMimeType::AudioMidi => &TiiMimeGroup::Audio,
-      TiiMimeType::AudioMpeg => &TiiMimeGroup::Audio,
-      TiiMimeType::AudioOgg => &TiiMimeGroup::Audio,
-      TiiMimeType::AudioWaveform => &TiiMimeGroup::Audio,
-      TiiMimeType::AudioWebm => &TiiMimeGroup::Audio,
-      TiiMimeType::Audio3gpp => &TiiMimeGroup::Audio,
-      TiiMimeType::Audio3gpp2 => &TiiMimeGroup::Audio,
-      TiiMimeType::TextCss => &TiiMimeGroup::Text,
-      TiiMimeType::TextHtml => &TiiMimeGroup::Text,
-      TiiMimeType::TextJavaScript => &TiiMimeGroup::Text,
-      TiiMimeType::TextLua => &TiiMimeGroup::Text,
-      TiiMimeType::TextPlain => &TiiMimeGroup::Text,
-      TiiMimeType::TextCsv => &TiiMimeGroup::Text,
-      TiiMimeType::TextCalendar => &TiiMimeGroup::Text,
-      TiiMimeType::Other(group, _) => group,
+      MimeType::FontTtf => &MimeGroup::Font,
+      MimeType::FontOtf => &MimeGroup::Font,
+      MimeType::FontWoff => &MimeGroup::Font,
+      MimeType::FontWoff2 => &MimeGroup::Font,
+      MimeType::ApplicationAbiWord => &MimeGroup::Application,
+      MimeType::ApplicationFreeArc => &MimeGroup::Application,
+      MimeType::ApplicationAmazonEbook => &MimeGroup::Application,
+      MimeType::ApplicationBzip => &MimeGroup::Application,
+      MimeType::ApplicationBzip2 => &MimeGroup::Application,
+      MimeType::ApplicationCDAudio => &MimeGroup::Application,
+      MimeType::ApplicationCShell => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftWord => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftWordXml => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftFont => &MimeGroup::Application,
+      MimeType::ApplicationEpub => &MimeGroup::Application,
+      MimeType::ApplicationGzip => &MimeGroup::Application,
+      MimeType::ApplicationJar => &MimeGroup::Application,
+      MimeType::ApplicationJavaClass => &MimeGroup::Application,
+      MimeType::ApplicationOctetStream => &MimeGroup::Application,
+      MimeType::ApplicationJson => &MimeGroup::Application,
+      MimeType::ApplicationJsonLd => &MimeGroup::Application,
+      MimeType::ApplicationYaml => &MimeGroup::Application,
+      MimeType::ApplicationLuaBytecode => &MimeGroup::Application,
+      MimeType::ApplicationPdf => &MimeGroup::Application,
+      MimeType::ApplicationZip => &MimeGroup::Application,
+      MimeType::ApplicationAppleInstallerPackage => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentPresentation => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentSpreadsheet => &MimeGroup::Application,
+      MimeType::ApplicationOpenDocumentText => &MimeGroup::Application,
+      MimeType::ApplicationOgg => &MimeGroup::Application,
+      MimeType::ApplicationPhp => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftPowerpoint => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftPowerpointXml => &MimeGroup::Application,
+      MimeType::ApplicationRar => &MimeGroup::Application,
+      MimeType::ApplicationRichText => &MimeGroup::Application,
+      MimeType::ApplicationBourneShell => &MimeGroup::Application,
+      MimeType::ApplicationTapeArchive => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftVisio => &MimeGroup::Application,
+      MimeType::ApplicationXHtml => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftExcel => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftExcelXml => &MimeGroup::Application,
+      MimeType::ApplicationXml => &MimeGroup::Application,
+      MimeType::ApplicationXul => &MimeGroup::Application,
+      MimeType::ApplicationDicom => &MimeGroup::Application,
+      MimeType::Application7Zip => &MimeGroup::Application,
+      MimeType::ApplicationXz => &MimeGroup::Application,
+      MimeType::ApplicationWasm => &MimeGroup::Application,
+      MimeType::VideoMp4 => &MimeGroup::Video,
+      MimeType::VideoOgg => &MimeGroup::Video,
+      MimeType::VideoWebm => &MimeGroup::Video,
+      MimeType::VideoAvi => &MimeGroup::Video,
+      MimeType::VideoMpeg => &MimeGroup::Video,
+      MimeType::VideoMpegTransportStream => &MimeGroup::Video,
+      MimeType::Video3gpp => &MimeGroup::Video,
+      MimeType::Video3gpp2 => &MimeGroup::Video,
+      MimeType::ImageBmp => &MimeGroup::Image,
+      MimeType::ImageGif => &MimeGroup::Image,
+      MimeType::ImageJpeg => &MimeGroup::Image,
+      MimeType::ImageAvif => &MimeGroup::Image,
+      MimeType::ImagePng => &MimeGroup::Image,
+      MimeType::ImageApng => &MimeGroup::Image,
+      MimeType::ImageWebp => &MimeGroup::Image,
+      MimeType::ImageSvg => &MimeGroup::Image,
+      MimeType::ImageIcon => &MimeGroup::Image,
+      MimeType::ImageTiff => &MimeGroup::Image,
+      MimeType::AudioAac => &MimeGroup::Audio,
+      MimeType::AudioMidi => &MimeGroup::Audio,
+      MimeType::AudioMpeg => &MimeGroup::Audio,
+      MimeType::AudioOgg => &MimeGroup::Audio,
+      MimeType::AudioWaveform => &MimeGroup::Audio,
+      MimeType::AudioWebm => &MimeGroup::Audio,
+      MimeType::Audio3gpp => &MimeGroup::Audio,
+      MimeType::Audio3gpp2 => &MimeGroup::Audio,
+      MimeType::TextCss => &MimeGroup::Text,
+      MimeType::TextHtml => &MimeGroup::Text,
+      MimeType::TextJavaScript => &MimeGroup::Text,
+      MimeType::TextLua => &MimeGroup::Text,
+      MimeType::TextPlain => &MimeGroup::Text,
+      MimeType::TextCsv => &MimeGroup::Text,
+      MimeType::TextCalendar => &MimeGroup::Text,
+      MimeType::Other(group, _) => group,
     }
   }
 
@@ -1114,23 +1114,23 @@ impl TiiMimeType {
   /// Types where this returns true cannot be relied upon to work with `MimeType::from_extension`
   pub const fn has_unique_known_extension(&self) -> bool {
     match self {
-      TiiMimeType::Video3gpp2 | TiiMimeType::Audio3gpp2 => false, //3g2 is shared
-      TiiMimeType::Video3gpp | TiiMimeType::Audio3gpp => false,   //3gp is shared
-      TiiMimeType::Other(_, _) => false, //We don't know what the extension even is.
+      MimeType::Video3gpp2 | MimeType::Audio3gpp2 => false, //3g2 is shared
+      MimeType::Video3gpp | MimeType::Audio3gpp => false,   //3gp is shared
+      MimeType::Other(_, _) => false, //We don't know what the extension even is.
       _ => true,
     }
   }
 
   /// returns a static slice that contains all well known mime types.
   #[must_use]
-  pub const fn well_known() -> &'static [TiiMimeType] {
+  pub const fn well_known() -> &'static [MimeType] {
     WELL_KNOWN_TYPES
   }
 
   /// returns true if this is a well known http mime type.
   #[must_use]
   pub const fn is_well_known(&self) -> bool {
-    !matches!(self, TiiMimeType::Other(_, _))
+    !matches!(self, MimeType::Other(_, _))
   }
 
   /// returns true if this is a custom http mime type.
@@ -1142,194 +1142,194 @@ impl TiiMimeType {
   /// Returns a static str of the mime type or None if the mime type is heap allocated.
   pub const fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
-      TiiMimeType::TextCss => "text/css",
-      TiiMimeType::TextHtml => "text/html",
-      TiiMimeType::TextJavaScript => "text/javascript",
-      TiiMimeType::TextPlain => "text/plain",
-      TiiMimeType::ImageBmp => "image/bmp",
-      TiiMimeType::ImageGif => "image/gif",
-      TiiMimeType::ImageJpeg => "image/jpeg",
-      TiiMimeType::ImagePng => "image/png",
-      TiiMimeType::ImageWebp => "image/webp",
-      TiiMimeType::ImageSvg => "image/svg+xml",
-      TiiMimeType::ImageIcon => "image/vnd.microsoft.icon",
-      TiiMimeType::ApplicationOctetStream => "application/octet-stream",
-      TiiMimeType::ApplicationJson => "application/json",
-      TiiMimeType::ApplicationPdf => "application/pdf",
-      TiiMimeType::ApplicationZip => "application/zip",
-      TiiMimeType::VideoMp4 => "video/mp4",
-      TiiMimeType::VideoOgg => "video/ogg",
-      TiiMimeType::VideoWebm => "video/webm",
-      TiiMimeType::FontTtf => "font/ttf",
-      TiiMimeType::FontOtf => "font/otf",
-      TiiMimeType::FontWoff => "font/woff",
-      TiiMimeType::FontWoff2 => "font/woff2",
-      TiiMimeType::ApplicationAbiWord => "application/x-abiword",
-      TiiMimeType::ApplicationFreeArc => "application/x-freearc",
-      TiiMimeType::ApplicationAmazonEbook => "application/vnd.amazon.ebook",
-      TiiMimeType::ApplicationBzip => "application/x-bzip",
-      TiiMimeType::ApplicationBzip2 => "application/x-bzip2",
-      TiiMimeType::ApplicationCDAudio => "application/x-cdf",
-      TiiMimeType::ApplicationCShell => "application/x-csh",
-      TiiMimeType::ApplicationMicrosoftWord => "application/msword",
-      TiiMimeType::ApplicationMicrosoftWordXml => {
+      MimeType::TextCss => "text/css",
+      MimeType::TextHtml => "text/html",
+      MimeType::TextJavaScript => "text/javascript",
+      MimeType::TextPlain => "text/plain",
+      MimeType::ImageBmp => "image/bmp",
+      MimeType::ImageGif => "image/gif",
+      MimeType::ImageJpeg => "image/jpeg",
+      MimeType::ImagePng => "image/png",
+      MimeType::ImageWebp => "image/webp",
+      MimeType::ImageSvg => "image/svg+xml",
+      MimeType::ImageIcon => "image/vnd.microsoft.icon",
+      MimeType::ApplicationOctetStream => "application/octet-stream",
+      MimeType::ApplicationJson => "application/json",
+      MimeType::ApplicationPdf => "application/pdf",
+      MimeType::ApplicationZip => "application/zip",
+      MimeType::VideoMp4 => "video/mp4",
+      MimeType::VideoOgg => "video/ogg",
+      MimeType::VideoWebm => "video/webm",
+      MimeType::FontTtf => "font/ttf",
+      MimeType::FontOtf => "font/otf",
+      MimeType::FontWoff => "font/woff",
+      MimeType::FontWoff2 => "font/woff2",
+      MimeType::ApplicationAbiWord => "application/x-abiword",
+      MimeType::ApplicationFreeArc => "application/x-freearc",
+      MimeType::ApplicationAmazonEbook => "application/vnd.amazon.ebook",
+      MimeType::ApplicationBzip => "application/x-bzip",
+      MimeType::ApplicationBzip2 => "application/x-bzip2",
+      MimeType::ApplicationCDAudio => "application/x-cdf",
+      MimeType::ApplicationCShell => "application/x-csh",
+      MimeType::ApplicationMicrosoftWord => "application/msword",
+      MimeType::ApplicationMicrosoftWordXml => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       }
-      TiiMimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
-      TiiMimeType::ApplicationEpub => "application/epub+zip",
-      TiiMimeType::ApplicationGzip => "application/gzip",
-      TiiMimeType::ApplicationJar => "application/java-archive",
-      TiiMimeType::ApplicationJavaClass => "application/x-java-class",
-      TiiMimeType::ApplicationJsonLd => "application/ld+json",
-      TiiMimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
-      TiiMimeType::ApplicationOpenDocumentPresentation => {
+      MimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
+      MimeType::ApplicationEpub => "application/epub+zip",
+      MimeType::ApplicationGzip => "application/gzip",
+      MimeType::ApplicationJar => "application/java-archive",
+      MimeType::ApplicationJavaClass => "application/x-java-class",
+      MimeType::ApplicationJsonLd => "application/ld+json",
+      MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
-      TiiMimeType::ApplicationOpenDocumentSpreadsheet => {
+      MimeType::ApplicationOpenDocumentSpreadsheet => {
         "application/vnd.oasis.opendocument.spreadsheet"
       }
-      TiiMimeType::ApplicationOpenDocumentText => "application/vnd.oasis.opendocument.text",
-      TiiMimeType::ApplicationOgg => "application/ogg",
-      TiiMimeType::ApplicationPhp => "application/x-httpd-php",
-      TiiMimeType::ApplicationMicrosoftPowerpoint => "application/vnd.ms-powerpoint",
-      TiiMimeType::ApplicationMicrosoftPowerpointXml => {
+      MimeType::ApplicationOpenDocumentText => "application/vnd.oasis.opendocument.text",
+      MimeType::ApplicationOgg => "application/ogg",
+      MimeType::ApplicationPhp => "application/x-httpd-php",
+      MimeType::ApplicationMicrosoftPowerpoint => "application/vnd.ms-powerpoint",
+      MimeType::ApplicationMicrosoftPowerpointXml => {
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       }
-      TiiMimeType::ApplicationRar => "application/vnd.rar",
-      TiiMimeType::ApplicationRichText => "application/rtf",
-      TiiMimeType::ApplicationBourneShell => "application/x-sh",
-      TiiMimeType::ApplicationTapeArchive => "application/x-tar",
-      TiiMimeType::ApplicationMicrosoftVisio => "application/vnd.visio",
-      TiiMimeType::ApplicationXHtml => "application/xhtml+xml",
-      TiiMimeType::ApplicationMicrosoftExcel => "application/vnd.ms-excel",
-      TiiMimeType::ApplicationMicrosoftExcelXml => {
+      MimeType::ApplicationRar => "application/vnd.rar",
+      MimeType::ApplicationRichText => "application/rtf",
+      MimeType::ApplicationBourneShell => "application/x-sh",
+      MimeType::ApplicationTapeArchive => "application/x-tar",
+      MimeType::ApplicationMicrosoftVisio => "application/vnd.visio",
+      MimeType::ApplicationXHtml => "application/xhtml+xml",
+      MimeType::ApplicationMicrosoftExcel => "application/vnd.ms-excel",
+      MimeType::ApplicationMicrosoftExcelXml => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       }
-      TiiMimeType::ApplicationXml => "application/xml",
-      TiiMimeType::ApplicationXul => "application/vnd.mozilla.xul+xml",
-      TiiMimeType::ApplicationDicom => "application/dicom",
-      TiiMimeType::Application7Zip => "application/x-7z-compressed",
-      TiiMimeType::ApplicationWasm => "application/wasm",
-      TiiMimeType::VideoAvi => "video/x-msvideo",
-      TiiMimeType::VideoMpeg => "video/mpeg",
-      TiiMimeType::VideoMpegTransportStream => "video/mp2t",
-      TiiMimeType::Video3gpp => "video/3gpp",
-      TiiMimeType::Video3gpp2 => "video/3gpp2",
-      TiiMimeType::ImageAvif => "image/avif",
-      TiiMimeType::ImageApng => "image/apng",
-      TiiMimeType::ImageTiff => "image/tiff",
-      TiiMimeType::AudioAac => "audio/aac",
-      TiiMimeType::AudioMidi => "audio/midi",
-      TiiMimeType::AudioMpeg => "audio/mpeg",
-      TiiMimeType::AudioOgg => "audio/ogg",
-      TiiMimeType::AudioWaveform => "audio/wav",
-      TiiMimeType::AudioWebm => "audio/webm",
-      TiiMimeType::Audio3gpp => "audio/3gpp",
-      TiiMimeType::Audio3gpp2 => "audio/3gpp2",
-      TiiMimeType::TextCsv => "text/csv",
-      TiiMimeType::TextCalendar => "text/calendar",
-      TiiMimeType::ApplicationYaml => "application/yaml",
-      TiiMimeType::TextLua => "text/x-lua",
-      TiiMimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
-      TiiMimeType::ApplicationXz => "application/x-xz",
-      TiiMimeType::Other(_, _) => return None,
+      MimeType::ApplicationXml => "application/xml",
+      MimeType::ApplicationXul => "application/vnd.mozilla.xul+xml",
+      MimeType::ApplicationDicom => "application/dicom",
+      MimeType::Application7Zip => "application/x-7z-compressed",
+      MimeType::ApplicationWasm => "application/wasm",
+      MimeType::VideoAvi => "video/x-msvideo",
+      MimeType::VideoMpeg => "video/mpeg",
+      MimeType::VideoMpegTransportStream => "video/mp2t",
+      MimeType::Video3gpp => "video/3gpp",
+      MimeType::Video3gpp2 => "video/3gpp2",
+      MimeType::ImageAvif => "image/avif",
+      MimeType::ImageApng => "image/apng",
+      MimeType::ImageTiff => "image/tiff",
+      MimeType::AudioAac => "audio/aac",
+      MimeType::AudioMidi => "audio/midi",
+      MimeType::AudioMpeg => "audio/mpeg",
+      MimeType::AudioOgg => "audio/ogg",
+      MimeType::AudioWaveform => "audio/wav",
+      MimeType::AudioWebm => "audio/webm",
+      MimeType::Audio3gpp => "audio/3gpp",
+      MimeType::Audio3gpp2 => "audio/3gpp2",
+      MimeType::TextCsv => "text/csv",
+      MimeType::TextCalendar => "text/calendar",
+      MimeType::ApplicationYaml => "application/yaml",
+      MimeType::TextLua => "text/x-lua",
+      MimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
+      MimeType::ApplicationXz => "application/x-xz",
+      MimeType::Other(_, _) => return None,
     })
   }
 
   /// returns the &str representation of the mime type.
   pub fn as_str(&self) -> &str {
     match self {
-      TiiMimeType::TextCss => "text/css",
-      TiiMimeType::TextHtml => "text/html",
-      TiiMimeType::TextJavaScript => "text/javascript",
-      TiiMimeType::TextPlain => "text/plain",
-      TiiMimeType::ImageBmp => "image/bmp",
-      TiiMimeType::ImageGif => "image/gif",
-      TiiMimeType::ImageJpeg => "image/jpeg",
-      TiiMimeType::ImagePng => "image/png",
-      TiiMimeType::ImageWebp => "image/webp",
-      TiiMimeType::ImageSvg => "image/svg+xml",
-      TiiMimeType::ImageIcon => "image/vnd.microsoft.icon",
-      TiiMimeType::ApplicationOctetStream => "application/octet-stream",
-      TiiMimeType::ApplicationJson => "application/json",
-      TiiMimeType::ApplicationPdf => "application/pdf",
-      TiiMimeType::ApplicationZip => "application/zip",
-      TiiMimeType::VideoMp4 => "video/mp4",
-      TiiMimeType::VideoOgg => "video/ogg",
-      TiiMimeType::VideoWebm => "video/webm",
-      TiiMimeType::FontTtf => "font/ttf",
-      TiiMimeType::FontOtf => "font/otf",
-      TiiMimeType::FontWoff => "font/woff",
-      TiiMimeType::FontWoff2 => "font/woff2",
-      TiiMimeType::ApplicationAbiWord => "application/x-abiword",
-      TiiMimeType::ApplicationFreeArc => "application/x-freearc",
-      TiiMimeType::ApplicationAmazonEbook => "application/vnd.amazon.ebook",
-      TiiMimeType::ApplicationBzip => "application/x-bzip",
-      TiiMimeType::ApplicationBzip2 => "application/x-bzip2",
-      TiiMimeType::ApplicationCDAudio => "application/x-cdf",
-      TiiMimeType::ApplicationCShell => "application/x-csh",
-      TiiMimeType::ApplicationMicrosoftWord => "application/msword",
-      TiiMimeType::ApplicationMicrosoftWordXml => {
+      MimeType::TextCss => "text/css",
+      MimeType::TextHtml => "text/html",
+      MimeType::TextJavaScript => "text/javascript",
+      MimeType::TextPlain => "text/plain",
+      MimeType::ImageBmp => "image/bmp",
+      MimeType::ImageGif => "image/gif",
+      MimeType::ImageJpeg => "image/jpeg",
+      MimeType::ImagePng => "image/png",
+      MimeType::ImageWebp => "image/webp",
+      MimeType::ImageSvg => "image/svg+xml",
+      MimeType::ImageIcon => "image/vnd.microsoft.icon",
+      MimeType::ApplicationOctetStream => "application/octet-stream",
+      MimeType::ApplicationJson => "application/json",
+      MimeType::ApplicationPdf => "application/pdf",
+      MimeType::ApplicationZip => "application/zip",
+      MimeType::VideoMp4 => "video/mp4",
+      MimeType::VideoOgg => "video/ogg",
+      MimeType::VideoWebm => "video/webm",
+      MimeType::FontTtf => "font/ttf",
+      MimeType::FontOtf => "font/otf",
+      MimeType::FontWoff => "font/woff",
+      MimeType::FontWoff2 => "font/woff2",
+      MimeType::ApplicationAbiWord => "application/x-abiword",
+      MimeType::ApplicationFreeArc => "application/x-freearc",
+      MimeType::ApplicationAmazonEbook => "application/vnd.amazon.ebook",
+      MimeType::ApplicationBzip => "application/x-bzip",
+      MimeType::ApplicationBzip2 => "application/x-bzip2",
+      MimeType::ApplicationCDAudio => "application/x-cdf",
+      MimeType::ApplicationCShell => "application/x-csh",
+      MimeType::ApplicationMicrosoftWord => "application/msword",
+      MimeType::ApplicationMicrosoftWordXml => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       }
-      TiiMimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
-      TiiMimeType::ApplicationEpub => "application/epub+zip",
-      TiiMimeType::ApplicationGzip => "application/gzip",
-      TiiMimeType::ApplicationJar => "application/java-archive",
-      TiiMimeType::ApplicationJavaClass => "application/x-java-class",
-      TiiMimeType::ApplicationJsonLd => "application/ld+json",
-      TiiMimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
-      TiiMimeType::ApplicationOpenDocumentPresentation => {
+      MimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
+      MimeType::ApplicationEpub => "application/epub+zip",
+      MimeType::ApplicationGzip => "application/gzip",
+      MimeType::ApplicationJar => "application/java-archive",
+      MimeType::ApplicationJavaClass => "application/x-java-class",
+      MimeType::ApplicationJsonLd => "application/ld+json",
+      MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
-      TiiMimeType::ApplicationOpenDocumentSpreadsheet => {
+      MimeType::ApplicationOpenDocumentSpreadsheet => {
         "application/vnd.oasis.opendocument.spreadsheet"
       }
-      TiiMimeType::ApplicationOpenDocumentText => "application/vnd.oasis.opendocument.text",
-      TiiMimeType::ApplicationOgg => "application/ogg",
-      TiiMimeType::ApplicationPhp => "application/x-httpd-php",
-      TiiMimeType::ApplicationMicrosoftPowerpoint => "application/vnd.ms-powerpoint",
-      TiiMimeType::ApplicationMicrosoftPowerpointXml => {
+      MimeType::ApplicationOpenDocumentText => "application/vnd.oasis.opendocument.text",
+      MimeType::ApplicationOgg => "application/ogg",
+      MimeType::ApplicationPhp => "application/x-httpd-php",
+      MimeType::ApplicationMicrosoftPowerpoint => "application/vnd.ms-powerpoint",
+      MimeType::ApplicationMicrosoftPowerpointXml => {
         "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       }
-      TiiMimeType::ApplicationRar => "application/vnd.rar",
-      TiiMimeType::ApplicationRichText => "application/rtf",
-      TiiMimeType::ApplicationBourneShell => "application/x-sh",
-      TiiMimeType::ApplicationTapeArchive => "application/x-tar",
-      TiiMimeType::ApplicationMicrosoftVisio => "application/vnd.visio",
-      TiiMimeType::ApplicationXHtml => "application/xhtml+xml",
-      TiiMimeType::ApplicationMicrosoftExcel => "application/vnd.ms-excel",
-      TiiMimeType::ApplicationMicrosoftExcelXml => {
+      MimeType::ApplicationRar => "application/vnd.rar",
+      MimeType::ApplicationRichText => "application/rtf",
+      MimeType::ApplicationBourneShell => "application/x-sh",
+      MimeType::ApplicationTapeArchive => "application/x-tar",
+      MimeType::ApplicationMicrosoftVisio => "application/vnd.visio",
+      MimeType::ApplicationXHtml => "application/xhtml+xml",
+      MimeType::ApplicationMicrosoftExcel => "application/vnd.ms-excel",
+      MimeType::ApplicationMicrosoftExcelXml => {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       }
-      TiiMimeType::ApplicationXml => "application/xml",
-      TiiMimeType::ApplicationXul => "application/vnd.mozilla.xul+xml",
-      TiiMimeType::ApplicationDicom => "application/dicom",
-      TiiMimeType::Application7Zip => "application/x-7z-compressed",
-      TiiMimeType::ApplicationWasm => "application/wasm",
-      TiiMimeType::VideoAvi => "video/x-msvideo",
-      TiiMimeType::VideoMpeg => "video/mpeg",
-      TiiMimeType::VideoMpegTransportStream => "video/mp2t",
-      TiiMimeType::Video3gpp => "video/3gpp",
-      TiiMimeType::Video3gpp2 => "video/3gpp2",
-      TiiMimeType::ImageAvif => "image/avif",
-      TiiMimeType::ImageApng => "image/apng",
-      TiiMimeType::ImageTiff => "image/tiff",
-      TiiMimeType::AudioAac => "audio/aac",
-      TiiMimeType::AudioMidi => "audio/midi",
-      TiiMimeType::AudioMpeg => "audio/mpeg",
-      TiiMimeType::AudioOgg => "audio/ogg",
-      TiiMimeType::AudioWaveform => "audio/wav",
-      TiiMimeType::AudioWebm => "audio/webm",
-      TiiMimeType::Audio3gpp => "audio/3gpp",
-      TiiMimeType::Audio3gpp2 => "audio/3gpp2",
-      TiiMimeType::TextCsv => "text/csv",
-      TiiMimeType::TextCalendar => "text/calendar",
-      TiiMimeType::ApplicationYaml => "application/yaml",
-      TiiMimeType::TextLua => "text/x-lua",
-      TiiMimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
-      TiiMimeType::ApplicationXz => "application/x-xz",
-      TiiMimeType::Other(_, data) => data.as_str(),
+      MimeType::ApplicationXml => "application/xml",
+      MimeType::ApplicationXul => "application/vnd.mozilla.xul+xml",
+      MimeType::ApplicationDicom => "application/dicom",
+      MimeType::Application7Zip => "application/x-7z-compressed",
+      MimeType::ApplicationWasm => "application/wasm",
+      MimeType::VideoAvi => "video/x-msvideo",
+      MimeType::VideoMpeg => "video/mpeg",
+      MimeType::VideoMpegTransportStream => "video/mp2t",
+      MimeType::Video3gpp => "video/3gpp",
+      MimeType::Video3gpp2 => "video/3gpp2",
+      MimeType::ImageAvif => "image/avif",
+      MimeType::ImageApng => "image/apng",
+      MimeType::ImageTiff => "image/tiff",
+      MimeType::AudioAac => "audio/aac",
+      MimeType::AudioMidi => "audio/midi",
+      MimeType::AudioMpeg => "audio/mpeg",
+      MimeType::AudioOgg => "audio/ogg",
+      MimeType::AudioWaveform => "audio/wav",
+      MimeType::AudioWebm => "audio/webm",
+      MimeType::Audio3gpp => "audio/3gpp",
+      MimeType::Audio3gpp2 => "audio/3gpp2",
+      MimeType::TextCsv => "text/csv",
+      MimeType::TextCalendar => "text/calendar",
+      MimeType::ApplicationYaml => "application/yaml",
+      MimeType::TextLua => "text/x-lua",
+      MimeType::ApplicationLuaBytecode => "application/x-lua-bytecode",
+      MimeType::ApplicationXz => "application/x-xz",
+      MimeType::Other(_, data) => data.as_str(),
     }
   }
 
@@ -1342,96 +1342,96 @@ impl TiiMimeType {
   /// Returns none for invalid mime types.
   pub fn parse<T: AsRef<str>>(value: T) -> Option<Self> {
     Some(match value.as_ref() {
-      "text/css" => TiiMimeType::TextCss,
-      "text/html" => TiiMimeType::TextHtml,
-      "text/javascript" => TiiMimeType::TextJavaScript,
-      "text/plain" => TiiMimeType::TextPlain,
-      "image/bmp" => TiiMimeType::ImageBmp,
-      "image/gif" => TiiMimeType::ImageGif,
-      "image/jpeg" => TiiMimeType::ImageJpeg,
-      "image/png" => TiiMimeType::ImagePng,
-      "image/webp" => TiiMimeType::ImageWebp,
-      "image/svg+xml" => TiiMimeType::ImageSvg,
-      "image/vnd.microsoft.icon" => TiiMimeType::ImageIcon,
-      "application/octet-stream" => TiiMimeType::ApplicationOctetStream,
-      "application/json" => TiiMimeType::ApplicationJson,
-      "application/pdf" => TiiMimeType::ApplicationPdf,
-      "application/zip" => TiiMimeType::ApplicationZip,
-      "video/mp4" => TiiMimeType::VideoMp4,
-      "video/ogg" => TiiMimeType::VideoOgg,
-      "video/webm" => TiiMimeType::VideoWebm,
-      "font/ttf" => TiiMimeType::FontTtf,
-      "font/otf" => TiiMimeType::FontOtf,
-      "font/woff" => TiiMimeType::FontWoff,
-      "font/woff2" => TiiMimeType::FontWoff2,
-      "application/x-abiword" => TiiMimeType::ApplicationAbiWord,
-      "application/x-freearc" => TiiMimeType::ApplicationFreeArc,
-      "application/vnd.amazon.ebook" => TiiMimeType::ApplicationAmazonEbook,
-      "application/x-bzip" => TiiMimeType::ApplicationBzip,
-      "application/x-bzip2" => TiiMimeType::ApplicationBzip2,
-      "application/x-cdf" => TiiMimeType::ApplicationCDAudio,
-      "application/x-csh" => TiiMimeType::ApplicationCShell,
-      "application/msword" => TiiMimeType::ApplicationMicrosoftWord,
+      "text/css" => MimeType::TextCss,
+      "text/html" => MimeType::TextHtml,
+      "text/javascript" => MimeType::TextJavaScript,
+      "text/plain" => MimeType::TextPlain,
+      "image/bmp" => MimeType::ImageBmp,
+      "image/gif" => MimeType::ImageGif,
+      "image/jpeg" => MimeType::ImageJpeg,
+      "image/png" => MimeType::ImagePng,
+      "image/webp" => MimeType::ImageWebp,
+      "image/svg+xml" => MimeType::ImageSvg,
+      "image/vnd.microsoft.icon" => MimeType::ImageIcon,
+      "application/octet-stream" => MimeType::ApplicationOctetStream,
+      "application/json" => MimeType::ApplicationJson,
+      "application/pdf" => MimeType::ApplicationPdf,
+      "application/zip" => MimeType::ApplicationZip,
+      "video/mp4" => MimeType::VideoMp4,
+      "video/ogg" => MimeType::VideoOgg,
+      "video/webm" => MimeType::VideoWebm,
+      "font/ttf" => MimeType::FontTtf,
+      "font/otf" => MimeType::FontOtf,
+      "font/woff" => MimeType::FontWoff,
+      "font/woff2" => MimeType::FontWoff2,
+      "application/x-abiword" => MimeType::ApplicationAbiWord,
+      "application/x-freearc" => MimeType::ApplicationFreeArc,
+      "application/vnd.amazon.ebook" => MimeType::ApplicationAmazonEbook,
+      "application/x-bzip" => MimeType::ApplicationBzip,
+      "application/x-bzip2" => MimeType::ApplicationBzip2,
+      "application/x-cdf" => MimeType::ApplicationCDAudio,
+      "application/x-csh" => MimeType::ApplicationCShell,
+      "application/msword" => MimeType::ApplicationMicrosoftWord,
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
-        TiiMimeType::ApplicationMicrosoftWordXml
+        MimeType::ApplicationMicrosoftWordXml
       }
-      "application/vnd.ms-fontobject" => TiiMimeType::ApplicationMicrosoftFont,
-      "application/epub+zip" => TiiMimeType::ApplicationEpub,
-      "application/gzip" => TiiMimeType::ApplicationGzip,
-      "application/java-archive" => TiiMimeType::ApplicationJar,
-      "application/x-java-class" => TiiMimeType::ApplicationJavaClass,
-      "application/ld+json" => TiiMimeType::ApplicationJsonLd,
-      "application/vnd.apple.installer+xml" => TiiMimeType::ApplicationAppleInstallerPackage,
+      "application/vnd.ms-fontobject" => MimeType::ApplicationMicrosoftFont,
+      "application/epub+zip" => MimeType::ApplicationEpub,
+      "application/gzip" => MimeType::ApplicationGzip,
+      "application/java-archive" => MimeType::ApplicationJar,
+      "application/x-java-class" => MimeType::ApplicationJavaClass,
+      "application/ld+json" => MimeType::ApplicationJsonLd,
+      "application/vnd.apple.installer+xml" => MimeType::ApplicationAppleInstallerPackage,
       "application/vnd.oasis.opendocument.presentation" => {
-        TiiMimeType::ApplicationOpenDocumentPresentation
+        MimeType::ApplicationOpenDocumentPresentation
       }
       "application/vnd.oasis.opendocument.spreadsheet" => {
-        TiiMimeType::ApplicationOpenDocumentSpreadsheet
+        MimeType::ApplicationOpenDocumentSpreadsheet
       }
-      "application/vnd.oasis.opendocument.text" => TiiMimeType::ApplicationOpenDocumentText,
-      "application/ogg" => TiiMimeType::ApplicationOgg,
-      "application/x-httpd-php" => TiiMimeType::ApplicationPhp,
-      "application/vnd.ms-powerpoint" => TiiMimeType::ApplicationMicrosoftPowerpoint,
+      "application/vnd.oasis.opendocument.text" => MimeType::ApplicationOpenDocumentText,
+      "application/ogg" => MimeType::ApplicationOgg,
+      "application/x-httpd-php" => MimeType::ApplicationPhp,
+      "application/vnd.ms-powerpoint" => MimeType::ApplicationMicrosoftPowerpoint,
       "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
-        TiiMimeType::ApplicationMicrosoftPowerpointXml
+        MimeType::ApplicationMicrosoftPowerpointXml
       }
-      "application/vnd.rar" => TiiMimeType::ApplicationRar,
-      "application/rtf" => TiiMimeType::ApplicationRichText,
-      "application/x-sh" => TiiMimeType::ApplicationBourneShell,
-      "application/x-tar" => TiiMimeType::ApplicationTapeArchive,
-      "application/vnd.visio" => TiiMimeType::ApplicationMicrosoftVisio,
-      "application/xhtml+xml" => TiiMimeType::ApplicationXHtml,
-      "application/vnd.ms-excel" => TiiMimeType::ApplicationMicrosoftExcel,
+      "application/vnd.rar" => MimeType::ApplicationRar,
+      "application/rtf" => MimeType::ApplicationRichText,
+      "application/x-sh" => MimeType::ApplicationBourneShell,
+      "application/x-tar" => MimeType::ApplicationTapeArchive,
+      "application/vnd.visio" => MimeType::ApplicationMicrosoftVisio,
+      "application/xhtml+xml" => MimeType::ApplicationXHtml,
+      "application/vnd.ms-excel" => MimeType::ApplicationMicrosoftExcel,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => {
-        TiiMimeType::ApplicationMicrosoftExcelXml
+        MimeType::ApplicationMicrosoftExcelXml
       }
-      "application/xml" => TiiMimeType::ApplicationXml,
-      "application/vnd.mozilla.xul+xml" => TiiMimeType::ApplicationXul,
-      "application/dicom" => TiiMimeType::ApplicationDicom,
-      "application/x-7z-compressed" => TiiMimeType::Application7Zip,
-      "application/wasm" => TiiMimeType::ApplicationWasm,
-      "video/x-msvideo" => TiiMimeType::VideoAvi,
-      "video/mpeg" => TiiMimeType::VideoMpeg,
-      "video/mp2t" => TiiMimeType::VideoMpegTransportStream,
-      "video/3gpp" => TiiMimeType::Video3gpp,
-      "video/3gpp2" => TiiMimeType::Video3gpp2,
-      "audio/3gpp" => TiiMimeType::Audio3gpp,
-      "audio/3gpp2" => TiiMimeType::Audio3gpp2,
-      "image/avif" => TiiMimeType::ImageAvif,
-      "image/apng" => TiiMimeType::ImageApng,
-      "image/tiff" => TiiMimeType::ImageTiff,
-      "audio/aac" => TiiMimeType::AudioAac,
-      "audio/midi" => TiiMimeType::AudioMidi,
-      "audio/mpeg" => TiiMimeType::AudioMpeg,
-      "audio/ogg" => TiiMimeType::AudioOgg,
-      "audio/wav" => TiiMimeType::AudioWaveform,
-      "audio/webm" => TiiMimeType::AudioWebm,
-      "text/csv" => TiiMimeType::TextCsv,
-      "text/calendar" => TiiMimeType::TextCalendar,
-      "application/yaml" => TiiMimeType::ApplicationYaml,
-      "text/x-lua" => TiiMimeType::TextLua,
-      "application/x-lua-bytecode" => TiiMimeType::ApplicationLuaBytecode,
-      "application/x-xz" => TiiMimeType::ApplicationXz,
+      "application/xml" => MimeType::ApplicationXml,
+      "application/vnd.mozilla.xul+xml" => MimeType::ApplicationXul,
+      "application/dicom" => MimeType::ApplicationDicom,
+      "application/x-7z-compressed" => MimeType::Application7Zip,
+      "application/wasm" => MimeType::ApplicationWasm,
+      "video/x-msvideo" => MimeType::VideoAvi,
+      "video/mpeg" => MimeType::VideoMpeg,
+      "video/mp2t" => MimeType::VideoMpegTransportStream,
+      "video/3gpp" => MimeType::Video3gpp,
+      "video/3gpp2" => MimeType::Video3gpp2,
+      "audio/3gpp" => MimeType::Audio3gpp,
+      "audio/3gpp2" => MimeType::Audio3gpp2,
+      "image/avif" => MimeType::ImageAvif,
+      "image/apng" => MimeType::ImageApng,
+      "image/tiff" => MimeType::ImageTiff,
+      "audio/aac" => MimeType::AudioAac,
+      "audio/midi" => MimeType::AudioMidi,
+      "audio/mpeg" => MimeType::AudioMpeg,
+      "audio/ogg" => MimeType::AudioOgg,
+      "audio/wav" => MimeType::AudioWaveform,
+      "audio/webm" => MimeType::AudioWebm,
+      "text/csv" => MimeType::TextCsv,
+      "text/calendar" => MimeType::TextCalendar,
+      "application/yaml" => MimeType::ApplicationYaml,
+      "text/x-lua" => MimeType::TextLua,
+      "application/x-lua-bytecode" => MimeType::ApplicationLuaBytecode,
+      "application/x-xz" => MimeType::ApplicationXz,
       other => {
         if other.starts_with('/') || other.ends_with('/') {
           return None;
@@ -1456,8 +1456,8 @@ impl TiiMimeType {
           return None;
         }
 
-        if let Some(grp) = TiiMimeGroup::parse(other) {
-          TiiMimeType::Other(grp, other.to_string())
+        if let Some(grp) = MimeGroup::parse(other) {
+          MimeType::Other(grp, other.to_string())
         } else {
           // We already do a superset of validations, this case is impossible.
           crate::util::unreachable()
@@ -1467,7 +1467,7 @@ impl TiiMimeType {
   }
 }
 
-impl Display for TiiMimeType {
+impl Display for MimeType {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }
@@ -1509,57 +1509,57 @@ const fn check_header_byte(char: u8) -> bool {
   )
 }
 
-impl From<TiiMimeType> for TiiAcceptMimeType {
-  fn from(value: TiiMimeType) -> Self {
-    TiiAcceptMimeType::Specific(value)
+impl From<MimeType> for AcceptMimeType {
+  fn from(value: MimeType) -> Self {
+    AcceptMimeType::Specific(value)
   }
 }
 
-impl From<&TiiMimeType> for TiiAcceptMimeType {
-  fn from(value: &TiiMimeType) -> Self {
-    TiiAcceptMimeType::Specific(value.clone())
+impl From<&MimeType> for AcceptMimeType {
+  fn from(value: &MimeType) -> Self {
+    AcceptMimeType::Specific(value.clone())
   }
 }
 
-impl From<TiiMimeGroup> for TiiAcceptMimeType {
-  fn from(value: TiiMimeGroup) -> Self {
-    TiiAcceptMimeType::GroupWildcard(value)
+impl From<MimeGroup> for AcceptMimeType {
+  fn from(value: MimeGroup) -> Self {
+    AcceptMimeType::GroupWildcard(value)
   }
 }
 
-impl From<&TiiMimeGroup> for TiiAcceptMimeType {
-  fn from(value: &TiiMimeGroup) -> Self {
-    TiiAcceptMimeType::GroupWildcard(value.clone())
+impl From<&MimeGroup> for AcceptMimeType {
+  fn from(value: &MimeGroup) -> Self {
+    AcceptMimeType::GroupWildcard(value.clone())
   }
 }
 
-impl From<TiiMimeType> for TiiMimeGroup {
-  fn from(value: TiiMimeType) -> Self {
+impl From<MimeType> for MimeGroup {
+  fn from(value: MimeType) -> Self {
     value.mime_group().clone()
   }
 }
 
-impl From<&TiiMimeType> for TiiMimeGroup {
-  fn from(value: &TiiMimeType) -> Self {
+impl From<&MimeType> for MimeGroup {
+  fn from(value: &MimeType) -> Self {
     value.mime_group().clone()
   }
 }
 
-impl From<TiiAcceptQualityMimeType> for TiiAcceptMimeType {
-  fn from(value: TiiAcceptQualityMimeType) -> Self {
+impl From<AcceptQualityMimeType> for AcceptMimeType {
+  fn from(value: AcceptQualityMimeType) -> Self {
     value.value
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use crate::http::mime::TiiQValue;
+  use crate::http::mime::QValue;
 
   /// Shutup clippy.
   #[macro_export]
   macro_rules! test_qvalue {
     ($input:expr, $expected:expr) => {
-      let q = TiiQValue($input);
+      let q = QValue($input);
       assert_eq!(q.as_str(), $expected);
     };
   }

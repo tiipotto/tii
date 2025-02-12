@@ -1,14 +1,14 @@
 use crate::mock_stream::MockStream;
 use std::io::ErrorKind;
-use tii::TiiBuilder;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::ServerBuilder;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   let body = ctx.request_body().unwrap();
   assert_eq!(0, body.read(&mut [])?);
   let mut data = [0; 12];
@@ -29,13 +29,13 @@ fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
   }
   let err = body.read_exact(data.as_mut()).unwrap_err();
   assert_eq!(ErrorKind::UnexpectedEof, err.kind());
-  TiiResponse::ok("Okay!", TiiMimeType::TextPlain).into()
+  Response::ok("Okay!", MimeType::TextPlain).into()
 }
 
 #[test]
 pub fn tc22a() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERROR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERROR").build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();
@@ -47,7 +47,7 @@ pub fn tc22a() {
 #[test]
 pub fn tc22b() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERROR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERROR").build();
   // INVALID Chunked trailer
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nContent-Length: 21\r\n\r\n123451234567890123456");
   let con = stream.to_stream();

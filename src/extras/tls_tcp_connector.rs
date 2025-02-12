@@ -1,11 +1,11 @@
 use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
-use crate::extras::{TiiConnector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{
-  DefaultThreadAdapter, TiiThreadAdapter, TiiThreadAdapterJoinHandle,
+  DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle,
 };
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
-use crate::{error_log, info_log, trace_log, TiiTlsStream};
+use crate::tii_server::Server;
+use crate::{error_log, info_log, trace_log, TlsStream};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::io;
@@ -16,20 +16,20 @@ use std::time::Duration;
 
 /// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
-pub struct TiiTlsTcpConnector {
-  main_thread: Mutex<Option<TiiThreadAdapterJoinHandle>>,
+pub struct TlsTcpConnector {
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
   inner: Arc<TlsTcpConnectorInner>,
 }
 
 #[derive(Debug)]
 struct TlsTcpConnectorInner {
-  thread_adapter: Arc<dyn TiiThreadAdapter>,
+  thread_adapter: Arc<dyn ThreadAdapter>,
   config: Arc<ServerConfig>,
   addr_string: String,
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl TlsTcpConnectorInner {
@@ -104,7 +104,7 @@ impl TlsTcpConnectorInner {
           Ok(stream) => {
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
-                match TiiTlsStream::create(
+                match TlsStream::create(
                   stream,
                   tls_con,
                   thread_adapter_clone.as_ref(),
@@ -182,7 +182,7 @@ impl TlsTcpConnectorInner {
         }
 
         //Code for panic enjoyers
-        if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+        if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
@@ -213,7 +213,7 @@ impl TlsTcpConnectorInner {
       }
 
       //Code for panic enjoyers
-      if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+      if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
             "tls_tcp_connector[{}]: connection {} thread panicked: {}",
@@ -279,7 +279,7 @@ impl TlsTcpConnectorInner {
     }
   }
 }
-impl TiiConnector for TiiTlsTcpConnector {
+impl Connector for TlsTcpConnector {
   #[cfg(unix)]
   fn shutdown(&self) {
     self.inner.shutdown();
@@ -348,15 +348,15 @@ impl TiiConnector for TiiTlsTcpConnector {
   }
 }
 
-impl TiiTlsTcpConnector {
+impl TlsTcpConnector {
   /// Creates a new tls connector that is listening on the given addr.
   /// Return Err on error.
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
     config: Arc<ServerConfig>,
-    thread_adapter: impl TiiThreadAdapter + 'static,
+    thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     //Check if the rust-tls server config is "valid".
     let _ = ServerConnection::new(config.clone())?;
@@ -408,9 +408,9 @@ impl TiiTlsTcpConnector {
   ///
   /// Threads are created using "thread::Builder::new().spawn"
   pub fn start_unpooled(
-    addr: impl ToSocketAddrs,
-    config: Arc<ServerConfig>,
-    tii_server: Arc<TiiServer>,
+      addr: impl ToSocketAddrs,
+      config: Arc<ServerConfig>,
+      tii_server: Arc<Server>,
   ) -> TiiResult<Self> {
     Self::start(addr, tii_server, config, DefaultThreadAdapter)
   }

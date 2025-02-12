@@ -4,16 +4,16 @@ use std::sync::{Arc, Mutex};
 use std::{io, thread, time::Duration};
 
 use crate::{error_log, info_log, util, warn_log};
-use crate::{TiiReadMessageTimeoutResult, TiiWebsocketReceiver, TiiWebsocketSender};
-use crate::{TiiRequestContext, TiiWebsocketEndpoint, TiiWebsocketMessage};
+use crate::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
+use crate::{RequestContext, WebsocketEndpoint, WebsocketMessage};
 
-type WebsocketContext = (TiiWebsocketReceiver, TiiWebsocketSender, String);
+type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
 
 #[derive(Debug)]
 #[non_exhaustive]
 /// Top level Error for why `run` ran into a fatal crash.
 /// Use the `log` feature for debugging/tracing errors (eg. a WS client disconnecting).
-pub enum TiiWsbAppError {
+pub enum WsbAppError {
   /// Broadcast thread unexpected exit
   BroadcastThread(Result<(), io::Error>),
   /// Exec thread unexpected exit
@@ -23,13 +23,13 @@ pub enum TiiWsbAppError {
 }
 
 /// WebSocketApp builder/linker for setup and linking to Tii
-pub struct TiiWsbAppBuilder {
+pub struct WsbAppBuilder {
   tii_link: Arc<Mutex<Sender<WebsocketContext>>>,
   state: State,
 }
 
 /// Represents a WebSocket app.
-pub struct TiiWsbApp {
+pub struct WsbApp {
   state: State,
 }
 
@@ -41,18 +41,18 @@ struct State {
   heartbeat: Option<Duration>,
 
   // A Vec of all the streams for broadcasting.
-  send_streams: Arc<Mutex<Vec<Sender<TiiWsbOutgoingMessage>>>>,
+  send_streams: Arc<Mutex<Vec<Sender<WsbOutgoingMessage>>>>,
   // A sender which is used by handler threads to send messages to clients.
-  broadcast_sender: Sender<TiiWebsocketMessage>,
+  broadcast_sender: Sender<WebsocketMessage>,
   // A receiver which receives messages from handler threads to forward to clients.
-  outgoing_broadcasts: Receiver<TiiWebsocketMessage>,
+  outgoing_broadcasts: Receiver<WebsocketMessage>,
 
   // The event handler called when a new client connects.
-  connect_handler: Option<Box<dyn TiiWsbEventHandler>>,
+  connect_handler: Option<Box<dyn WsbEventHandler>>,
   // The event handler called when a client disconnects.
-  disconnect_handler: Option<Box<dyn TiiWsbEventHandler>>,
+  disconnect_handler: Option<Box<dyn WsbEventHandler>>,
   // The event handler called when a client sends a message.
-  message_handler: Option<Box<dyn TiiWsbMessageHandler>>,
+  message_handler: Option<Box<dyn WsbMessageHandler>>,
 
   // Shutdown signal for the application.
   shutdown: Option<Receiver<()>>,
@@ -64,28 +64,28 @@ struct State {
 /// This is what is passed to the handler in place of the actual stream. It is able to send
 /// messages back to the stream or broadcast to all streams within the WebSocketApp.
 #[derive(Debug)]
-pub struct TiiWsbHandle {
+pub struct WsbHandle {
   addr: String,
-  sender: Sender<TiiWsbOutgoingMessage>,
+  sender: Sender<WsbOutgoingMessage>,
 }
 
 /// Represents a global sender which can be used to broadcast messages to all clients.
-pub struct BroadcastSender(Sender<TiiWebsocketMessage>);
+pub struct BroadcastSender(Sender<WebsocketMessage>);
 
 impl BroadcastSender {
   /// Broadcast a message to all connected clients.
-  pub fn broadcast(&self, message: TiiWebsocketMessage) {
+  pub fn broadcast(&self, message: WebsocketMessage) {
     self.0.send(message).ok();
   }
 }
 
 /// Represents a message to be sent from the server (tii) to client(s).
 #[derive(Debug)]
-pub enum TiiWsbOutgoingMessage {
+pub enum WsbOutgoingMessage {
   /// A message to be sent to a specific client.
-  Message(TiiWebsocketMessage),
+  Message(WebsocketMessage),
   /// A message to be sent to every connected client.
-  Broadcast(TiiWebsocketMessage),
+  Broadcast(WebsocketMessage),
 }
 
 /// Represents a function able to handle a WebSocket event (a connection or disconnection).
@@ -94,14 +94,14 @@ pub enum TiiWsbOutgoingMessage {
 /// ## Example
 /// A basic example of an event handler would be as follows:
 /// ```
-/// fn connection_handler(stream: &tii::extras::TiiWsbHandle) {
+/// fn connection_handler(stream: &tii::extras::WsbHandle) {
 ///     println!("A new client connected! {:?}", stream.peer_addr());
 ///
-///     stream.send(tii::TiiWebsocketMessage::new_text("Hello, World!"));
+///     stream.send(tii::WebsocketMessage::new_text("Hello, World!"));
 /// }
 /// ```
-pub trait TiiWsbEventHandler: Fn(TiiWsbHandle) + Send + Sync + 'static {}
-impl<T> TiiWsbEventHandler for T where T: Fn(TiiWsbHandle) + Send + Sync + 'static {}
+pub trait WsbEventHandler: Fn(WsbHandle) + Send + Sync + 'static {}
+impl<T> WsbEventHandler for T where T: Fn(WsbHandle) + Send + Sync + 'static {}
 
 /// Represents a function able to handle a message event.
 /// It is passed the stream which sent the message.
@@ -109,24 +109,24 @@ impl<T> TiiWsbEventHandler for T where T: Fn(TiiWsbHandle) + Send + Sync + 'stat
 /// ## Example
 /// A basic example of a message handler would be as follows:
 /// ```
-/// use tii::TiiWebsocketMessage;
-/// use tii::extras::TiiWsbHandle;
-/// fn message_handler(handle: TiiWsbHandle, message: TiiWebsocketMessage) {
+/// use tii::WebsocketMessage;
+/// use tii::extras::WsbHandle;
+/// fn message_handler(handle: WsbHandle, message: WebsocketMessage) {
 ///    println!("{:?}", message);
 ///
-///    handle.send(TiiWebsocketMessage::new_text("Message received."));
+///    handle.send(WebsocketMessage::new_text("Message received."));
 /// }
 /// ```
-pub trait TiiWsbMessageHandler:
-  Fn(TiiWsbHandle, TiiWebsocketMessage) + Send + Sync + 'static
+pub trait WsbMessageHandler:
+  Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static
 {
 }
-impl<T> TiiWsbMessageHandler for T where
-  T: Fn(TiiWsbHandle, TiiWebsocketMessage) + Send + Sync + 'static
+impl<T> WsbMessageHandler for T where
+  T: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static
 {
 }
 
-impl Default for TiiWsbAppBuilder {
+impl Default for WsbAppBuilder {
   fn default() -> Self {
     let (connect_hook, incoming_streams) = channel();
     let (broadcast_sender, outgoing_broadcasts) = channel();
@@ -149,19 +149,19 @@ impl Default for TiiWsbAppBuilder {
   }
 }
 
-impl TiiWsbAppBuilder {
+impl WsbAppBuilder {
   /// Returns the finalized App.
-  pub fn finalize(self) -> TiiWsbApp {
-    TiiWsbApp { state: self.state }
+  pub fn finalize(self) -> WsbApp {
+    WsbApp { state: self.state }
   }
 
   /// Returns a websocket endpoint that will service this WebSocketBroadcastApp.
   /// Add this endpoint to a websocket route in a TiiBuilder.
-  pub fn endpoint(&self) -> impl TiiWebsocketEndpoint {
+  pub fn endpoint(&self) -> impl WebsocketEndpoint {
     let hook = self.tii_link.clone();
-    move |request: &TiiRequestContext,
-          receiver: TiiWebsocketReceiver,
-          sender: TiiWebsocketSender| {
+    move |request: &RequestContext,
+          receiver: WebsocketReceiver,
+          sender: WebsocketSender| {
       let hook = util::unwrap_poison(hook.lock());
       Ok(hook?.send((receiver, sender, request.peer_address().to_string()))?)
     }
@@ -173,19 +173,19 @@ impl TiiWsbAppBuilder {
   }
 
   /// Set the event handler called when a new client connects.
-  pub fn with_connect_handler(mut self, handler: impl TiiWsbEventHandler) -> Self {
+  pub fn with_connect_handler(mut self, handler: impl WsbEventHandler) -> Self {
     self.state.connect_handler = Some(Box::new(handler));
     self
   }
 
   /// Set the event handler called when a client disconnects.
-  pub fn with_disconnect_handler(mut self, handler: impl TiiWsbEventHandler) -> Self {
+  pub fn with_disconnect_handler(mut self, handler: impl WsbEventHandler) -> Self {
     self.state.disconnect_handler = Some(Box::new(handler));
     self
   }
 
   /// Set the message handler called when a client sends a message.
-  pub fn with_message_handler(mut self, handler: impl TiiWsbMessageHandler) -> Self {
+  pub fn with_message_handler(mut self, handler: impl WsbMessageHandler) -> Self {
     self.state.message_handler = Some(Box::new(handler));
     self
   }
@@ -211,10 +211,10 @@ impl TiiWsbAppBuilder {
   }
 }
 
-impl TiiWsbApp {
+impl WsbApp {
   /// Start the application on the main thread.
   /// This blocks until the Tii server has been dropped.
-  pub fn run(self) -> Result<(), TiiWsbAppError> {
+  pub fn run(self) -> Result<(), WsbAppError> {
     let connect_handler = self.state.connect_handler.map(Arc::new);
     let disconnect_handler = self.state.disconnect_handler.map(Arc::new);
     let message_handler = self.state.message_handler.map(Arc::new);
@@ -244,7 +244,7 @@ impl TiiWsbApp {
             let mut streams = util::unwrap_poison(streams.lock())?;
             for (idx, stream) in streams.iter_mut().enumerate() {
               // convert the broadcast back to message, but for each sender
-              if stream.send(TiiWsbOutgoingMessage::Message(message.clone())).is_err() {
+              if stream.send(WsbOutgoingMessage::Message(message.clone())).is_err() {
                 remove_idx = Some(idx);
               }
             }
@@ -329,19 +329,19 @@ impl TiiWsbApp {
       }
       if exec_thread.is_finished() {
         return match exec_thread.join() {
-          Ok(et) => Err(TiiWsbAppError::ExecThread(et)),
+          Ok(et) => Err(WsbAppError::ExecThread(et)),
           Err(e) => {
             error_log!("Unexpected exec_thread panic: {:?}.", e);
-            Err(TiiWsbAppError::Panic)
+            Err(WsbAppError::Panic)
           }
         };
       }
       if broadcast_thread.is_finished() {
         return match exec_thread.join() {
-          Ok(bt) => Err(TiiWsbAppError::BroadcastThread(bt)),
+          Ok(bt) => Err(WsbAppError::BroadcastThread(bt)),
           Err(e) => {
             error_log!("Unexpected broadcast_thread panic: {:?}.", e);
-            Err(TiiWsbAppError::Panic)
+            Err(WsbAppError::Panic)
           }
         };
       }
@@ -351,31 +351,31 @@ impl TiiWsbApp {
 
     if let Err(e) = exec_thread.join() {
       error_log!("{:?} while doing join of `exec` thread.", e);
-      return Err(TiiWsbAppError::Panic);
+      return Err(WsbAppError::Panic);
     }
 
     if let Err(e) = broadcast_thread.join() {
       error_log!("{:?} while doing join of `exec` thread.", e);
-      return Err(TiiWsbAppError::Panic);
+      return Err(WsbAppError::Panic);
     }
     Ok(())
   }
 }
 
-impl TiiWsbHandle {
+impl WsbHandle {
   /// Create a new handle.
-  pub fn new(addr: String, sender: Sender<TiiWsbOutgoingMessage>) -> Self {
+  pub fn new(addr: String, sender: Sender<WsbOutgoingMessage>) -> Self {
     Self { addr, sender }
   }
 
   /// Send a message to the client.
-  pub fn send(&self, message: TiiWebsocketMessage) {
-    self.sender.send(TiiWsbOutgoingMessage::Message(message)).ok();
+  pub fn send(&self, message: WebsocketMessage) {
+    self.sender.send(WsbOutgoingMessage::Message(message)).ok();
   }
 
   /// Broadcast a message to all connected clients.
-  pub fn broadcast(&self, message: TiiWebsocketMessage) {
-    self.sender.send(TiiWsbOutgoingMessage::Broadcast(message)).ok();
+  pub fn broadcast(&self, message: WebsocketMessage) {
+    self.sender.send(WsbOutgoingMessage::Broadcast(message)).ok();
   }
 
   /// Get the address of the stream.
@@ -386,12 +386,12 @@ impl TiiWsbHandle {
 
 struct ExecState {
   stream: WebsocketContext,
-  broadcast: Sender<TiiWebsocketMessage>,
-  message_sender: Sender<TiiWsbOutgoingMessage>,
-  outgoing_messages: Receiver<TiiWsbOutgoingMessage>,
-  connect_handler: Option<Arc<Box<dyn TiiWsbEventHandler>>>,
-  disconnect_handler: Option<Arc<Box<dyn TiiWsbEventHandler>>>,
-  message_handler: Option<Arc<Box<dyn TiiWsbMessageHandler>>>,
+  broadcast: Sender<WebsocketMessage>,
+  message_sender: Sender<WsbOutgoingMessage>,
+  outgoing_messages: Receiver<WsbOutgoingMessage>,
+  connect_handler: Option<Arc<Box<dyn WsbEventHandler>>>,
+  disconnect_handler: Option<Arc<Box<dyn WsbEventHandler>>>,
+  message_handler: Option<Arc<Box<dyn WsbMessageHandler>>>,
   timeout: Duration,
   shutdown_signal: Arc<AtomicBool>,
 }
@@ -400,7 +400,7 @@ fn exec(es: ExecState) {
   let (mut ws_receiver, ws_sender, addr) = (es.stream.0, es.stream.1, es.stream.2);
 
   if let Some(ch) = es.connect_handler {
-    let handle = TiiWsbHandle::new(addr.clone(), es.message_sender.clone());
+    let handle = WsbHandle::new(addr.clone(), es.message_sender.clone());
     (ch)(handle);
   }
 
@@ -412,12 +412,12 @@ fn exec(es: ExecState) {
     }
     match es.outgoing_messages.recv_timeout(es.timeout) {
       Ok(m) => match m {
-        TiiWsbOutgoingMessage::Message(message) => {
+        WsbOutgoingMessage::Message(message) => {
           if ws_sender.send(message).is_err() {
             break;
           }
         }
-        TiiWsbOutgoingMessage::Broadcast(message) => {
+        WsbOutgoingMessage::Broadcast(message) => {
           if es.broadcast.send(message).is_err() {
             break;
           }
@@ -440,26 +440,26 @@ fn exec(es: ExecState) {
     let Some(ref mh) = es.message_handler else { break };
     match ws_receiver.read_message_timeout(Some(es.timeout)) {
       Ok(message) => match message {
-        TiiReadMessageTimeoutResult::Message(m) => {
+        ReadMessageTimeoutResult::Message(m) => {
           match m {
-            TiiWebsocketMessage::Binary(_) | TiiWebsocketMessage::Text(_) => {
-              (mh)(TiiWsbHandle::new(addr.clone(), es.message_sender.clone()), m);
+            WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
+              (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
             }
-            TiiWebsocketMessage::Ping => {
+            WebsocketMessage::Ping => {
               if es
                 .message_sender
-                .send(TiiWsbOutgoingMessage::Message(TiiWebsocketMessage::Pong))
+                .send(WsbOutgoingMessage::Message(WebsocketMessage::Pong))
                 .is_err()
               {
                 break;
               }
             }
-            TiiWebsocketMessage::Pong => (), // do nothing
+            WebsocketMessage::Pong => (), // do nothing
           }
         }
-        TiiReadMessageTimeoutResult::Timeout | TiiReadMessageTimeoutResult::Closed => {
+        ReadMessageTimeoutResult::Timeout | ReadMessageTimeoutResult::Closed => {
           if let Some(dh) = es.disconnect_handler {
-            (dh)(TiiWsbHandle::new(addr.clone(), es.message_sender.clone()));
+            (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
           }
           break;
         }
@@ -467,7 +467,7 @@ fn exec(es: ExecState) {
       Err(e) => {
         error_log!("ws_app read: {:?} occurred", &e);
         if let Some(dh) = es.disconnect_handler {
-          (dh)(TiiWsbHandle::new(addr.clone(), es.message_sender.clone()));
+          (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
         }
         break;
       }

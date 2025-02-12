@@ -1,37 +1,37 @@
 use crate::mock_stream::MockStream;
-use tii::TiiBuilder;
-use tii::TiiHttpVersion;
-use tii::TiiMimeType;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
-use tii::TiiResponseBody;
+use tii::ServerBuilder;
+use tii::HttpVersion;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ResponseBody;
 use tii::TiiResult;
 
 mod mock_stream;
 
-fn dummy_route(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
 
-  Ok(TiiResponse::ok(TiiResponseBody::from_slice("Okay!"), TiiMimeType::TextPlain))
+  Ok(Response::ok(ResponseBody::from_slice("Okay!"), MimeType::TextPlain))
 }
 
-fn dummy_route2(ctx: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  assert_eq!(TiiHttpVersion::Http11, ctx.request_head().get_version());
+fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
 
-  Ok(TiiResponse::ok(TiiResponseBody::from_slice("\"Nice!\""), TiiMimeType::ApplicationJson))
+  Ok(Response::ok(ResponseBody::from_slice("\"Nice!\""), MimeType::ApplicationJson))
 }
 
 #[test]
 pub fn tc26() {
-  let server = TiiBuilder::builder(|builder| {
+  let server = ServerBuilder::builder(|builder| {
     builder.router(|rt| {
       rt.get("/dummy")
-        .produces(TiiMimeType::TextPlain)
+        .produces(MimeType::TextPlain)
         .endpoint(dummy_route)?
         .get("/dummy")
-        .produces(TiiMimeType::ApplicationJson)
+        .produces(MimeType::ApplicationJson)
         .endpoint(dummy_route2)
     })
   })

@@ -1,11 +1,11 @@
 //! Provides functionality for working with a WebSocket stream.
 
 use crate::websocket::frame::{Frame, Opcode};
-use crate::websocket::message::TiiWebsocketMessage;
+use crate::websocket::message::WebsocketMessage;
 use std::collections::VecDeque;
 use std::{io, mem};
 
-use crate::stream::TiiConnectionStream;
+use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::{unwrap_poison, unwrap_some};
 use crate::{error_log, trace_log, warn_log};
@@ -19,27 +19,27 @@ use std::time::Duration;
 struct WebSocketGuard {
   closed: AtomicBool,
   write_mutex: Mutex<()>,
-  stream: Box<dyn TiiConnectionStream>,
+  stream: Box<dyn ConnectionStream>,
 }
 
 /// Sending side of a web socket
 #[derive(Debug, Clone)]
 #[repr(transparent)]
-pub struct TiiWebsocketSender(Arc<WebSocketGuard>);
+pub struct WebsocketSender(Arc<WebSocketGuard>);
 
 /// Creates a new WebSocket receiver sender pair.
 pub fn new_web_socket_stream(
-  connection: &dyn TiiConnectionStream,
-) -> (TiiWebsocketSender, TiiWebsocketReceiver) {
+  connection: &dyn ConnectionStream,
+) -> (WebsocketSender, WebsocketReceiver) {
   let guard = Arc::new(WebSocketGuard {
     closed: AtomicBool::new(false),
     write_mutex: Mutex::new(()),
     stream: connection.new_ref(),
   });
 
-  let sender = TiiWebsocketSender(guard.clone());
+  let sender = WebsocketSender(guard.clone());
 
-  let receiver = TiiWebsocketReceiver {
+  let receiver = WebsocketReceiver {
     guard,
     state: Vec::new(),
     cursor: Default::default(),
@@ -49,7 +49,7 @@ pub fn new_web_socket_stream(
   (sender, receiver)
 }
 
-impl TiiWebsocketSender {
+impl WebsocketSender {
   /// returns true if this web socket sender refers to a closed web socket.
   #[must_use]
   pub fn is_closed(&self) -> bool {
@@ -57,12 +57,12 @@ impl TiiWebsocketSender {
   }
 
   /// Sends a message to the client.
-  pub fn send(&self, message: TiiWebsocketMessage) -> TiiResult<()> {
+  pub fn send(&self, message: WebsocketMessage) -> TiiResult<()> {
     match message {
-      TiiWebsocketMessage::Text(txt) => self.text(txt),
-      TiiWebsocketMessage::Binary(bin) => self.binary(bin),
-      TiiWebsocketMessage::Ping => self.ping(),
-      TiiWebsocketMessage::Pong => self.pong(),
+      WebsocketMessage::Text(txt) => self.text(txt),
+      WebsocketMessage::Binary(bin) => self.binary(bin),
+      WebsocketMessage::Ping => self.ping(),
+      WebsocketMessage::Pong => self.pong(),
     }
   }
 
@@ -110,25 +110,25 @@ impl TiiWebsocketSender {
 
 /// Receiving side of a web socket
 #[derive(Debug)]
-pub struct TiiWebsocketReceiver {
+pub struct WebsocketReceiver {
   guard: Arc<WebSocketGuard>,
   state: Vec<Frame>,
   cursor: Cursor<Vec<u8>>,
-  unhandled_messages: VecDeque<TiiWebsocketMessage>,
+  unhandled_messages: VecDeque<WebsocketMessage>,
 }
 
 /// Return enum for the fn WebsocketReceiver::read_message_timeout
 #[derive(Debug)]
-pub enum TiiReadMessageTimeoutResult {
+pub enum ReadMessageTimeoutResult {
   /// We got a message without running into any timeout
-  Message(TiiWebsocketMessage),
+  Message(WebsocketMessage),
   /// We got a timeout before the first byte of the next message was received.
   Timeout,
   /// We received the Close 'Message' without running into any timeout
   Closed,
 }
 
-impl TiiWebsocketReceiver {
+impl WebsocketReceiver {
   /// Closes the Websocket sending the close frame to the client.
   pub fn close(&self) -> TiiResult<()> {
     let _g = unwrap_poison(self.guard.write_mutex.lock())?;
@@ -143,13 +143,13 @@ impl TiiWebsocketReceiver {
   /// If the WebsocketReceiver is used with the "io::Read" trait then
   /// any ping/pong messages received are not handled. They are instead queued.
   /// This fn pop_front's the head of the queue.
-  pub fn unhandled(&mut self) -> Option<TiiWebsocketMessage> {
+  pub fn unhandled(&mut self) -> Option<WebsocketMessage> {
     self.unhandled_messages.pop_front()
   }
 
   /// receive the next complete message.
   /// Ok(None) indicates that the web socket is closed.
-  pub fn read_message(&mut self) -> TiiResult<Option<TiiWebsocketMessage>> {
+  pub fn read_message(&mut self) -> TiiResult<Option<WebsocketMessage>> {
     if let Some(message) = self.unhandled_messages.pop_front() {
       return Ok(Some(message));
     }
@@ -173,14 +173,14 @@ impl TiiWebsocketReceiver {
   pub fn read_message_timeout(
     &mut self,
     timeout: Option<Duration>,
-  ) -> TiiResult<TiiReadMessageTimeoutResult> {
+  ) -> TiiResult<ReadMessageTimeoutResult> {
     if let Some(message) = self.unhandled_messages.pop_front() {
-      return Ok(TiiReadMessageTimeoutResult::Message(message));
+      return Ok(ReadMessageTimeoutResult::Message(message));
     }
 
     if self.guard.stream.available() == 0 {
       if self.guard.closed.load(SeqCst) {
-        return Ok(TiiReadMessageTimeoutResult::Closed);
+        return Ok(ReadMessageTimeoutResult::Closed);
       }
 
       let old_timeout = self.guard.stream.get_read_timeout()?.as_ref().cloned();
@@ -200,7 +200,7 @@ impl TiiWebsocketReceiver {
 
       if let Err(err) = res {
         if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) {
-          return Ok(TiiReadMessageTimeoutResult::Timeout);
+          return Ok(ReadMessageTimeoutResult::Timeout);
         }
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error while waiting for 1st byte of next frame {}", &err);
@@ -209,8 +209,8 @@ impl TiiWebsocketReceiver {
     }
 
     match self.read_next_frame() {
-      Ok(Some(message)) => Ok(TiiReadMessageTimeoutResult::Message(message)),
-      Ok(None) => Ok(TiiReadMessageTimeoutResult::Closed),
+      Ok(Some(message)) => Ok(ReadMessageTimeoutResult::Message(message)),
+      Ok(None) => Ok(ReadMessageTimeoutResult::Closed),
       Err(err) => Err(err),
     }
   }
@@ -218,7 +218,7 @@ impl TiiWebsocketReceiver {
   /// Attempts to read a message from the given stream.
   ///
   /// Silently responds to pings with pongs, as specified in [RFC 6455 Section 5.5.2](https://datatracker.ietf.org/doc/html/rfc6455#section-5.5.2).
-  fn read_next_frame(&mut self) -> TiiResult<Option<TiiWebsocketMessage>> {
+  fn read_next_frame(&mut self) -> TiiResult<Option<WebsocketMessage>> {
     if self.guard.closed.load(SeqCst) {
       return Ok(None);
     }
@@ -232,11 +232,11 @@ impl TiiWebsocketReceiver {
       })?;
 
       if frame.opcode == Opcode::Ping {
-        return Ok(Some(TiiWebsocketMessage::Ping));
+        return Ok(Some(WebsocketMessage::Ping));
       }
 
       if frame.opcode == Opcode::Pong {
-        return Ok(Some(TiiWebsocketMessage::Pong));
+        return Ok(Some(WebsocketMessage::Pong));
       }
 
       if frame.opcode == Opcode::Close {
@@ -277,9 +277,9 @@ impl TiiWebsocketReceiver {
           ))
         })?;
 
-        Ok(Some(TiiWebsocketMessage::Text(payload)))
+        Ok(Some(WebsocketMessage::Text(payload)))
       }
-      Opcode::Binary => Ok(Some(TiiWebsocketMessage::Binary(payload))),
+      Opcode::Binary => Ok(Some(WebsocketMessage::Binary(payload))),
       _ => {
         self.guard.closed.store(true, SeqCst);
         Err(TiiError::RequestHeadParsing(RequestHeadParsingError::UnexpectedWebSocketOpcode))
@@ -288,7 +288,7 @@ impl TiiWebsocketReceiver {
   }
 }
 
-impl Read for TiiWebsocketReceiver {
+impl Read for WebsocketReceiver {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     loop {
       let cnt = self.cursor.read(buf)?;
@@ -321,7 +321,7 @@ impl Read for TiiWebsocketReceiver {
   }
 }
 
-impl Write for TiiWebsocketSender {
+impl Write for WebsocketSender {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
     if self.0.closed.load(SeqCst) {
       return Err(io::Error::from(ErrorKind::ConnectionReset));

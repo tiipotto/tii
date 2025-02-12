@@ -1,12 +1,12 @@
 //! Provides a basic cookie implementation according to [RFC 6265](http://tools.ietf.org/html/rfc6265).
 
-use crate::http::headers::TiiHttpHeader;
+use crate::http::headers::HttpHeader;
 
 use std::time::Duration;
 
 /// Represents an HTTP cookie as in the `Cookie` header.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TiiCookie {
+pub struct Cookie {
   /// The name of the cookie.
   pub name: String,
   /// The value of the cookie.
@@ -17,7 +17,7 @@ pub struct TiiCookie {
 ///
 /// Contains additional information about the cookie, such as its expiration.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TiiSetCookie {
+pub struct SetCookie {
   /// The name of the cookie.
   pub name: String,
   /// The value of the cookie.
@@ -35,12 +35,12 @@ pub struct TiiSetCookie {
   /// Whether the cookie is HTTP-only.
   pub http_only: bool,
   /// The SameSite configuration of the cookie.
-  pub same_site: Option<TiiSameSite>,
+  pub same_site: Option<SameSite>,
 }
 
 /// Represents the SameSite value of the cookie.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TiiSameSite {
+pub enum SameSite {
   /// Cookies will only be sent in a first-party context and not be sent along with requests
   ///   initiated by third party websites.
   Strict,
@@ -53,14 +53,14 @@ pub enum TiiSameSite {
   None,
 }
 
-impl TiiCookie {
+impl Cookie {
   /// Create a new cookie with the given name and value.
   pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
     Self { name: name.as_ref().to_string(), value: value.as_ref().to_string() }
   }
 
   /// Convert a collection of cookies into a `Cookie` header.
-  pub fn to_header(cookies: impl AsRef<[TiiCookie]>) -> Option<TiiHttpHeader> {
+  pub fn to_header(cookies: impl AsRef<[Cookie]>) -> Option<HttpHeader> {
     let cookies = cookies.as_ref();
 
     if cookies.is_empty() {
@@ -76,11 +76,11 @@ impl TiiCookie {
       value.push_str("; ");
     }
 
-    Some(TiiHttpHeader::new("Cookie", &value[..value.len() - 2]))
+    Some(HttpHeader::new("Cookie", &value[..value.len() - 2]))
   }
 }
 
-impl TiiSetCookie {
+impl SetCookie {
   /// Create a new cookie with the given name and value.
   pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
     Self {
@@ -135,14 +135,14 @@ impl TiiSetCookie {
   }
 
   /// Set the SameSite configuration of the cookie.
-  pub fn with_same_site(mut self, same_site: TiiSameSite) -> Self {
+  pub fn with_same_site(mut self, same_site: SameSite) -> Self {
     self.same_site = Some(same_site);
     self
   }
 }
 
-impl From<TiiSetCookie> for TiiHttpHeader {
-  fn from(cookie: TiiSetCookie) -> Self {
+impl From<SetCookie> for HttpHeader {
+  fn from(cookie: SetCookie) -> Self {
     let mut value = format!("{}={}", cookie.name, cookie.value);
 
     if let Some(expires) = cookie.expires {
@@ -166,9 +166,9 @@ impl From<TiiSetCookie> for TiiHttpHeader {
         "{}; SameSite={}",
         value,
         match same_site {
-          TiiSameSite::Strict => "Strict",
-          TiiSameSite::Lax => "Lax",
-          TiiSameSite::None => "None",
+          SameSite::Strict => "Strict",
+          SameSite::Lax => "Lax",
+          SameSite::None => "None",
         }
       );
     }
@@ -181,6 +181,6 @@ impl From<TiiSetCookie> for TiiHttpHeader {
       value = format!("{}; HttpOnly", value);
     }
 
-    TiiHttpHeader::new("Set-Cookie", value)
+    HttpHeader::new("Set-Cookie", value)
   }
 }

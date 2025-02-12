@@ -3,7 +3,7 @@ pub mod builtin_endpoints;
 mod connector;
 
 pub(crate) use connector::CONNECTOR_SHUTDOWN_TIMEOUT;
-pub use {connector::ConnectorMeta, connector::TiiConnector};
+pub use {connector::ConnectorMeta, connector::Connector};
 
 #[cfg(unix)]
 mod unix_connector;

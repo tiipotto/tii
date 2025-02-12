@@ -1,20 +1,20 @@
 //! Contains the impl of the router.
 
 use crate::functional_traits::{
-  TiiHttpEndpoint, TiiRequestFilter, TiiResponseFilter, TiiRouter, TiiRouterFilter,
-  TiiRouterWebSocketServingResponse, TiiWebsocketEndpoint,
+  HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
+  RouterWebSocketServingResponse, WebsocketEndpoint,
 };
-use crate::stream::TiiConnectionStream;
+use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::TiiHttpHeaderName;
-use crate::TiiHttpMethod;
-use crate::TiiHttpVersion;
-use crate::TiiRequestContext;
+use crate::HttpHeaderName;
+use crate::HttpMethod;
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::{trace_log, util};
-use crate::{TiiAcceptMimeType, TiiQValue};
-use crate::{TiiResponse, TiiStatusCode};
+use crate::{AcceptMimeType, QValue};
+use crate::{Response, StatusCode};
 use base64::Engine;
 use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
@@ -149,49 +149,49 @@ impl PathPart {
 
 #[derive(Debug, Clone)]
 /// Encapsulates a route and its handler.
-pub struct TiiRouteable {
+pub struct Routeable {
   /// The route that this handler will match.
   path: String,
 
   parts: Vec<PathPart>,
 
   /// The method this route will handle
-  method: TiiHttpMethod,
+  method: HttpMethod,
 
   /// The mime types this route can consume
   /// EMPTY SET means this route does not expect a request body.
-  consumes: HashSet<TiiAcceptMimeType>,
+  consumes: HashSet<AcceptMimeType>,
 
   /// The mime types this route can produce
   /// EMPTY SET means this route will produce a matching body type.
-  produces: HashSet<TiiAcceptMimeType>,
+  produces: HashSet<AcceptMimeType>,
 }
 
 pub(crate) struct HttpRoute {
-  pub(crate) routeable: TiiRouteable,
+  pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
-  pub(crate) handler: Box<dyn TiiHttpEndpoint>,
+  pub(crate) handler: Box<dyn HttpEndpoint>,
 }
 
 pub(crate) struct WebSocketRoute {
-  pub(crate) routeable: TiiRouteable,
+  pub(crate) routeable: Routeable,
 
   /// The handler to run when the route is matched.
-  pub(crate) handler: Box<dyn TiiWebsocketEndpoint>,
+  pub(crate) handler: Box<dyn WebsocketEndpoint>,
 }
 
 impl HttpRoute {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<TiiHttpMethod>,
-    consumes: HashSet<TiiAcceptMimeType>,
-    produces: HashSet<TiiAcceptMimeType>,
-    route: impl TiiHttpEndpoint + 'static,
+    method: impl Into<HttpMethod>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+    route: impl HttpEndpoint + 'static,
   ) -> TiiResult<Self> {
     Ok(HttpRoute {
-      routeable: TiiRouteable::new(path, method, consumes, produces)?,
-      handler: Box::new(route) as Box<dyn TiiHttpEndpoint>,
+      routeable: Routeable::new(path, method, consumes, produces)?,
+      handler: Box::new(route) as Box<dyn HttpEndpoint>,
     })
   }
 }
@@ -199,23 +199,23 @@ impl HttpRoute {
 impl WebSocketRoute {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<TiiHttpMethod>,
-    consumes: HashSet<TiiAcceptMimeType>,
-    produces: HashSet<TiiAcceptMimeType>,
-    route: impl TiiWebsocketEndpoint + 'static,
+    method: impl Into<HttpMethod>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+    route: impl WebsocketEndpoint + 'static,
   ) -> TiiResult<Self> {
     Ok(WebSocketRoute {
-      routeable: TiiRouteable::new(path, method, consumes, produces)?,
-      handler: Box::new(route) as Box<dyn TiiWebsocketEndpoint>,
+      routeable: Routeable::new(path, method, consumes, produces)?,
+      handler: Box::new(route) as Box<dyn WebsocketEndpoint>,
     })
   }
 }
 
 /// Enum that shows information on how a particular request could be routed on a route.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum TiiRoutingDecision {
+pub enum RoutingDecision {
   /// Routing matches with the given quality and path params.
-  Match(TiiQValue, Option<HashMap<String, String>>),
+  Match(QValue, Option<HashMap<String, String>>),
   /// Path doesnt match.
   PathMismatch,
   /// Path matches, but method doesn't.
@@ -226,64 +226,64 @@ pub enum TiiRoutingDecision {
   AcceptMismatch,
 }
 
-impl Display for TiiRoutingDecision {
+impl Display for RoutingDecision {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     //TODO make this not shit
     Debug::fmt(self, f)
   }
 }
 
-impl PartialOrd for TiiRoutingDecision {
+impl PartialOrd for RoutingDecision {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for TiiRoutingDecision {
+impl Ord for RoutingDecision {
   fn cmp(&self, other: &Self) -> Ordering {
     match (self, other) {
-      (TiiRoutingDecision::Match(q1, _), TiiRoutingDecision::Match(q2, _)) => q1.cmp(q2),
-      (TiiRoutingDecision::Match(_, _), TiiRoutingDecision::PathMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::Match(_, _), TiiRoutingDecision::MethodMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::Match(_, _), TiiRoutingDecision::MimeMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::Match(_, _), TiiRoutingDecision::AcceptMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(q1, _), RoutingDecision::Match(q2, _)) => q1.cmp(q2),
+      (RoutingDecision::Match(_, _), RoutingDecision::PathMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::MethodMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::MimeMismatch) => Ordering::Greater,
+      (RoutingDecision::Match(_, _), RoutingDecision::AcceptMismatch) => Ordering::Greater,
 
-      (TiiRoutingDecision::PathMismatch, TiiRoutingDecision::Match(_, _)) => Ordering::Less,
-      (TiiRoutingDecision::PathMismatch, TiiRoutingDecision::PathMismatch) => Ordering::Equal,
-      (TiiRoutingDecision::PathMismatch, TiiRoutingDecision::MethodMismatch) => Ordering::Less,
-      (TiiRoutingDecision::PathMismatch, TiiRoutingDecision::MimeMismatch) => Ordering::Less,
-      (TiiRoutingDecision::PathMismatch, TiiRoutingDecision::AcceptMismatch) => Ordering::Less,
+      (RoutingDecision::PathMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
+      (RoutingDecision::PathMismatch, RoutingDecision::PathMismatch) => Ordering::Equal,
+      (RoutingDecision::PathMismatch, RoutingDecision::MethodMismatch) => Ordering::Less,
+      (RoutingDecision::PathMismatch, RoutingDecision::MimeMismatch) => Ordering::Less,
+      (RoutingDecision::PathMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (TiiRoutingDecision::MethodMismatch, TiiRoutingDecision::Match(_, _)) => Ordering::Less,
-      (TiiRoutingDecision::MethodMismatch, TiiRoutingDecision::PathMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::MethodMismatch, TiiRoutingDecision::MethodMismatch) => Ordering::Equal,
-      (TiiRoutingDecision::MethodMismatch, TiiRoutingDecision::MimeMismatch) => Ordering::Less,
-      (TiiRoutingDecision::MethodMismatch, TiiRoutingDecision::AcceptMismatch) => Ordering::Less,
+      (RoutingDecision::MethodMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
+      (RoutingDecision::MethodMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
+      (RoutingDecision::MethodMismatch, RoutingDecision::MethodMismatch) => Ordering::Equal,
+      (RoutingDecision::MethodMismatch, RoutingDecision::MimeMismatch) => Ordering::Less,
+      (RoutingDecision::MethodMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (TiiRoutingDecision::MimeMismatch, TiiRoutingDecision::Match(_, _)) => Ordering::Less,
-      (TiiRoutingDecision::MimeMismatch, TiiRoutingDecision::PathMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::MimeMismatch, TiiRoutingDecision::MethodMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::MimeMismatch, TiiRoutingDecision::MimeMismatch) => Ordering::Equal,
-      (TiiRoutingDecision::MimeMismatch, TiiRoutingDecision::AcceptMismatch) => Ordering::Less,
+      (RoutingDecision::MimeMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
+      (RoutingDecision::MimeMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
+      (RoutingDecision::MimeMismatch, RoutingDecision::MethodMismatch) => Ordering::Greater,
+      (RoutingDecision::MimeMismatch, RoutingDecision::MimeMismatch) => Ordering::Equal,
+      (RoutingDecision::MimeMismatch, RoutingDecision::AcceptMismatch) => Ordering::Less,
 
-      (TiiRoutingDecision::AcceptMismatch, TiiRoutingDecision::Match(_, _)) => Ordering::Less,
-      (TiiRoutingDecision::AcceptMismatch, TiiRoutingDecision::PathMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::AcceptMismatch, TiiRoutingDecision::MethodMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::AcceptMismatch, TiiRoutingDecision::MimeMismatch) => Ordering::Greater,
-      (TiiRoutingDecision::AcceptMismatch, TiiRoutingDecision::AcceptMismatch) => Ordering::Equal,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::Match(_, _)) => Ordering::Less,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::PathMismatch) => Ordering::Greater,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::MethodMismatch) => Ordering::Greater,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::MimeMismatch) => Ordering::Greater,
+      (RoutingDecision::AcceptMismatch, RoutingDecision::AcceptMismatch) => Ordering::Equal,
     }
   }
 }
 
-impl TiiRouteable {
+impl Routeable {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<TiiHttpMethod>,
-    consumes: HashSet<TiiAcceptMimeType>,
-    produces: HashSet<TiiAcceptMimeType>,
-  ) -> TiiResult<TiiRouteable> {
+    method: impl Into<HttpMethod>,
+    consumes: HashSet<AcceptMimeType>,
+    produces: HashSet<AcceptMimeType>,
+  ) -> TiiResult<Routeable> {
     let path = path.to_string();
-    Ok(TiiRouteable {
+    Ok(Routeable {
       parts: PathPart::parse(path.as_str())?,
       path,
       method: method.into(),
@@ -293,28 +293,28 @@ impl TiiRouteable {
   }
 
   /// The path for this route
-  pub fn path(&self) -> &str {
+  pub fn get_path(&self) -> &str {
     self.path.as_str()
   }
 
   /// The method for this route
-  pub fn method(&self) -> &TiiHttpMethod {
+  pub fn get_method(&self) -> &HttpMethod {
     &self.method
   }
 
   /// The mime types this route can consume
-  pub fn consumes(&self) -> &HashSet<TiiAcceptMimeType> {
+  pub fn get_consumes(&self) -> &HashSet<AcceptMimeType> {
     &self.consumes
   }
 
   /// The mime types this route can produce
-  pub fn produces(&self) -> &HashSet<TiiAcceptMimeType> {
+  pub fn get_produces(&self) -> &HashSet<AcceptMimeType> {
     &self.produces
   }
 
   fn matches_path(
     &self,
-    route: &TiiRequestContext,
+    route: &RequestContext,
     path_params: &mut Option<HashMap<String, String>>,
   ) -> bool {
     let mut request_path = route.request_head().get_path();
@@ -369,16 +369,16 @@ impl TiiRouteable {
 
   /// Checks whether this route matches the given one, respecting its own wildcards only.
   /// For example, `/blog/*` will match `/blog/my-first-post` but not the other way around.
-  pub fn matches(&self, route: &TiiRequestContext) -> TiiRoutingDecision {
+  pub fn matches(&self, route: &RequestContext) -> RoutingDecision {
     let head = route.request_head();
     let mut path_params = None;
 
     if !self.matches_path(route, &mut path_params) {
-      return TiiRoutingDecision::PathMismatch;
+      return RoutingDecision::PathMismatch;
     }
 
     if &self.method != head.get_method() {
-      return TiiRoutingDecision::MethodMismatch;
+      return RoutingDecision::MethodMismatch;
     }
 
     if let Some(content_type) = head.get_content_type() {
@@ -391,19 +391,19 @@ impl TiiRouteable {
       }
 
       if !found {
-        return TiiRoutingDecision::MimeMismatch;
+        return RoutingDecision::MimeMismatch;
       }
     }
 
     if self.produces.is_empty() {
       //The endpoint either doesn't produce a body or declares that it will produce a matching body...
-      return TiiRoutingDecision::Match(TiiQValue::MAX, path_params);
+      return RoutingDecision::Match(QValue::MAX, path_params);
     }
 
     let acc = head.get_accept();
     if acc.is_empty() {
       //The client doesn't accept a body.
-      return TiiRoutingDecision::MimeMismatch;
+      return RoutingDecision::MimeMismatch;
     }
 
     let mut current_q = None;
@@ -414,8 +414,8 @@ impl TiiRouteable {
         }
 
         let qvalue = accept.qvalue();
-        if qvalue == TiiQValue::MAX {
-          return TiiRoutingDecision::Match(qvalue, path_params);
+        if qvalue == QValue::MAX {
+          return RoutingDecision::Match(qvalue, path_params);
         }
 
         match &current_q {
@@ -432,10 +432,10 @@ impl TiiRouteable {
     }
 
     if let Some(qval) = current_q {
-      return TiiRoutingDecision::Match(qval, path_params);
+      return RoutingDecision::Match(qval, path_params);
     }
 
-    TiiRoutingDecision::AcceptMismatch
+    RoutingDecision::AcceptMismatch
   }
 }
 
@@ -452,24 +452,24 @@ impl Debug for WebSocketRoute {
 }
 
 /// Represents a sub-app to run for a specific host.
-pub(crate) struct BasicRouter {
+pub(crate) struct DefaultRouter {
   /// This filter/predicate will decide if the router should even serve the request at all
-  router_filter: Box<dyn TiiRouterFilter>,
+  router_filter: Box<dyn RouterFilter>,
 
   /// Filters that run before the route is matched.
   /// These filters may modify the path of the request to affect routing decision.
-  pre_routing_filters: Vec<Box<dyn TiiRequestFilter>>,
+  pre_routing_filters: Vec<Box<dyn RequestFilter>>,
 
   /// Filters that run once the routing decision has been made.
   /// These filters only run if there is an actual endpoint.
-  routing_filters: Vec<Box<dyn TiiRequestFilter>>,
+  routing_filters: Vec<Box<dyn RequestFilter>>,
 
   /// These filters run on the response after the actual endpoint (or the error handler) has been called.
-  response_filters: Vec<Box<dyn TiiResponseFilter>>,
+  response_filters: Vec<Box<dyn ResponseFilter>>,
 
   /// Contains all pathing information for websockets and normal http routes.
   /// This is essentially a union of routes and websocket_routes without the handler
-  routeables: Vec<TiiRouteable>,
+  routeables: Vec<Routeable>,
 
   /// The routes to process requests for and their handlers.
   routes: Vec<HttpRoute>,
@@ -491,7 +491,7 @@ pub(crate) struct BasicRouter {
   error_handler: ErrorHandler,
 }
 
-impl Debug for BasicRouter {
+impl Debug for DefaultRouter {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!("TiiRouter(pre_routing_filters={}, routing_filters={}, response_filters={}, routes={:?}, websocket_routes={})",
                                  self.pre_routing_filters.len(),
@@ -504,7 +504,7 @@ impl Debug for BasicRouter {
 }
 
 /// Performs the WebSocket handshake.
-fn websocket_handshake(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn websocket_handshake(request: &RequestContext) -> TiiResult<Response> {
   const HANDSHAKE_KEY_CONSTANT: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
   // Get the handshake key header
@@ -521,9 +521,9 @@ fn websocket_handshake(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
   //let sec_websocket_accept = sha1.encode();
 
   // Serialise the handshake response
-  let response = TiiResponse::new(TiiStatusCode::SwitchingProtocols)
-    .with_header(TiiHttpHeaderName::Upgrade, "websocket")?
-    .with_header(TiiHttpHeaderName::Connection, "Upgrade")?
+  let response = Response::new(StatusCode::SwitchingProtocols)
+    .with_header(HttpHeaderName::Upgrade, "websocket")?
+    .with_header(HttpHeaderName::Connection, "Upgrade")?
     .with_header("Sec-WebSocket-Accept", sec_websocket_accept)?;
 
   // Oddly enough I think you can establish a WS connection with a POST request that has data.
@@ -533,13 +533,13 @@ fn websocket_handshake(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
   Ok(response)
 }
 
-impl BasicRouter {
+impl DefaultRouter {
   #[expect(clippy::too_many_arguments)] //Only called by the builder.
   pub(crate) fn new(
-    router_filter: Box<dyn TiiRouterFilter>,
-    pre_routing_filters: Vec<Box<dyn TiiRequestFilter>>,
-    routing_filters: Vec<Box<dyn TiiRequestFilter>>,
-    response_filters: Vec<Box<dyn TiiResponseFilter>>,
+    router_filter: Box<dyn RouterFilter>,
+    pre_routing_filters: Vec<Box<dyn RequestFilter>>,
+    routing_filters: Vec<Box<dyn RequestFilter>>,
+    response_filters: Vec<Box<dyn ResponseFilter>>,
     routes: Vec<HttpRoute>,
     websocket_routes: Vec<WebSocketRoute>,
     not_found_handler: NotRouteableHandler,
@@ -574,14 +574,14 @@ impl BasicRouter {
 
   fn serve_ws(
     &self,
-    stream: &dyn TiiConnectionStream,
-    request: &mut TiiRequestContext,
-  ) -> TiiResult<TiiRouterWebSocketServingResponse> {
+    stream: &dyn ConnectionStream,
+    request: &mut RequestContext,
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     //TODO this fn is too long and has significant duplicate parts with normal http serving.
     //TODO consolidate both impls and split it into smaller sub fn's
 
     if !self.router_filter.filter(request)? {
-      return Ok(TiiRouterWebSocketServingResponse::NotHandled);
+      return Ok(RouterWebSocketServingResponse::NotHandled);
     }
 
     for filter in self.pre_routing_filters.iter() {
@@ -592,10 +592,10 @@ impl BasicRouter {
       };
 
       let resp = self.call_response_filters(request, resp)?;
-      return Ok(TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+      return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
     }
 
-    let mut best_decision = TiiRoutingDecision::PathMismatch;
+    let mut best_decision = RoutingDecision::PathMismatch;
     let mut best_handler = None;
 
     for handler in &self.websocket_routes {
@@ -605,9 +605,9 @@ impl BasicRouter {
       }
 
       best_decision = decision;
-      if let TiiRoutingDecision::Match(qv, _) = &best_decision {
+      if let RoutingDecision::Match(qv, _) = &best_decision {
         best_handler = Some(handler);
-        if qv == &TiiQValue::MAX {
+        if qv == &QValue::MAX {
           break;
         }
       }
@@ -625,26 +625,26 @@ impl BasicRouter {
         };
 
         let resp = self.call_response_filters(request, resp)?;
-        return Ok(TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+        return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
       }
 
       return match websocket_handshake(request) {
         Err(err) => {
           let resp = (self.error_handler)(request, err)?;
           let resp = self.call_response_filters(request, resp)?;
-          Ok(TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp))
+          Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp))
         }
         Ok(resp) => {
           let resp = self.call_response_filters(request, resp)?;
-          if resp.status_code != TiiStatusCode::SwitchingProtocols {
-            return Ok(TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+          if resp.status_code != StatusCode::SwitchingProtocols {
+            return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
           }
 
-          resp.write_to(TiiHttpVersion::Http11, stream)?; //Errors here are fatal
+          resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal
 
           let (sender, receiver) = crate::new_web_socket_stream(stream);
           handler.handler.serve(request, receiver, sender)?;
-          Ok(TiiRouterWebSocketServingResponse::HandledWithProtocolSwitch)
+          Ok(RouterWebSocketServingResponse::HandledWithProtocolSwitch)
         }
       };
     }
@@ -660,16 +660,16 @@ impl BasicRouter {
         self.call_response_filters(request, resp)?
       }
     };
-    Ok(TiiRouterWebSocketServingResponse::HandledWithoutProtocolSwitch(fallback_resp))
+    Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(fallback_resp))
   }
 
   fn handle_path_parameters(
     &self,
-    request: &mut TiiRequestContext,
-    best_decision: &TiiRoutingDecision,
+    request: &mut RequestContext,
+    best_decision: &RoutingDecision,
   ) {
     match best_decision {
-      TiiRoutingDecision::Match(_, path_params) => {
+      RoutingDecision::Match(_, path_params) => {
         if let Some(path_params) = path_params {
           for (key, value) in path_params {
             request.set_path_param(key, value);
@@ -682,9 +682,9 @@ impl BasicRouter {
 
   fn call_error_handler(
     &self,
-    request: &mut TiiRequestContext,
+    request: &mut RequestContext,
     error: TiiError,
-  ) -> TiiResult<TiiResponse> {
+  ) -> TiiResult<Response> {
     //TODO i am not 100% sure this is a good idea, but it probably is a good idea.
     //The only thing i could consider is having the default impl do this and outsource this responsibility to the user
     //Not doing this on io::Errors when reading the request body will cause stuff to break in a horrific manner.
@@ -695,7 +695,7 @@ impl BasicRouter {
     (self.error_handler)(request, error)
   }
 
-  fn serve_outer(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+  fn serve_outer(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     if !self.router_filter.filter(request)? {
       return Ok(None);
     }
@@ -708,23 +708,23 @@ impl BasicRouter {
 
   fn call_response_filters(
     &self,
-    request: &mut TiiRequestContext,
-    mut resp: TiiResponse,
-  ) -> TiiResult<TiiResponse> {
+    request: &mut RequestContext,
+    mut resp: Response,
+  ) -> TiiResult<Response> {
     for filter in self.response_filters.iter() {
       resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
     }
     Ok(resp)
   }
 
-  fn serve_inner(&self, request: &mut TiiRequestContext) -> TiiResult<TiiResponse> {
+  fn serve_inner(&self, request: &mut RequestContext) -> TiiResult<Response> {
     for filter in self.pre_routing_filters.iter() {
       if let Some(resp) = filter.filter(request)? {
         return Ok(resp);
       }
     }
 
-    let mut best_decision = TiiRoutingDecision::PathMismatch;
+    let mut best_decision = RoutingDecision::PathMismatch;
     let mut best_handler = None;
 
     for handler in &self.routes {
@@ -734,9 +734,9 @@ impl BasicRouter {
       }
 
       best_decision = decision;
-      if let TiiRoutingDecision::Match(qv, _) = &best_decision {
+      if let RoutingDecision::Match(qv, _) = &best_decision {
         best_handler = Some(handler);
-        if qv == &TiiQValue::MAX {
+        if qv == &QValue::MAX {
           break;
         }
       }
@@ -760,50 +760,50 @@ impl BasicRouter {
 
   fn invoke_appropriate_fallback_handler(
     &self,
-    request: &mut TiiRequestContext,
-    best_decision: &TiiRoutingDecision,
-  ) -> TiiResult<TiiResponse> {
+    request: &mut RequestContext,
+    best_decision: &RoutingDecision,
+  ) -> TiiResult<Response> {
     match best_decision {
-      TiiRoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routeables),
-      TiiRoutingDecision::MethodMismatch => {
+      RoutingDecision::PathMismatch => (self.not_found_handler)(request, &self.routeables),
+      RoutingDecision::MethodMismatch => {
         (self.method_not_allowed_handler)(request, &self.routeables)
       }
-      TiiRoutingDecision::MimeMismatch => {
+      RoutingDecision::MimeMismatch => {
         (self.unsupported_media_type_handler)(request, &self.routeables)
       }
-      TiiRoutingDecision::AcceptMismatch => {
+      RoutingDecision::AcceptMismatch => {
         (self.not_acceptable_handler)(request, &self.routeables)
       }
       // We found a handler! Why are we here?
-      TiiRoutingDecision::Match(_, _) => util::unreachable(),
+      RoutingDecision::Match(_, _) => util::unreachable(),
     }
   }
 }
 
-impl TiiRouter for BasicRouter {
-  fn serve(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+impl Router for DefaultRouter {
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     self.serve_outer(request)
   }
 
   fn serve_websocket(
     &self,
-    stream: &dyn TiiConnectionStream,
-    request: &mut TiiRequestContext,
-  ) -> TiiResult<TiiRouterWebSocketServingResponse> {
+    stream: &dyn ConnectionStream,
+    request: &mut RequestContext,
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     self.serve_ws(stream, request)
   }
 }
 
-impl TiiRouter for Arc<BasicRouter> {
-  fn serve(&self, request: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+impl Router for Arc<DefaultRouter> {
+  fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     Arc::as_ref(self).serve(request)
   }
 
   fn serve_websocket(
     &self,
-    stream: &dyn TiiConnectionStream,
-    request: &mut TiiRequestContext,
-  ) -> TiiResult<TiiRouterWebSocketServingResponse> {
+    stream: &dyn ConnectionStream,
+    request: &mut RequestContext,
+  ) -> TiiResult<RouterWebSocketServingResponse> {
     Arc::as_ref(self).serve_websocket(stream, request)
   }
 }

@@ -1,16 +1,16 @@
 use log::info;
-use tii::extras::{TiiConnector, TiiTcpConnector};
-use tii::TiiBuilder;
-use tii::TiiHttpMethod;
-use tii::TiiRequestContext;
-use tii::TiiResponse;
+use tii::extras::{Connector, TcpConnector};
+use tii::ServerBuilder;
+use tii::HttpMethod;
+use tii::RequestContext;
+use tii::Response;
 use tii::TiiResult;
-use tii::{TiiAcceptMimeType, TiiMimeType};
+use tii::{AcceptMimeType, MimeType};
 
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.
     builder.router(|router| {
       router
@@ -20,19 +20,19 @@ fn main() -> TiiResult<()> {
         .begin_get("/", |route| {
           route
             //
-            .produces(TiiMimeType::TextHtml)
-            .produces(TiiMimeType::TextPlain)
+            .produces(MimeType::TextHtml)
+            .produces(MimeType::TextPlain)
             .endpoint(home)
         })?
         //
         //build endpoint directly without any indents.
         .get("/contact")
-        .produces(TiiMimeType::TextHtml)
+        .produces(MimeType::TextHtml)
         .endpoint(contact)?
         // as you can see without this comment it would be hard to tell what belongs to which endpoint.
         .post("/ping")
-        .consumes(TiiAcceptMimeType::Wildcard)
-        .produces(TiiMimeType::ApplicationOctetStream)
+        .consumes(AcceptMimeType::Wildcard)
+        .produces(MimeType::ApplicationOctetStream)
         .endpoint(pong)?
         //If you do not desire any media type handling you can also use the "route" type of methods.
         // This endpoint is called for any normal http method and any media type.
@@ -40,7 +40,7 @@ fn main() -> TiiResult<()> {
         //Same but limited to http GET method
         .route_get("/only/get", echo_method)?
         // Tii also supports non-standard custom methods.
-        .route_method(TiiHttpMethod::from("QUERY"), "/custom/stuff", echo_method)?
+        .route_method(HttpMethod::from("QUERY"), "/custom/stuff", echo_method)?
         // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
         .route_get("/path/param/{key1}/{key2}/{regex:.*}", path_param)?
@@ -50,14 +50,14 @@ fn main() -> TiiResult<()> {
             .get("/closure/*")
             //You don't have to pass a function pointer, if your endpoint is tiny you can also do it in a closure
             //You do have to explicitly write out "&RequestContext" tho otherwise rust gets confused.
-            .endpoint(|ctx: &TiiRequestContext| {
-              TiiResponse::ok(
+            .endpoint(|ctx: &RequestContext| {
+              Response::ok(
                 format!("This is a closure to {}!", ctx.request_head().get_path()),
-                TiiMimeType::TextPlain,
+                MimeType::TextPlain,
               )
             })?
             .get("/*")
-            .produces(TiiMimeType::TextHtml)
+            .produces(MimeType::TextHtml)
             .endpoint(generic)
         })?
         // There 3 are not endpoints, they are filters etc.
@@ -68,45 +68,45 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TiiTcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
+  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
 
   Ok(())
 }
 
-fn pre_routing(req: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+fn pre_routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   info!("pre_routing {:?}", req);
   Ok(None)
 }
 
-fn routing(req: &mut TiiRequestContext) -> TiiResult<Option<TiiResponse>> {
+fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   info!("routing {:?}", req);
   Ok(None)
 }
 
-fn resp(req: &mut TiiRequestContext, mut resp: TiiResponse) -> TiiResult<TiiResponse> {
+fn resp(req: &mut RequestContext, mut resp: Response) -> TiiResult<Response> {
   info!("resp {:?}", req);
   resp.add_header("X-Magic", "true magic")?;
   Ok(resp)
 }
 
-fn home(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  Ok(TiiResponse::ok("<html><body><h1>Home</h1></body></html>", TiiMimeType::TextHtml))
+fn home(_: &RequestContext) -> TiiResult<Response> {
+  Ok(Response::ok("<html><body><h1>Home</h1></body></html>", MimeType::TextHtml))
 }
 
-fn contact(_: &TiiRequestContext) -> TiiResult<TiiResponse> {
-  Ok(TiiResponse::ok("<html><body><h1>Contact</h1></body></html>", TiiMimeType::TextHtml))
+fn contact(_: &RequestContext) -> TiiResult<Response> {
+  Ok(Response::ok("<html><body><h1>Contact</h1></body></html>", MimeType::TextHtml))
 }
 
-fn generic(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn generic(request: &RequestContext) -> TiiResult<Response> {
   let html = format!(
     "<html><body><h1>You just requested {}.</h1></body></html>",
     request.request_head().get_path()
   );
 
-  Ok(TiiResponse::ok(html, TiiMimeType::TextHtml))
+  Ok(Response::ok(html, MimeType::TextHtml))
 }
 
-fn pong(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
+fn pong(request: &RequestContext) -> TiiResult<Response> {
   let body = if let Some(body) = request.request_body() {
     let mut buffer = Vec::new();
     body.clone().read_to_end(&mut buffer)?;
@@ -115,17 +115,17 @@ fn pong(request: &TiiRequestContext) -> TiiResult<TiiResponse> {
     b"No Body".to_vec()
   };
 
-  Ok(TiiResponse::ok(body, TiiMimeType::ApplicationOctetStream))
+  Ok(Response::ok(body, MimeType::ApplicationOctetStream))
 }
 
-fn echo_method(request: &TiiRequestContext) -> TiiResponse {
-  TiiResponse::ok(request.request_head().get_method().as_str(), TiiMimeType::TextPlain)
+fn echo_method(request: &RequestContext) -> Response {
+  Response::ok(request.request_head().get_method().as_str(), MimeType::TextPlain)
 }
 
-fn path_param(request: &TiiRequestContext) -> TiiResponse {
+fn path_param(request: &RequestContext) -> Response {
   for (key, value) in request.get_path_params() {
     info!("path_param {} {}", key, value);
   }
 
-  TiiResponse::no_content()
+  Response::no_content()
 }

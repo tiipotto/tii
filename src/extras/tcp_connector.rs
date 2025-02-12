@@ -1,10 +1,10 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{ConnectorMeta, TiiConnector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{ConnectorMeta, Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{
-  DefaultThreadAdapter, TiiThreadAdapter, TiiThreadAdapterJoinHandle,
+  DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle,
 };
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
+use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
 use std::io;
@@ -15,19 +15,19 @@ use std::time::Duration;
 
 /// Represents a handle to the simple TCP Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
-pub struct TiiTcpConnector {
-  main_thread: Mutex<Option<TiiThreadAdapterJoinHandle>>,
+pub struct TcpConnector {
+  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
   inner: Arc<TcpConnectorInner>,
 }
 
 #[derive(Debug)]
 struct TcpConnectorInner {
-  thread_adapter: Arc<dyn TiiThreadAdapter>,
+  thread_adapter: Arc<dyn ThreadAdapter>,
   addr_string: String,
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl TcpConnectorInner {
@@ -150,7 +150,7 @@ impl TcpConnectorInner {
         }
 
         //Code for panic enjoyers
-        if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+        if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
@@ -181,7 +181,7 @@ impl TcpConnectorInner {
       }
 
       //Code for panic enjoyers
-      if let Some(Err(err)) = con.hdl.take().map(TiiThreadAdapterJoinHandle::join) {
+      if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
             "tcp_connector[{}]: connection {} thread panicked: {}",
@@ -247,7 +247,7 @@ impl TcpConnectorInner {
     }
   }
 }
-impl TiiConnector for TiiTcpConnector {
+impl Connector for TcpConnector {
   #[cfg(unix)]
   fn shutdown(&self) {
     self.inner.shutdown();
@@ -316,14 +316,14 @@ impl TiiConnector for TiiTcpConnector {
   }
 }
 
-impl TiiTcpConnector {
+impl TcpConnector {
   /// Creates a new tcp connector that is listening on the given addr.
   /// Return Err on error.
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    tii_server: Arc<TiiServer>,
-    thread_adapter: impl TiiThreadAdapter + 'static,
+    tii_server: Arc<Server>,
+    thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     let mut addr_string = String::new();
     let addr_in_vec = addr.to_socket_addrs()?.collect::<Vec<SocketAddr>>();
@@ -370,7 +370,7 @@ impl TiiTcpConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl ToSocketAddrs, tii_server: Arc<TiiServer>) -> TiiResult<Self> {
+  pub fn start_unpooled(addr: impl ToSocketAddrs, tii_server: Arc<Server>) -> TiiResult<Self> {
     Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }
