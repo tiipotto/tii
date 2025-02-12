@@ -297,10 +297,7 @@ impl RequestHead {
         version,
         headers,
         content_type: None,
-        accept: vec![AcceptQualityMimeType::from_mime(
-          MimeType::TextHtml,
-          QValue::default(),
-        )], // Http 0.9 only accepts html.
+        accept: vec![AcceptQualityMimeType::from_mime(MimeType::TextHtml, QValue::default())], // Http 0.9 only accepts html.
         status_line: status_line.to_string(),
       });
     }

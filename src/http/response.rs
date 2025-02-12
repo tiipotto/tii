@@ -76,10 +76,7 @@ impl Response {
   }
 
   /// HTTP 203 Non-Authoritative Information with body
-  pub fn non_authoritative(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn non_authoritative(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::NonAuthoritative)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
@@ -97,20 +94,14 @@ impl Response {
 
   /// HTTP 206 Partial Content
   /// Note: Content-Range header must still be set by the caller. TODO
-  pub fn partial_content(
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn partial_content(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::PartialContent)
       .with_body(body.into())
       .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 300 Multiple Choices
-  pub fn multiple_choices(
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn multiple_choices(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::MultipleChoices)
       .with_body(body.into())
       .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
@@ -215,10 +206,7 @@ impl Response {
   }
 
   /// HTTP 400 Bad Request
-  pub fn bad_request(
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn bad_request(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::BadRequest)
       .with_body(body.into())
       .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
@@ -235,10 +223,7 @@ impl Response {
   }
 
   /// HTTP 402 Payment Required with body
-  pub fn payment_required(
-    body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn payment_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::PaymentRequired)
       .with_body(body.into())
       .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())

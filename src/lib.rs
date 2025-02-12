@@ -25,7 +25,7 @@ pub use tii_server::*;
 #[cfg(feature = "tls")]
 mod tls_stream;
 #[cfg(feature = "tls")]
-pub use tls_stream::{TlsStream, TlsCapableStream};
+pub use tls_stream::{TlsCapableStream, TlsStream};
 
 /// Extra utilities that can be useful for many projects but should not be part of tii itself.
 /// This stuff might be moved to its own crate at some point.

@@ -117,14 +117,8 @@ impl<T> WsbEventHandler for T where T: Fn(WsbHandle) + Send + Sync + 'static {}
 ///    handle.send(WebsocketMessage::new_text("Message received."));
 /// }
 /// ```
-pub trait WsbMessageHandler:
-  Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static
-{
-}
-impl<T> WsbMessageHandler for T where
-  T: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static
-{
-}
+pub trait WsbMessageHandler: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static {}
+impl<T> WsbMessageHandler for T where T: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static {}
 
 impl Default for WsbAppBuilder {
   fn default() -> Self {
@@ -159,9 +153,7 @@ impl WsbAppBuilder {
   /// Add this endpoint to a websocket route in a TiiBuilder.
   pub fn endpoint(&self) -> impl WebsocketEndpoint {
     let hook = self.tii_link.clone();
-    move |request: &RequestContext,
-          receiver: WebsocketReceiver,
-          sender: WebsocketSender| {
+    move |request: &RequestContext, receiver: WebsocketReceiver, sender: WebsocketSender| {
       let hook = util::unwrap_poison(hook.lock());
       Ok(hook?.send((receiver, sender, request.peer_address().to_string()))?)
     }

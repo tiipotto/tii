@@ -1,8 +1,8 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::ServerBuilder;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 
 mod mock_stream;

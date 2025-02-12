@@ -109,8 +109,8 @@ fn test_acceptable() {
     AcceptMimeType::parse("audio/*").unwrap()
   );
   assert_eq!(
-      AcceptMimeType::Specific(MimeType::ApplicationJson),
-      AcceptMimeType::parse("application/json").unwrap()
+    AcceptMimeType::Specific(MimeType::ApplicationJson),
+    AcceptMimeType::parse("application/json").unwrap()
   );
   assert!(AcceptMimeType::parse("no*/fun*").is_none());
   assert!(AcceptMimeType::parse("application/fun*").is_none());
@@ -125,24 +125,18 @@ fn test_acceptable_permits_group() {
   assert!(!AcceptMimeType::from(MimeGroup::Audio).permits_group(MimeGroup::Video));
   assert!(AcceptMimeType::Wildcard.permits_group(MimeGroup::Video));
   assert!(AcceptMimeType::Wildcard.permits_group(MimeGroup::Audio));
-  assert!(
-    !AcceptMimeType::from(MimeType::ApplicationJson).permits_group(MimeGroup::Application)
-  );
+  assert!(!AcceptMimeType::from(MimeType::ApplicationJson).permits_group(MimeGroup::Application));
   assert!(!AcceptMimeType::from(MimeType::ApplicationJson).permits_group(MimeGroup::Video));
   assert!(AcceptMimeType::from(MimeGroup::parse("fubar").unwrap())
     .permits_group(MimeGroup::parse("fubar").unwrap()));
-  assert!(!AcceptMimeType::from(MimeGroup::parse("fubar").unwrap())
-    .permits_group(MimeGroup::Video));
+  assert!(!AcceptMimeType::from(MimeGroup::parse("fubar").unwrap()).permits_group(MimeGroup::Video));
 }
 
 #[test]
 fn test_acceptable_permits() {
-  assert!(AcceptMimeType::from(MimeGroup::Video)
-    .permits(AcceptMimeType::from(MimeType::VideoMp4)));
-  assert!(AcceptMimeType::from(MimeGroup::Video)
-    .permits(AcceptMimeType::from(MimeGroup::Video)));
-  assert!(AcceptMimeType::from(MimeGroup::Video)
-    .permits(AcceptMimeType::from(MimeGroup::Video)));
+  assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeType::VideoMp4)));
+  assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeGroup::Video)));
+  assert!(AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::from(MimeGroup::Video)));
   assert!(!AcceptMimeType::from(MimeGroup::Video).permits(AcceptMimeType::Wildcard));
   assert!(AcceptMimeType::Wildcard.permits(AcceptMimeType::Wildcard));
 }
@@ -162,8 +156,8 @@ fn test_acceptable_display_and_parse() {
   }
 
   assert_eq!(
-      AcceptMimeType::parse(AcceptMimeType::Wildcard.to_string()).unwrap(),
-      AcceptMimeType::Wildcard
+    AcceptMimeType::parse(AcceptMimeType::Wildcard.to_string()).unwrap(),
+    AcceptMimeType::Wildcard
   )
 }
 
@@ -220,20 +214,13 @@ fn test_accept_q_display_and_parse() {
     assert!(!parsed.is_specific());
   }
 
-  assert_eq!(
-    AcceptQualityMimeType::default(),
-    AcceptQualityMimeType::wildcard(QValue::default())
-  );
+  assert_eq!(AcceptQualityMimeType::default(), AcceptQualityMimeType::wildcard(QValue::default()));
 }
 
 #[test]
 fn test_accept_q_edge() {
   assert_eq!(
-    AcceptQualityMimeType::parse("application/json;q=0.500")
-      .unwrap()
-      .into_iter()
-      .next()
-      .unwrap(),
+    AcceptQualityMimeType::parse("application/json;q=0.500").unwrap().into_iter().next().unwrap(),
     AcceptQualityMimeType::from_mime(MimeType::ApplicationJson, QValue::from_clamped(500))
   );
   assert!(AcceptQualityMimeType::parse("application/json;sad=0.500").is_none());
@@ -268,7 +255,7 @@ fn test_mime_type2group() {
   }
 
   assert_eq!(
-      MimeGroup::from(MimeType::parse("application/dubdub").unwrap()),
-      MimeGroup::parse("application/dubdub").unwrap()
+    MimeGroup::from(MimeType::parse("application/dubdub").unwrap()),
+    MimeGroup::parse("application/dubdub").unwrap()
   );
 }

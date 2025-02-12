@@ -1,8 +1,8 @@
 use crate::mock_stream::MockStream;
-use tii::ServerBuilder;
 use tii::HttpVersion;
 use tii::RequestContext;
 use tii::ResponseBody;
+use tii::ServerBuilder;
 use tii::TiiResult;
 use tii::{Response, StatusCode};
 
@@ -18,10 +18,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   }
   assert_eq!(ctx.get_path_param("regex2"), Some("hello/world"));
 
-  Ok(
-    Response::new(StatusCode::OK)
-      .with_body(ResponseBody::from(format!("Okay! {}", regex1))),
-  )
+  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from(format!("Okay! {}", regex1))))
 }
 
 #[test]

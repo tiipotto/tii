@@ -663,11 +663,7 @@ impl DefaultRouter {
     Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(fallback_resp))
   }
 
-  fn handle_path_parameters(
-    &self,
-    request: &mut RequestContext,
-    best_decision: &RoutingDecision,
-  ) {
+  fn handle_path_parameters(&self, request: &mut RequestContext, best_decision: &RoutingDecision) {
     match best_decision {
       RoutingDecision::Match(_, path_params) => {
         if let Some(path_params) = path_params {
@@ -771,9 +767,7 @@ impl DefaultRouter {
       RoutingDecision::MimeMismatch => {
         (self.unsupported_media_type_handler)(request, &self.routeables)
       }
-      RoutingDecision::AcceptMismatch => {
-        (self.not_acceptable_handler)(request, &self.routeables)
-      }
+      RoutingDecision::AcceptMismatch => (self.not_acceptable_handler)(request, &self.routeables),
       // We found a handler! Why are we here?
       RoutingDecision::Match(_, _) => util::unreachable(),
     }

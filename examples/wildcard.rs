@@ -1,8 +1,8 @@
 use tii::extras::{Connector, TcpConnector};
-use tii::ServerBuilder;
 use tii::MimeType;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 
 const HTML: &str = r##"

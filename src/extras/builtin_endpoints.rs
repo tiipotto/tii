@@ -24,24 +24,19 @@ fn try_file_open(path: &PathBuf) -> TiiResult<Response> {
   let mime = MimeType::from_extension(
     path.extension().map(|a| a.to_string_lossy().to_string()).unwrap_or("".to_string()).as_str(),
   );
-  Ok(
-    File::open(path)
-      .and_then(ResponseBody::from_file)
-      .map(|a| Response::ok(a, mime))
-      .or_else(|e| {
-        if e.kind() == ErrorKind::NotFound {
-          Ok(Response::not_found_no_body())
-        } else {
-          Err(e)
-        }
-      })?,
-  )
+  Ok(File::open(path).and_then(ResponseBody::from_file).map(|a| Response::ok(a, mime)).or_else(
+    |e| {
+      if e.kind() == ErrorKind::NotFound {
+        Ok(Response::not_found_no_body())
+      } else {
+        Err(e)
+      }
+    },
+  )?)
 }
 
 /// Serve the specified file, or a default error 404 if not found.
-pub fn serve_file(
-  file_path: &'static str,
-) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   let path_buf = PathBuf::from(file_path);
 
   move |_| try_file_open(&path_buf)
@@ -78,9 +73,7 @@ pub fn serve_as_file_path(
 /// Respects index files with the following rules:
 ///   - requests to `/directory` will return either the file `directory`, 301 redirect to `/directory/` if it is a directory, or return 404
 ///   - requests to `/directory/` will return either the file `/directory/index.html` or `/directory/index.htm`, or return 404
-pub fn serve_dir(
-  directory_path: &'static str,
-) -> impl Fn(&RequestContext) -> TiiResult<Response> {
+pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
@@ -94,12 +87,10 @@ pub fn serve_dir(
 
     if let Some(located) = located {
       match located {
-        LocatedPath::Directory => {
-          Ok(Response::new(StatusCode::MovedPermanently).with_header(
-            HttpHeaderName::Location,
-            format!("{}/", &request.request_head().get_path()),
-          )?)
-        }
+        LocatedPath::Directory => Ok(Response::new(StatusCode::MovedPermanently).with_header(
+          HttpHeaderName::Location,
+          format!("{}/", &request.request_head().get_path()),
+        )?),
         LocatedPath::File(path) => try_file_open(&path),
       }
     } else {

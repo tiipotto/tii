@@ -177,7 +177,7 @@ mod test {
   #![allow(clippy::unusual_byte_groupings)]
   #![allow(dead_code)]
 
-  use crate::stream::{IntoConnectionStream, ConnectionStream};
+  use crate::stream::{ConnectionStream, IntoConnectionStream};
   use crate::websocket::frame::{Frame, Opcode};
   use std::collections::VecDeque;
   use std::io::{Read, Write};

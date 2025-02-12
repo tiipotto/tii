@@ -72,11 +72,7 @@ impl Headers {
 
   /// Replaces all header values with a single header.
   /// The returned Vec contains the removed values. is len() == 0 if there were none.
-  pub fn replace_all(
-    &mut self,
-    name: impl AsRef<str>,
-    value: impl AsRef<str>,
-  ) -> Vec<HttpHeader> {
+  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Vec<HttpHeader> {
     let mut hcopy = Vec::with_capacity(self.len());
     let mut hrem = Vec::new();
     std::mem::swap(&mut self.0, &mut hcopy);

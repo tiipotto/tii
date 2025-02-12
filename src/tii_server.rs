@@ -4,7 +4,7 @@
 
 use crate::functional_traits::Router;
 use crate::http::{Response, StatusCode};
-use crate::stream::{IntoConnectionStream, ConnectionStream};
+use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
 use crate::HttpHeaderName;
@@ -347,11 +347,7 @@ impl Server {
     Ok(())
   }
 
-  fn fallback_error_handler(
-    &self,
-    request: &mut RequestContext,
-    error: TiiError,
-  ) -> Response {
+  fn fallback_error_handler(&self, request: &mut RequestContext, error: TiiError) -> Response {
     request.force_connection_close();
 
     error_log!(

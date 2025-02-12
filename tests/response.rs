@@ -7,8 +7,8 @@ use tii::StatusCode;
 use tii::{SameSite, SetCookie};
 
 use std::time::Duration;
-use tii::IntoConnectionStream;
 use tii::HttpVersion;
+use tii::IntoConnectionStream;
 use tii::{ResponseBody, ResponseBodySink};
 
 #[test]

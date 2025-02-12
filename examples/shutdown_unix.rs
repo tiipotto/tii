@@ -8,10 +8,10 @@ mod unix {
   use std::thread::sleep;
   use std::time::Duration;
   use tii::extras::{Connector, UnixConnector};
-  use tii::ServerBuilder;
   use tii::MimeType;
   use tii::RequestContext;
   use tii::Response;
+  use tii::ServerBuilder;
   use tii::TiiResult;
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {

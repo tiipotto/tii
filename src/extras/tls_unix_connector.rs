@@ -1,5 +1,5 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{ConnectorMeta, Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;

@@ -1,8 +1,6 @@
 use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
 use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
-use crate::functional_traits::{
-  DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle,
-};
+use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log, TlsStream};
@@ -408,9 +406,9 @@ impl TlsTcpConnector {
   ///
   /// Threads are created using "thread::Builder::new().spawn"
   pub fn start_unpooled(
-      addr: impl ToSocketAddrs,
-      config: Arc<ServerConfig>,
-      tii_server: Arc<Server>,
+    addr: impl ToSocketAddrs,
+    config: Arc<ServerConfig>,
+    tii_server: Arc<Server>,
   ) -> TiiResult<Self> {
     Self::start(addr, tii_server, config, DefaultThreadAdapter)
   }

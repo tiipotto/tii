@@ -36,8 +36,7 @@ use crate::RequestContext;
 pub type ErrorHandler = fn(&mut RequestContext, TiiError) -> TiiResult<Response>;
 
 /// Handler for request that couldn't route for some reason.
-pub type NotRouteableHandler =
-  fn(&mut RequestContext, &[Routeable]) -> TiiResult<Response>;
+pub type NotRouteableHandler = fn(&mut RequestContext, &[Routeable]) -> TiiResult<Response>;
 
 /// Fallback handler if no router handled the request.
 pub type NotFoundHandler = fn(&mut RequestContext) -> TiiResult<Response>;

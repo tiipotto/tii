@@ -5,11 +5,11 @@ use rustls_pemfile::{certs, private_key};
 use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 use tii::extras;
-use tii::extras::{ConnectorMeta, Connector};
-use tii::ServerBuilder;
+use tii::extras::{Connector, ConnectorMeta};
 use tii::MimeType;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 
 fn load_certs() -> Vec<CertificateDer<'static>> {
@@ -40,7 +40,8 @@ fn create_rust_tls_server_config() -> Arc<ServerConfig> {
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Debug).init();
 
-  let app = ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
+  let app =
+    ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
   let config = create_rust_tls_server_config();
 
   //Non Tls connectors
@@ -70,13 +71,9 @@ fn tls_route(ctx: &RequestContext) -> Response {
 
   match ctx.get_stream_meta::<ConnectorMeta>() {
     Some(meta) => match meta {
-      ConnectorMeta::TlsTcp => {
-        Response::ok("Tls Connection via Tcp socket", MimeType::TextPlain)
-      }
+      ConnectorMeta::TlsTcp => Response::ok("Tls Connection via Tcp socket", MimeType::TextPlain),
       #[cfg(unix)]
-      ConnectorMeta::TlsUnix => {
-        Response::ok("Tls Connection via Unix socket", MimeType::TextPlain)
-      }
+      ConnectorMeta::TlsUnix => Response::ok("Tls Connection via Unix socket", MimeType::TextPlain),
       ConnectorMeta::Tcp => {
         Response::forbidden("Plain text Connection via Tcp socket", MimeType::TextPlain)
       }
@@ -86,10 +83,7 @@ fn tls_route(ctx: &RequestContext) -> Response {
         Response::forbidden("Plain text Connection via Unix socket", MimeType::TextPlain)
       }
 
-      _ => Response::forbidden(
-        format!("Connection type {meta} is not known"),
-        MimeType::TextPlain,
-      ),
+      _ => Response::forbidden(format!("Connection type {meta} is not known"), MimeType::TextPlain),
     },
     None => Response::forbidden("Connection type not known", MimeType::TextPlain),
   }

@@ -1,9 +1,9 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::ServerBuilder;
 use tii::MimeType;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 
 mod mock_stream;
@@ -88,8 +88,10 @@ pub fn tc35_5() {
 
 #[test]
 pub fn tc35_6() {
-  let server =
-    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route2)).expect("ERR").build();
+  let server = ServerBuilder::default()
+    .router(|rt| rt.route_any("/dummy", dummy_route2))
+    .expect("ERR")
+    .build();
 
   let stream = MockStream::with_str("GET /dummy?a!=!&b!=a! HTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();

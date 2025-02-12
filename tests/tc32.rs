@@ -1,9 +1,9 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::ServerBuilder;
 use tii::HttpHeaderName;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 use tii::{AcceptQualityMimeType, MimeType};
 

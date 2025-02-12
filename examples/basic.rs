@@ -1,9 +1,9 @@
 use log::info;
 use tii::extras::{Connector, TcpConnector};
-use tii::ServerBuilder;
 use tii::HttpMethod;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiResult;
 use tii::{AcceptMimeType, MimeType};
 

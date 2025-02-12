@@ -1,8 +1,8 @@
 use crate::mock_stream::MockStream;
-use tii::ServerBuilder;
 use tii::HttpVersion;
 use tii::RequestContext;
 use tii::ResponseBody;
+use tii::ServerBuilder;
 use tii::TiiResult;
 use tii::{Response, StatusCode};
 

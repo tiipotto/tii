@@ -8,8 +8,8 @@ use tii::{HttpHeader, HttpHeaderName};
 
 use std::collections::VecDeque;
 use std::iter::FromIterator;
-use tii::IntoConnectionStream;
 use tii::HttpVersion;
+use tii::IntoConnectionStream;
 
 #[allow(deprecated)]
 #[test]

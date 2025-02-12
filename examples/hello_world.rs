@@ -1,9 +1,9 @@
 use std::net::TcpListener;
 use std::time::Duration;
-use tii::ServerBuilder;
 use tii::MimeType;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
 
 fn hello_world(request: &RequestContext) -> Response {
   let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());

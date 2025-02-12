@@ -257,18 +257,16 @@ impl AcceptQualityMimeType {
             }
             None => return None,
           },
-          Some(mime) => data
-            .push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q: qvalue }),
+          Some(mime) => {
+            data.push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q: qvalue })
+          }
         };
 
         continue;
       }
 
       if mime == "*/*" {
-        data.push(AcceptQualityMimeType {
-          value: AcceptMimeType::Wildcard,
-          q: QValue::default(),
-        });
+        data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: QValue::default() });
         continue;
       }
 

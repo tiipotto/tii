@@ -1,8 +1,8 @@
 use crate::mock_stream::MockStream;
-use tii::ServerBuilder;
-use tii::TiiError;
 use tii::RequestContext;
 use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiError;
 use tii::{RequestHeadParsingError, TiiResult};
 
 mod mock_stream;

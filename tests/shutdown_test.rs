@@ -7,10 +7,10 @@ mod inner {
   use std::time::Duration;
   use tii::extras;
   use tii::extras::Connector;
-  use tii::ServerBuilder;
   use tii::MimeType;
   use tii::RequestContext;
   use tii::Response;
+  use tii::ServerBuilder;
   use tii::TiiResult;
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {
