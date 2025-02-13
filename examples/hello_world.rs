@@ -1,16 +1,16 @@
 use std::net::TcpListener;
 use std::time::Duration;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
 
 fn hello_world(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().path());
+  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
   Response::ok(response_body, MimeType::TextPlain)
 }
 fn main() {
-  let tii_server = TiiBuilder::builder(|builder| {
+  let tii_server = ServerBuilder::builder(|builder| {
     builder
       .router(|router| router.route_get("/*", hello_world))?
       .with_keep_alive_timeout(Some(Duration::ZERO)) //We disable http keep alive.

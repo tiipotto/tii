@@ -1,6 +1,6 @@
 //! Contains all state that's needed to process a request.
 
-use crate::http::headers::HeaderName;
+use crate::http::headers::HttpHeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
 use crate::http::RequestHead;
@@ -49,7 +49,7 @@ impl RequestContext {
 
     let req = RequestHead::new(stream, max_head_buffer_size)?;
 
-    if req.version() == HttpVersion::Http09 {
+    if req.get_version() == HttpVersion::Http09 {
       return Ok(RequestContext {
         id,
         peer_address,
@@ -64,8 +64,8 @@ impl RequestContext {
       });
     }
 
-    if req.version() == HttpVersion::Http11 {
-      match req.get_header(&HeaderName::TransferEncoding) {
+    if req.get_version() == HttpVersion::Http11 {
+      match req.get_header(&HttpHeaderName::TransferEncoding) {
         Some("chunked") => {
           let body = RequestBody::new_chunked(stream.new_ref_read());
           return Ok(RequestContext {
@@ -90,12 +90,12 @@ impl RequestContext {
       }
     }
 
-    if let Some(content_length) = req.get_header(&HeaderName::ContentLength) {
+    if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
         TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
       })?;
 
-      let is_http_10 = req.version() == HttpVersion::Http10;
+      let is_http_10 = req.get_version() == HttpVersion::Http10;
 
       if content_length == 0 {
         return Ok(RequestContext {

@@ -4,17 +4,17 @@ use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
   RouterWebSocketServingResponse, WebsocketEndpoint,
 };
-use crate::http::headers::HeaderName;
-use crate::http::method::Method;
-use crate::http::mime::{AcceptMimeType, QValue};
-use crate::http::request::HttpVersion;
-use crate::http::request_context::RequestContext;
-use crate::http::{Response, StatusCode};
 use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
+use crate::HttpHeaderName;
+use crate::HttpMethod;
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::{trace_log, util};
+use crate::{AcceptMimeType, QValue};
+use crate::{Response, StatusCode};
 use base64::Engine;
 use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
@@ -156,7 +156,7 @@ pub struct Routeable {
   parts: Vec<PathPart>,
 
   /// The method this route will handle
-  method: Method,
+  method: HttpMethod,
 
   /// The mime types this route can consume
   /// EMPTY SET means this route does not expect a request body.
@@ -184,7 +184,7 @@ pub(crate) struct WebSocketRoute {
 impl HttpRoute {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<Method>,
+    method: impl Into<HttpMethod>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
     route: impl HttpEndpoint + 'static,
@@ -199,7 +199,7 @@ impl HttpRoute {
 impl WebSocketRoute {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<Method>,
+    method: impl Into<HttpMethod>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
     route: impl WebsocketEndpoint + 'static,
@@ -278,7 +278,7 @@ impl Ord for RoutingDecision {
 impl Routeable {
   pub(crate) fn new(
     path: impl ToString,
-    method: impl Into<Method>,
+    method: impl Into<HttpMethod>,
     consumes: HashSet<AcceptMimeType>,
     produces: HashSet<AcceptMimeType>,
   ) -> TiiResult<Routeable> {
@@ -293,22 +293,22 @@ impl Routeable {
   }
 
   /// The path for this route
-  pub fn path(&self) -> &str {
+  pub fn get_path(&self) -> &str {
     self.path.as_str()
   }
 
   /// The method for this route
-  pub fn method(&self) -> &Method {
+  pub fn get_method(&self) -> &HttpMethod {
     &self.method
   }
 
   /// The mime types this route can consume
-  pub fn consumes(&self) -> &HashSet<AcceptMimeType> {
+  pub fn get_consumes(&self) -> &HashSet<AcceptMimeType> {
     &self.consumes
   }
 
   /// The mime types this route can produce
-  pub fn produces(&self) -> &HashSet<AcceptMimeType> {
+  pub fn get_produces(&self) -> &HashSet<AcceptMimeType> {
     &self.produces
   }
 
@@ -317,7 +317,7 @@ impl Routeable {
     route: &RequestContext,
     path_params: &mut Option<HashMap<String, String>>,
   ) -> bool {
-    let mut request_path = route.request_head().path();
+    let mut request_path = route.request_head().get_path();
     if !request_path.starts_with("/") {
       return false;
     }
@@ -377,7 +377,7 @@ impl Routeable {
       return RoutingDecision::PathMismatch;
     }
 
-    if &self.method != head.method() {
+    if &self.method != head.get_method() {
       return RoutingDecision::MethodMismatch;
     }
 
@@ -452,7 +452,7 @@ impl Debug for WebSocketRoute {
 }
 
 /// Represents a sub-app to run for a specific host.
-pub struct TiiRouter {
+pub(crate) struct DefaultRouter {
   /// This filter/predicate will decide if the router should even serve the request at all
   router_filter: Box<dyn RouterFilter>,
 
@@ -491,7 +491,7 @@ pub struct TiiRouter {
   error_handler: ErrorHandler,
 }
 
-impl Debug for TiiRouter {
+impl Debug for DefaultRouter {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!("TiiRouter(pre_routing_filters={}, routing_filters={}, response_filters={}, routes={:?}, websocket_routes={})",
                                  self.pre_routing_filters.len(),
@@ -522,8 +522,8 @@ fn websocket_handshake(request: &RequestContext) -> TiiResult<Response> {
 
   // Serialise the handshake response
   let response = Response::new(StatusCode::SwitchingProtocols)
-    .with_header(HeaderName::Upgrade, "websocket")?
-    .with_header(HeaderName::Connection, "Upgrade")?
+    .with_header(HttpHeaderName::Upgrade, "websocket")?
+    .with_header(HttpHeaderName::Connection, "Upgrade")?
     .with_header("Sec-WebSocket-Accept", sec_websocket_accept)?;
 
   // Oddly enough I think you can establish a WS connection with a POST request that has data.
@@ -533,7 +533,7 @@ fn websocket_handshake(request: &RequestContext) -> TiiResult<Response> {
   Ok(response)
 }
 
-impl TiiRouter {
+impl DefaultRouter {
   #[expect(clippy::too_many_arguments)] //Only called by the builder.
   pub(crate) fn new(
     router_filter: Box<dyn RouterFilter>,
@@ -642,7 +642,7 @@ impl TiiRouter {
 
           resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal
 
-          let (sender, receiver) = crate::websocket::stream::new(stream);
+          let (sender, receiver) = crate::new_web_socket_stream(stream);
           handler.handler.serve(request, receiver, sender)?;
           Ok(RouterWebSocketServingResponse::HandledWithProtocolSwitch)
         }
@@ -774,7 +774,7 @@ impl TiiRouter {
   }
 }
 
-impl Router for TiiRouter {
+impl Router for DefaultRouter {
   fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     self.serve_outer(request)
   }
@@ -788,7 +788,7 @@ impl Router for TiiRouter {
   }
 }
 
-impl Router for Arc<TiiRouter> {
+impl Router for Arc<DefaultRouter> {
   fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     Arc::as_ref(self).serve(request)
   }

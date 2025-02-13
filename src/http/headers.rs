@@ -11,17 +11,18 @@ use std::fmt::Display;
 /// Anywhere where you would specify the header type, e.g. `HeaderType::ContentType`, you can replace it
 ///   with the string name of the header, e.g. `Content-Type`, since both these types implement `HeaderLike`.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub(crate) struct Headers(Vec<Header>);
+pub(crate) struct Headers(Vec<HttpHeader>);
 
 /// Represents an individual header.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Header {
+pub struct HttpHeader {
   /// The name of the header.
-  pub name: HeaderName,
+  pub name: HttpHeaderName,
   /// The value of the header.
   pub value: String,
 }
 
+//TODO later move this impl to RequestContext and get rid of this unneeded wrapper for the Vec
 impl Headers {
   /// Create an empty collection of headers.
   pub fn new() -> Self {
@@ -35,11 +36,11 @@ impl Headers {
 
   /// Create and add a new header with the given name and value.
   pub fn add(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
-    self.0.push(Header::new(name, value));
+    self.0.push(HttpHeader::new(name, value));
   }
 
   /// Add an existing header to the collection.
-  pub fn push(&mut self, header: Header) {
+  pub fn push(&mut self, header: HttpHeader) {
     self.0.push(header);
   }
 
@@ -65,13 +66,13 @@ impl Headers {
     if self.get(&header).is_some() {
       return self.get(header);
     }
-    self.0.push(Header::new(header, value));
+    self.0.push(HttpHeader::new(header, value));
     None
   }
 
   /// Replaces all header values with a single header.
   /// The returned Vec contains the removed values. is len() == 0 if there were none.
-  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Vec<Header> {
+  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Vec<HttpHeader> {
     let mut hcopy = Vec::with_capacity(self.len());
     let mut hrem = Vec::new();
     std::mem::swap(&mut self.0, &mut hcopy);
@@ -84,7 +85,7 @@ impl Headers {
       self.0.push(h);
     }
 
-    self.0.push(Header::new(name, value));
+    self.0.push(HttpHeader::new(name, value));
     hrem
   }
 
@@ -100,18 +101,18 @@ impl Headers {
   }
 
   /// Return an iterator over the headers in the collection.
-  pub fn iter(&self) -> impl Iterator<Item = &Header> {
+  pub fn iter(&self) -> impl Iterator<Item = &HttpHeader> {
     self.0.iter()
   }
 }
 
-impl Header {
+impl HttpHeader {
   /// Create a new header with the given name and value.
   ///
   /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
   ///   a string, e.g. `Content-Type`.
   pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-    Self { name: HeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
+    Self { name: HttpHeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
   }
 }
 
@@ -119,7 +120,7 @@ impl Header {
 ///TODO implement to &str fn to prevent clone on serialization!
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum HeaderName {
+pub enum HttpHeaderName {
   /// Informs the server about the types of data that can be sent back.
   Accept,
   /// Informs the server about the accepted character encodings.
@@ -217,58 +218,58 @@ pub enum HeaderName {
 }
 
 /// Contains a list of all well known headers.
-static WELL_KNOWN: &[HeaderName] = &[
-  HeaderName::Accept,
-  HeaderName::Accept,
-  HeaderName::AcceptCharset,
-  HeaderName::AcceptEncoding,
-  HeaderName::AcceptLanguage,
-  HeaderName::AccessControlRequestMethod,
-  HeaderName::AccessControlRequestHeaders,
-  HeaderName::Authorization,
-  HeaderName::CacheControl,
-  HeaderName::Connection,
-  HeaderName::ContentEncoding,
-  HeaderName::ContentLength,
-  HeaderName::ContentType,
-  HeaderName::Cookie,
-  HeaderName::Date,
-  HeaderName::Expect,
-  HeaderName::Forwarded,
-  HeaderName::From,
-  HeaderName::Host,
-  HeaderName::Origin,
-  HeaderName::Pragma,
-  HeaderName::Referer,
-  HeaderName::Upgrade,
-  HeaderName::UserAgent,
-  HeaderName::Via,
-  HeaderName::Warning,
-  HeaderName::AccessControlAllowOrigin,
-  HeaderName::AccessControlAllowHeaders,
-  HeaderName::AccessControlAllowMethods,
-  HeaderName::Age,
-  HeaderName::Allow,
-  HeaderName::ContentDisposition,
-  HeaderName::ContentLanguage,
-  HeaderName::ContentLocation,
-  HeaderName::ETag,
-  HeaderName::Expires,
-  HeaderName::LastModified,
-  HeaderName::Link,
-  HeaderName::Location,
-  HeaderName::Server,
-  HeaderName::SetCookie,
-  HeaderName::TransferEncoding,
-  HeaderName::Trailer,
-  HeaderName::TE,
-  HeaderName::ProxyAuthenticate,
+static WELL_KNOWN: &[HttpHeaderName] = &[
+  HttpHeaderName::Accept,
+  HttpHeaderName::Accept,
+  HttpHeaderName::AcceptCharset,
+  HttpHeaderName::AcceptEncoding,
+  HttpHeaderName::AcceptLanguage,
+  HttpHeaderName::AccessControlRequestMethod,
+  HttpHeaderName::AccessControlRequestHeaders,
+  HttpHeaderName::Authorization,
+  HttpHeaderName::CacheControl,
+  HttpHeaderName::Connection,
+  HttpHeaderName::ContentEncoding,
+  HttpHeaderName::ContentLength,
+  HttpHeaderName::ContentType,
+  HttpHeaderName::Cookie,
+  HttpHeaderName::Date,
+  HttpHeaderName::Expect,
+  HttpHeaderName::Forwarded,
+  HttpHeaderName::From,
+  HttpHeaderName::Host,
+  HttpHeaderName::Origin,
+  HttpHeaderName::Pragma,
+  HttpHeaderName::Referer,
+  HttpHeaderName::Upgrade,
+  HttpHeaderName::UserAgent,
+  HttpHeaderName::Via,
+  HttpHeaderName::Warning,
+  HttpHeaderName::AccessControlAllowOrigin,
+  HttpHeaderName::AccessControlAllowHeaders,
+  HttpHeaderName::AccessControlAllowMethods,
+  HttpHeaderName::Age,
+  HttpHeaderName::Allow,
+  HttpHeaderName::ContentDisposition,
+  HttpHeaderName::ContentLanguage,
+  HttpHeaderName::ContentLocation,
+  HttpHeaderName::ETag,
+  HttpHeaderName::Expires,
+  HttpHeaderName::LastModified,
+  HttpHeaderName::Link,
+  HttpHeaderName::Location,
+  HttpHeaderName::Server,
+  HttpHeaderName::SetCookie,
+  HttpHeaderName::TransferEncoding,
+  HttpHeaderName::Trailer,
+  HttpHeaderName::TE,
+  HttpHeaderName::ProxyAuthenticate,
 ];
 
-impl HeaderName {
+impl HttpHeaderName {
   /// Returns a static array of all well known header types
   #[must_use]
-  pub fn well_known() -> &'static [HeaderName] {
+  pub fn well_known() -> &'static [HttpHeaderName] {
     WELL_KNOWN
   }
 
@@ -290,51 +291,51 @@ impl HeaderName {
   #[must_use]
   pub fn to_str(&self) -> &str {
     match self {
-      HeaderName::Accept => "Accept",
-      HeaderName::AcceptCharset => "Accept-Charset",
-      HeaderName::AcceptEncoding => "Accept-Encoding",
-      HeaderName::AcceptLanguage => "Accept-Language",
-      HeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
-      HeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
-      HeaderName::Authorization => "Authorization",
-      HeaderName::CacheControl => "Cache-Control",
-      HeaderName::Connection => "Connection",
-      HeaderName::ContentEncoding => "Content-Encoding",
-      HeaderName::ContentLength => "Content-Length",
-      HeaderName::ContentType => "Content-Type",
-      HeaderName::Cookie => "Cookie",
-      HeaderName::Date => "Date",
-      HeaderName::Expect => "Expect",
-      HeaderName::Forwarded => "Forwarded",
-      HeaderName::From => "From",
-      HeaderName::Host => "Host",
-      HeaderName::Origin => "Origin",
-      HeaderName::Pragma => "Pragma",
-      HeaderName::Referer => "Referer",
-      HeaderName::Upgrade => "Upgrade",
-      HeaderName::UserAgent => "User-Agent",
-      HeaderName::Via => "Via",
-      HeaderName::Warning => "Warning",
-      HeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
-      HeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
-      HeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
-      HeaderName::Age => "Age",
-      HeaderName::Allow => "Allow",
-      HeaderName::ContentDisposition => "Content-Disposition",
-      HeaderName::ContentLanguage => "Content-Language",
-      HeaderName::ContentLocation => "Content-Location",
-      HeaderName::ETag => "ETag",
-      HeaderName::Expires => "Expires",
-      HeaderName::LastModified => "Last-Modified",
-      HeaderName::Link => "Link",
-      HeaderName::Location => "Location",
-      HeaderName::Server => "Server",
-      HeaderName::SetCookie => "Set-Cookie",
-      HeaderName::TransferEncoding => "Transfer-Encoding",
-      HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
-      HeaderName::TE => "TE",
-      HeaderName::Trailer => "Trailer",
-      HeaderName::Custom(name) => name.as_str(),
+      HttpHeaderName::Accept => "Accept",
+      HttpHeaderName::AcceptCharset => "Accept-Charset",
+      HttpHeaderName::AcceptEncoding => "Accept-Encoding",
+      HttpHeaderName::AcceptLanguage => "Accept-Language",
+      HttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HttpHeaderName::Authorization => "Authorization",
+      HttpHeaderName::CacheControl => "Cache-Control",
+      HttpHeaderName::Connection => "Connection",
+      HttpHeaderName::ContentEncoding => "Content-Encoding",
+      HttpHeaderName::ContentLength => "Content-Length",
+      HttpHeaderName::ContentType => "Content-Type",
+      HttpHeaderName::Cookie => "Cookie",
+      HttpHeaderName::Date => "Date",
+      HttpHeaderName::Expect => "Expect",
+      HttpHeaderName::Forwarded => "Forwarded",
+      HttpHeaderName::From => "From",
+      HttpHeaderName::Host => "Host",
+      HttpHeaderName::Origin => "Origin",
+      HttpHeaderName::Pragma => "Pragma",
+      HttpHeaderName::Referer => "Referer",
+      HttpHeaderName::Upgrade => "Upgrade",
+      HttpHeaderName::UserAgent => "User-Agent",
+      HttpHeaderName::Via => "Via",
+      HttpHeaderName::Warning => "Warning",
+      HttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HttpHeaderName::Age => "Age",
+      HttpHeaderName::Allow => "Allow",
+      HttpHeaderName::ContentDisposition => "Content-Disposition",
+      HttpHeaderName::ContentLanguage => "Content-Language",
+      HttpHeaderName::ContentLocation => "Content-Location",
+      HttpHeaderName::ETag => "ETag",
+      HttpHeaderName::Expires => "Expires",
+      HttpHeaderName::LastModified => "Last-Modified",
+      HttpHeaderName::Link => "Link",
+      HttpHeaderName::Location => "Location",
+      HttpHeaderName::Server => "Server",
+      HttpHeaderName::SetCookie => "Set-Cookie",
+      HttpHeaderName::TransferEncoding => "Transfer-Encoding",
+      HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HttpHeaderName::TE => "TE",
+      HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::Custom(name) => name.as_str(),
     }
   }
 
@@ -344,68 +345,68 @@ impl HeaderName {
   #[must_use]
   pub fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
-      HeaderName::Accept => "Accept",
-      HeaderName::AcceptCharset => "Accept-Charset",
-      HeaderName::AcceptEncoding => "Accept-Encoding",
-      HeaderName::AcceptLanguage => "Accept-Language",
-      HeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
-      HeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
-      HeaderName::Authorization => "Authorization",
-      HeaderName::CacheControl => "Cache-Control",
-      HeaderName::Connection => "Connection",
-      HeaderName::ContentEncoding => "Content-Encoding",
-      HeaderName::ContentLength => "Content-Length",
-      HeaderName::ContentType => "Content-Type",
-      HeaderName::Cookie => "Cookie",
-      HeaderName::Date => "Date",
-      HeaderName::Expect => "Expect",
-      HeaderName::Forwarded => "Forwarded",
-      HeaderName::From => "From",
-      HeaderName::Host => "Host",
-      HeaderName::Origin => "Origin",
-      HeaderName::Pragma => "Pragma",
-      HeaderName::Referer => "Referer",
-      HeaderName::Upgrade => "Upgrade",
-      HeaderName::UserAgent => "User-Agent",
-      HeaderName::Via => "Via",
-      HeaderName::Warning => "Warning",
-      HeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
-      HeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
-      HeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
-      HeaderName::Age => "Age",
-      HeaderName::Allow => "Allow",
-      HeaderName::ContentDisposition => "Content-Disposition",
-      HeaderName::ContentLanguage => "Content-Language",
-      HeaderName::ContentLocation => "Content-Location",
-      HeaderName::ETag => "ETag",
-      HeaderName::Expires => "Expires",
-      HeaderName::LastModified => "Last-Modified",
-      HeaderName::Link => "Link",
-      HeaderName::Location => "Location",
-      HeaderName::Server => "Server",
-      HeaderName::SetCookie => "Set-Cookie",
-      HeaderName::TransferEncoding => "Transfer-Encoding",
-      HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
-      HeaderName::Trailer => "Trailer",
-      HeaderName::TE => "TE",
-      HeaderName::Custom(_) => return None,
+      HttpHeaderName::Accept => "Accept",
+      HttpHeaderName::AcceptCharset => "Accept-Charset",
+      HttpHeaderName::AcceptEncoding => "Accept-Encoding",
+      HttpHeaderName::AcceptLanguage => "Accept-Language",
+      HttpHeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
+      HttpHeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
+      HttpHeaderName::Authorization => "Authorization",
+      HttpHeaderName::CacheControl => "Cache-Control",
+      HttpHeaderName::Connection => "Connection",
+      HttpHeaderName::ContentEncoding => "Content-Encoding",
+      HttpHeaderName::ContentLength => "Content-Length",
+      HttpHeaderName::ContentType => "Content-Type",
+      HttpHeaderName::Cookie => "Cookie",
+      HttpHeaderName::Date => "Date",
+      HttpHeaderName::Expect => "Expect",
+      HttpHeaderName::Forwarded => "Forwarded",
+      HttpHeaderName::From => "From",
+      HttpHeaderName::Host => "Host",
+      HttpHeaderName::Origin => "Origin",
+      HttpHeaderName::Pragma => "Pragma",
+      HttpHeaderName::Referer => "Referer",
+      HttpHeaderName::Upgrade => "Upgrade",
+      HttpHeaderName::UserAgent => "User-Agent",
+      HttpHeaderName::Via => "Via",
+      HttpHeaderName::Warning => "Warning",
+      HttpHeaderName::AccessControlAllowOrigin => "Access-Control-Allow-Origin",
+      HttpHeaderName::AccessControlAllowHeaders => "Access-Control-Allow-Headers",
+      HttpHeaderName::AccessControlAllowMethods => "Access-Control-Allow-Methods",
+      HttpHeaderName::Age => "Age",
+      HttpHeaderName::Allow => "Allow",
+      HttpHeaderName::ContentDisposition => "Content-Disposition",
+      HttpHeaderName::ContentLanguage => "Content-Language",
+      HttpHeaderName::ContentLocation => "Content-Location",
+      HttpHeaderName::ETag => "ETag",
+      HttpHeaderName::Expires => "Expires",
+      HttpHeaderName::LastModified => "Last-Modified",
+      HttpHeaderName::Link => "Link",
+      HttpHeaderName::Location => "Location",
+      HttpHeaderName::Server => "Server",
+      HttpHeaderName::SetCookie => "Set-Cookie",
+      HttpHeaderName::TransferEncoding => "Transfer-Encoding",
+      HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+      HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::TE => "TE",
+      HttpHeaderName::Custom(_) => return None,
     })
   }
 }
 
-impl PartialOrd for HeaderName {
+impl PartialOrd for HttpHeaderName {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     Some(self.cmp(other))
   }
 }
 
-impl Ord for HeaderName {
+impl Ord for HttpHeaderName {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     self.to_str().cmp(other.to_str())
   }
 }
 
-impl From<&str> for HeaderName {
+impl From<&str> for HttpHeaderName {
   fn from(name: &str) -> Self {
     //TODO to_ascii_lowercase is a heap allocation...
     match name.to_ascii_lowercase().as_str() {
@@ -458,13 +459,13 @@ impl From<&str> for HeaderName {
   }
 }
 
-impl Display for HeaderName {
+impl Display for HttpHeaderName {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.to_str())
   }
 }
 
-impl AsRef<str> for HeaderName {
+impl AsRef<str> for HttpHeaderName {
   fn as_ref(&self) -> &str {
     self.to_str()
   }
@@ -479,22 +480,22 @@ fn test_header_replace_all() {
   n.add("Another", "Meep");
   n.add("Mop", "Dop");
   let mut it = n.iter();
-  assert_eq!(Header::new("Some", "Header"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Another", "Value"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Another", "Meep"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
   assert!(it.next().is_none());
   drop(it);
 
   let rmoved = n.replace_all("Another", "Friend");
   let mut it = n.iter();
-  assert_eq!(Header::new("Some", "Header"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Mop", "Dop"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Another", "Friend"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Some", "Header"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Mop", "Dop"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Friend"), it.next().unwrap().clone());
   assert!(it.next().is_none());
 
   let mut it = rmoved.iter();
-  assert_eq!(Header::new("Another", "Value"), it.next().unwrap().clone());
-  assert_eq!(Header::new("Another", "Meep"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Value"), it.next().unwrap().clone());
+  assert_eq!(HttpHeader::new("Another", "Meep"), it.next().unwrap().clone());
   assert!(it.next().is_none());
 }

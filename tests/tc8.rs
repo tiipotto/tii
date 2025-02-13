@@ -1,9 +1,9 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 mod mock_stream;
 
@@ -14,7 +14,7 @@ fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
 #[test]
 pub fn tc8() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let mut combined = Vec::new();
   for b in "GET /dummy HTTP/1.1\r\nHdr: ".as_bytes() {

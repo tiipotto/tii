@@ -1,6 +1,6 @@
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
 
 #[cfg(not(unix))]
 pub fn main() {
@@ -18,7 +18,7 @@ pub fn handle(ctx: &RequestContext) -> Response {
       format!(
         "Hello unix->{} with {}\n",
         ctx.local_address(),
-        ctx.request_head().raw_status_line()
+        ctx.request_head().get_raw_status_line()
       ),
       MimeType::TextPlain,
     )
@@ -29,7 +29,7 @@ pub fn handle(ctx: &RequestContext) -> Response {
         "Hello tcp {}->{} with {}\n",
         ctx.peer_address(),
         ctx.local_address(),
-        ctx.request_head().raw_status_line()
+        ctx.request_head().get_raw_status_line()
       ),
       MimeType::TextPlain,
     )
@@ -41,14 +41,15 @@ mod unix {
   use crate::handle;
   use tii::extras;
   use tii::extras::Connector;
-  use tii::tii_builder::TiiBuilder;
-  use tii::tii_error::TiiResult;
+  use tii::ServerBuilder;
+  use tii::TiiResult;
 
   pub fn work() -> TiiResult<()> {
     colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-    let tii_server =
-      TiiBuilder::builder_arc(|builder| builder.router(|router| router.route_any("/*", handle)))?;
+    let tii_server = ServerBuilder::builder_arc(|builder| {
+      builder.router(|router| router.route_any("/*", handle))
+    })?;
 
     if std::fs::exists("/tmp/tii.sock")? {
       std::fs::remove_file("/tmp/tii.sock")?;

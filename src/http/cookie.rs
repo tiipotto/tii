@@ -1,6 +1,6 @@
 //! Provides a basic cookie implementation according to [RFC 6265](http://tools.ietf.org/html/rfc6265).
 
-use crate::http::headers::Header;
+use crate::http::headers::HttpHeader;
 
 use std::time::Duration;
 
@@ -60,7 +60,7 @@ impl Cookie {
   }
 
   /// Convert a collection of cookies into a `Cookie` header.
-  pub fn to_header(cookies: impl AsRef<[Cookie]>) -> Option<Header> {
+  pub fn to_header(cookies: impl AsRef<[Cookie]>) -> Option<HttpHeader> {
     let cookies = cookies.as_ref();
 
     if cookies.is_empty() {
@@ -76,7 +76,7 @@ impl Cookie {
       value.push_str("; ");
     }
 
-    Some(Header::new("Cookie", &value[..value.len() - 2]))
+    Some(HttpHeader::new("Cookie", &value[..value.len() - 2]))
   }
 }
 
@@ -141,7 +141,7 @@ impl SetCookie {
   }
 }
 
-impl From<SetCookie> for Header {
+impl From<SetCookie> for HttpHeader {
   fn from(cookie: SetCookie) -> Self {
     let mut value = format!("{}={}", cookie.name, cookie.value);
 
@@ -181,6 +181,6 @@ impl From<SetCookie> for Header {
       value = format!("{}; HttpOnly", value);
     }
 
-    Header::new("Set-Cookie", value)
+    HttpHeader::new("Set-Cookie", value)
   }
 }

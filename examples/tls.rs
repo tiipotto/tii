@@ -6,11 +6,11 @@ use std::io::{BufReader, Cursor};
 use std::sync::Arc;
 use tii::extras;
 use tii::extras::{Connector, ConnectorMeta};
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 fn load_certs() -> Vec<CertificateDer<'static>> {
   let keyfile = include_bytes!("./ssl/cert.pem").to_vec(); //Use a real cert!
@@ -40,7 +40,8 @@ fn create_rust_tls_server_config() -> Arc<ServerConfig> {
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Debug).init();
 
-  let app = TiiBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
+  let app =
+    ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
   let config = create_rust_tls_server_config();
 
   //Non Tls connectors

@@ -2,10 +2,10 @@
 //! TODO docs before release
 #![allow(missing_docs)]
 
-use crate::http::headers::HeaderName;
-use crate::http::method::Method;
-use crate::http::request::HttpVersion;
-use crate::http::Response;
+use crate::HttpHeaderName;
+use crate::HttpMethod;
+use crate::HttpVersion;
+use crate::Response;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -35,7 +35,7 @@ pub enum RequestHeadParsingError {
   StatusLineTooManyWhitespaces,
   StatusLineTooLong(Vec<u8>),
   PathInvalidUrlEncoding(String),
-  MethodNotSupportedByHttpVersion(HttpVersion, Method),
+  MethodNotSupportedByHttpVersion(HttpVersion, HttpMethod),
   HeaderLineIsNotUsAscii,
   HeaderLineNoCRLF,
   HeaderNameEmpty,
@@ -70,9 +70,9 @@ pub enum UserError {
   IllegalAcceptHeaderValueSet(String),
   MultipleAcceptHeaderValuesSet(String, String),
   MultipleContentTypeHeaderValuesSet(String, String),
-  ImmutableRequestHeaderModified(HeaderName, String),
-  ImmutableRequestHeaderRemoved(HeaderName),
-  ImmutableResponseHeaderModified(HeaderName),
+  ImmutableRequestHeaderModified(HttpHeaderName, String),
+  ImmutableRequestHeaderRemoved(HttpHeaderName),
+  ImmutableResponseHeaderModified(HttpHeaderName),
   RequestHeadBufferTooSmall(usize),
 }
 

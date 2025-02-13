@@ -1,14 +1,14 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::http::cookie::Cookie;
-use crate::http::headers::{Header, HeaderName, Headers};
-use crate::http::method::Method;
+use crate::Cookie;
+use crate::HttpMethod;
+use crate::{Headers, HttpHeader, HttpHeaderName};
 
-use crate::http::mime::{AcceptQualityMimeType, MimeType, QValue};
-use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult, UserError};
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
+use crate::ConnectionStream;
+use crate::{AcceptQualityMimeType, MimeType, QValue};
 use std::fmt::{Display, Formatter};
 use std::io::ErrorKind;
 
@@ -84,7 +84,7 @@ impl HttpVersion {
 #[derive(Clone, Debug)]
 pub struct RequestHead {
   /// The method used in making the request, e.g. "GET".
-  method: Method,
+  method: HttpMethod,
 
   /// The HTTP version of the request.
   version: HttpVersion,
@@ -255,7 +255,7 @@ impl RequestHead {
 
     let mut start_line = status_line.split(' ');
 
-    let method = Method::from(unwrap_some(start_line.next()));
+    let method = HttpMethod::from(unwrap_some(start_line.next()));
 
     let mut uri_iter =
       start_line.next().ok_or(RequestHeadParsingError::StatusLineNoWhitespace)?.splitn(2, '?');
@@ -284,7 +284,7 @@ impl RequestHead {
     let mut headers = Headers::new();
 
     if version == HttpVersion::Http09 {
-      if method != Method::Get {
+      if method != HttpMethod::Get {
         return Err(TiiError::from(RequestHeadParsingError::MethodNotSupportedByHttpVersion(
           version, method,
         )));
@@ -332,10 +332,10 @@ impl RequestHead {
         return Err(TiiError::from(RequestHeadParsingError::HeaderValueEmpty));
       }
 
-      headers.add(HeaderName::from(name), value);
+      headers.add(HttpHeaderName::from(name), value);
     }
 
-    let accept_hdr = headers.get(HeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
+    let accept_hdr = headers.get(HttpHeaderName::Accept).unwrap_or("*/*"); //TODO This is probably also wrong.
     let accept = AcceptQualityMimeType::parse(accept_hdr);
     if accept.is_none() {
       // TODO should this be a hard error?
@@ -348,7 +348,7 @@ impl RequestHead {
 
     let accept = accept.unwrap_or_else(|| vec![AcceptQualityMimeType::default()]);
 
-    let content_type = headers.get(HeaderName::ContentType).map(|ctype_raw| {
+    let content_type = headers.get(HttpHeaderName::ContentType).map(|ctype_raw| {
       let ctype = MimeType::parse_from_content_type_header(ctype_raw);
       if ctype.is_none() {
         warn_log!(
@@ -374,18 +374,18 @@ impl RequestHead {
   }
 
   /// get the http version this request was made in by the client.
-  pub fn version(&self) -> HttpVersion {
+  pub fn get_version(&self) -> HttpVersion {
     self.version
   }
 
   /// Returns the raw status line.
-  pub fn raw_status_line(&self) -> &str {
+  pub fn get_raw_status_line(&self) -> &str {
     self.status_line.as_str()
   }
 
   /// Returns the path the request will be routed to
   /// This should not contain any url encoding.
-  pub fn path(&self) -> &str {
+  pub fn get_path(&self) -> &str {
     self.path.as_str()
   }
 
@@ -396,8 +396,75 @@ impl RequestHead {
   }
 
   /// Gets the query parameters.
-  pub fn query(&self) -> &[(String, String)] {
+  pub fn get_query(&self) -> &[(String, String)] {
     self.query.as_slice()
+  }
+
+  /// Gets the mutable Vec that contains the query parameters.
+  pub fn query_mut(&mut self) -> &mut Vec<(String, String)> {
+    &mut self.query
+  }
+
+  /// Set the query parameters
+  pub fn set_query(&mut self, query: Vec<(String, String)>) {
+    self.query = query;
+  }
+
+  /// Add a query parameter. Existing query parameters with the same key are not touched.
+  pub fn add_query_param(&mut self, key: impl ToString, value: impl ToString) {
+    self.query.push((key.to_string(), value.to_string()));
+  }
+
+  /// Removes all query parameters that match the given key.
+  /// Returns the removed values.
+  pub fn remove_query_params(&mut self, key: impl AsRef<str>) -> Vec<String> {
+    let key = key.as_ref();
+
+    let mut result = Vec::new();
+
+    for n in (0..self.query.len()).rev() {
+      let (k, _) = unwrap_some(self.query.get(n));
+      if k == key {
+        let (_, v) = self.query.remove(n);
+        result.push(v);
+      }
+    }
+
+    result.reverse();
+    result
+  }
+
+  /// Removes all instances of the query parameter with the given key if there are any and adds a new query
+  /// parameter with the given key and value to the end of the query parameters.
+  ///
+  /// If the key already has the value then its position is retained.
+  /// All other values for the key are still removed.
+  ///
+  /// Returns the removed values.
+  pub fn set_query_param(&mut self, key: impl ToString, value: impl ToString) -> Vec<String> {
+    let key = key.to_string();
+    let value = value.to_string();
+
+    let mut result = Vec::new();
+    let mut added = false;
+    for n in (0..self.query.len()).rev() {
+      let (k, v) = unwrap_some(self.query.get(n));
+      if k == key.as_str() {
+        if !added && v == value.as_str() {
+          added = true;
+          continue;
+        }
+        let (_, v) = self.query.remove(n);
+        result.push(v);
+      }
+    }
+
+    if !added {
+      self.query.push((key, value));
+    }
+
+    result.reverse();
+    result
   }
 
   /// Gets the first query parameter with the given key.
@@ -426,23 +493,13 @@ impl RequestHead {
     result
   }
 
-  /// Gets the mutable Vec that contains the query parameters.
-  pub fn query_mut(&mut self) -> &mut Vec<(String, String)> {
-    &mut self.query
-  }
-
-  /// Set the query parameters
-  pub fn set_query(&mut self, query: Vec<(String, String)>) {
-    self.query = query;
-  }
-
   /// gets the method of the request.
-  pub fn method(&self) -> &Method {
+  pub fn get_method(&self) -> &HttpMethod {
     &self.method
   }
 
   /// Changes the method of the request
-  pub fn set_method(&mut self, method: Method) {
+  pub fn set_method(&mut self, method: HttpMethod) {
     self.method = method;
   }
 
@@ -450,7 +507,7 @@ impl RequestHead {
   pub fn get_cookies(&self) -> Vec<Cookie> {
     self
       .headers
-      .get(HeaderName::Cookie)
+      .get(HttpHeaderName::Cookie)
       .map(|cookies| {
         cookies
           .split(';')
@@ -472,7 +529,7 @@ impl RequestHead {
   /// This also overwrites the actual accept header!
   pub fn set_accept(&mut self, types: Vec<AcceptQualityMimeType>) {
     let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
-    self.headers.set(HeaderName::Accept, hdr_value);
+    self.headers.set(HttpHeaderName::Accept, hdr_value);
     self.accept = types;
   }
 
@@ -489,14 +546,14 @@ impl RequestHead {
   /// sets the content type header to given MimeType.
   /// This will affect both the header and the return value of get_content_type.
   pub fn set_content_type(&mut self, content_type: MimeType) {
-    self.headers.set(HeaderName::ContentType, content_type.as_str());
+    self.headers.set(HttpHeaderName::ContentType, content_type.as_str());
     self.content_type = Some(content_type);
   }
 
   /// Removes the content type header. get_content_type will return None after this call.
-  pub fn remove_content_type(&mut self) {
-    self.content_type = None;
-    self.headers.remove(HeaderName::ContentType);
+  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+    self.headers.remove(HttpHeaderName::ContentType);
+    self.content_type.take()
   }
 
   /// Returns the acceptable mime types
@@ -505,7 +562,7 @@ impl RequestHead {
   }
 
   /// Returns an iterator over all headers.
-  pub fn get_all_headers(&self) -> impl Iterator<Item = &Header> {
+  pub fn iter_headers(&self) -> impl Iterator<Item = &HttpHeader> {
     self.headers.iter()
   }
 
@@ -520,23 +577,23 @@ impl RequestHead {
   }
 
   /// Removes all instances of a particular header.
-  pub fn remove_header(&mut self, hdr: impl AsRef<str>) -> TiiResult<()> {
+  pub fn remove_headers(&mut self, hdr: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
-      HeaderName::Accept => {
+      HttpHeaderName::Accept => {
         self.accept = vec![AcceptQualityMimeType::default()];
         self.headers.set(hdr, "*/*");
         Ok(())
       }
-      HeaderName::ContentType => {
+      HttpHeaderName::ContentType => {
         self.headers.remove(hdr);
         self.content_type = None;
         Ok(())
       }
-      HeaderName::TransferEncoding => {
-        UserError::ImmutableRequestHeaderRemoved(HeaderName::TransferEncoding).into()
+      HttpHeaderName::TransferEncoding => {
+        UserError::ImmutableRequestHeaderRemoved(HttpHeaderName::TransferEncoding).into()
       }
-      HeaderName::ContentLength => {
-        UserError::ImmutableRequestHeaderRemoved(HeaderName::ContentLength).into()
+      HttpHeaderName::ContentLength => {
+        UserError::ImmutableRequestHeaderRemoved(HttpHeaderName::ContentLength).into()
       }
       _ => {
         self.headers.remove(hdr);
@@ -550,7 +607,7 @@ impl RequestHead {
   pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
-      HeaderName::Accept => {
+      HttpHeaderName::Accept => {
         if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           self.accept = accept;
           self.headers.set(hdr, value);
@@ -559,22 +616,23 @@ impl RequestHead {
 
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      HeaderName::ContentType => {
+      HttpHeaderName::ContentType => {
         let mime = MimeType::parse(hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
-        self.headers.set(HeaderName::ContentType, hdr_value);
+        self.headers.set(HttpHeaderName::ContentType, hdr_value);
         self.content_type = Some(mime);
         Ok(())
       }
-      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
-        HeaderName::TransferEncoding,
+      HttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      HeaderName::ContentLength => {
-        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
-          .into()
-      }
+      HttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::ContentLength,
+        hdr_value.to_string(),
+      )
+      .into(),
       _ => {
         self.headers.set(hdr, value);
         Ok(())
@@ -586,7 +644,7 @@ impl RequestHead {
   pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     let hdr_value = value.as_ref();
     match &hdr.as_ref().into() {
-      HeaderName::Accept => {
+      HttpHeaderName::Accept => {
         if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
           if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
             return UserError::MultipleAcceptHeaderValuesSet(
@@ -600,7 +658,7 @@ impl RequestHead {
         }
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
-      HeaderName::ContentType => {
+      HttpHeaderName::ContentType => {
         let mime = MimeType::parse(hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
         if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
@@ -613,15 +671,16 @@ impl RequestHead {
         self.content_type = Some(mime);
         Ok(())
       }
-      HeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
-        HeaderName::TransferEncoding,
+      HttpHeaderName::TransferEncoding => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::TransferEncoding,
         hdr_value.to_string(),
       )
       .into(),
-      HeaderName::ContentLength => {
-        UserError::ImmutableRequestHeaderModified(HeaderName::ContentLength, hdr_value.to_string())
-          .into()
-      }
+      HttpHeaderName::ContentLength => UserError::ImmutableRequestHeaderModified(
+        HttpHeaderName::ContentLength,
+        hdr_value.to_string(),
+      )
+      .into(),
       _ => {
         self.headers.add(hdr, value);
         Ok(())

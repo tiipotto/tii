@@ -2,7 +2,7 @@
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tii::stream::{ConnectionStream, IntoConnectionStream};
+use tii::{ConnectionStream, IntoConnectionStream};
 
 #[derive(Debug, Clone)]
 pub struct MockStream {

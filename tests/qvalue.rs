@@ -1,4 +1,4 @@
-use tii::http::mime::QValue;
+use tii::QValue;
 
 #[test]
 pub fn test() {

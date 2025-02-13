@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 /// Represents an HTTP method.
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub enum Method {
+pub enum HttpMethod {
   /// The `GET` method.
   Get,
   /// The `HEAD` method.
@@ -25,24 +25,24 @@ pub enum Method {
   Custom(String),
 }
 
-static WELL_KNOWN: &[Method] = &[
-  Method::Get,
-  Method::Head,
-  Method::Post,
-  Method::Put,
-  Method::Delete,
-  Method::Options,
-  Method::Trace,
-  Method::Patch,
+static WELL_KNOWN: &[HttpMethod] = &[
+  HttpMethod::Get,
+  HttpMethod::Head,
+  HttpMethod::Post,
+  HttpMethod::Put,
+  HttpMethod::Delete,
+  HttpMethod::Options,
+  HttpMethod::Trace,
+  HttpMethod::Patch,
 ];
 
-impl Method {
+impl HttpMethod {
   /// Attempts to convert from the HTTP verb into an enum variant.
   ///
   /// ## Example
   /// ```
-  /// let method = tii::http::method::Method::from("GET");
-  /// assert_eq!(method, tii::http::method::Method::Get);
+  /// let method = tii::HttpMethod::from("GET");
+  /// assert_eq!(method, tii::HttpMethod::Get);
   /// ```
   pub fn from(name: &str) -> Self {
     match name {
@@ -60,7 +60,7 @@ impl Method {
 
   /// Returns an array of all well known http Methods.
   #[must_use]
-  pub fn well_known() -> &'static [Method] {
+  pub fn well_known() -> &'static [HttpMethod] {
     WELL_KNOWN
   }
 
@@ -78,35 +78,35 @@ impl Method {
   #[must_use]
   pub fn well_known_str(&self) -> Option<&'static str> {
     Some(match self {
-      Method::Get => "GET",
-      Method::Head => "HEAD",
-      Method::Post => "POST",
-      Method::Put => "PUT",
-      Method::Delete => "DELETE",
-      Method::Options => "OPTIONS",
-      Method::Trace => "TRACE",
-      Method::Patch => "PATCH",
-      Method::Custom(_) => return None,
+      HttpMethod::Get => "GET",
+      HttpMethod::Head => "HEAD",
+      HttpMethod::Post => "POST",
+      HttpMethod::Put => "PUT",
+      HttpMethod::Delete => "DELETE",
+      HttpMethod::Options => "OPTIONS",
+      HttpMethod::Trace => "TRACE",
+      HttpMethod::Patch => "PATCH",
+      HttpMethod::Custom(_) => return None,
     })
   }
 
   /// returns a &str with the same lifetime as self. this works for custom and none custom methods.
   pub fn as_str(&self) -> &str {
     match self {
-      Method::Get => "GET",
-      Method::Head => "HEAD",
-      Method::Post => "POST",
-      Method::Put => "PUT",
-      Method::Delete => "DELETE",
-      Method::Options => "OPTIONS",
-      Method::Trace => "TRACE",
-      Method::Patch => "PATCH",
-      Method::Custom(meth) => meth.as_str(),
+      HttpMethod::Get => "GET",
+      HttpMethod::Head => "HEAD",
+      HttpMethod::Post => "POST",
+      HttpMethod::Put => "PUT",
+      HttpMethod::Delete => "DELETE",
+      HttpMethod::Options => "OPTIONS",
+      HttpMethod::Trace => "TRACE",
+      HttpMethod::Patch => "PATCH",
+      HttpMethod::Custom(meth) => meth.as_str(),
     }
   }
 }
 
-impl Display for Method {
+impl Display for HttpMethod {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }

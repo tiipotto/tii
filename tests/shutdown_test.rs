@@ -7,18 +7,18 @@ mod inner {
   use std::time::Duration;
   use tii::extras;
   use tii::extras::Connector;
-  use tii::http::mime::MimeType;
-  use tii::http::request_context::RequestContext;
-  use tii::http::Response;
-  use tii::tii_builder::TiiBuilder;
-  use tii::tii_error::TiiResult;
+  use tii::MimeType;
+  use tii::RequestContext;
+  use tii::Response;
+  use tii::ServerBuilder;
+  use tii::TiiResult;
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {
     Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
   }
 
   pub(crate) fn work() -> TiiResult<()> {
-    let tii_server = TiiBuilder::builder_arc(|builder| {
+    let tii_server = ServerBuilder::builder_arc(|builder| {
       builder
         .router(|router| router.route_any("/*", hello))?
         .with_connection_timeout(Some(Duration::from_secs(5)))?

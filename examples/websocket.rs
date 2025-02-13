@@ -3,11 +3,11 @@ use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 use log::{info, LevelFilter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use tii::http::request_context::RequestContext;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
-use tii::websocket::message::WebsocketMessage;
-use tii::websocket::stream::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
+use tii::RequestContext;
+use tii::ServerBuilder;
+use tii::TiiResult;
+use tii::WebsocketMessage;
+use tii::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -18,7 +18,7 @@ fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(LevelFilter::Trace).init();
 
   //Visit localhost:8080 in a web-browser like firefox or chrome to see this example.
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/*", builtin_endpoints::serve_dir("./examples/static/ws"))?

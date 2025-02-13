@@ -1,19 +1,19 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tii::http::mime::MimeType;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::response_body::ResponseBody;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::HttpVersion;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ResponseBody;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
@@ -25,7 +25,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
 static COUNTER2: AtomicUsize = AtomicUsize::new(0);
 fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER2.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
@@ -36,7 +36,7 @@ fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
 
 #[test]
 pub fn tc25() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| {
       rt.post("/dummy")
         .consumes(MimeType::TextPlain)

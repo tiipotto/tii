@@ -1,11 +1,11 @@
 use crate::mock_stream::MockStream;
 use std::io;
 use std::io::ErrorKind;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 mod mock_stream;
 
@@ -31,7 +31,7 @@ fn dummy_route_eof(ctx: &RequestContext) -> TiiResult<Response> {
 
 #[test]
 pub fn tc21a() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -45,7 +45,7 @@ pub fn tc21a() {
 
 #[test]
 pub fn tc21b() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -59,7 +59,7 @@ pub fn tc21b() {
 
 #[test]
 pub fn tc21c() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -73,7 +73,7 @@ pub fn tc21c() {
 
 #[test]
 pub fn tc21d() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERR")
     .build();
@@ -87,7 +87,7 @@ pub fn tc21d() {
 
 #[test]
 pub fn tc21e() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -101,7 +101,7 @@ pub fn tc21e() {
 
 #[test]
 pub fn tc21f() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -115,7 +115,7 @@ pub fn tc21f() {
 
 #[test]
 pub fn tc21g() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -129,7 +129,7 @@ pub fn tc21g() {
 
 #[test]
 pub fn tc21h() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_eof))
     .expect("ERROR")
     .build();
@@ -143,7 +143,7 @@ pub fn tc21h() {
 
 #[test]
 pub fn tc21i() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -157,7 +157,7 @@ pub fn tc21i() {
 
 #[test]
 pub fn tc21j() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();
@@ -171,7 +171,7 @@ pub fn tc21j() {
 
 #[test]
 pub fn tc21k() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_eof))
     .expect("ERROR")
     .build();
@@ -187,7 +187,7 @@ pub fn tc21k() {
 
 #[test]
 pub fn tc21l() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| rt.route_any("/dummy", dummy_route_invalid_data))
     .expect("ERROR")
     .build();

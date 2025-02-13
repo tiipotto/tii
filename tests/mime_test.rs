@@ -1,4 +1,4 @@
-use tii::http::mime::{AcceptMimeType, AcceptQualityMimeType, MimeGroup, MimeType, QValue};
+use tii::{AcceptMimeType, AcceptQualityMimeType, MimeGroup, MimeType, QValue};
 
 #[test]
 fn test_not_valid() {

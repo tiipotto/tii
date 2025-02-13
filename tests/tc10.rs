@@ -1,9 +1,9 @@
 use crate::mock_stream::MockStream;
 use std::io;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 mod mock_stream;
 
@@ -14,7 +14,7 @@ fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
 #[test]
 pub fn tc10() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET/dummyHTTP/1.1\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();

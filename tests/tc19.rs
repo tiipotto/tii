@@ -1,8 +1,8 @@
 use crate::mock_stream::MockStream;
-use tii::http::request_context::RequestContext;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::RequestContext;
+use tii::ServerBuilder;
+use tii::TiiResult;
+use tii::{Response, StatusCode};
 
 mod mock_stream;
 
@@ -16,7 +16,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
 #[test]
 pub fn tc19() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
   let con = stream.to_stream();

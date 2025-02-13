@@ -3,7 +3,7 @@ use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
+use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
 use std::os::fd::AsRawFd;
@@ -27,7 +27,7 @@ struct UnixConnectorInner {
   listener: UnixListener,
   waiter: ConnWait,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl UnixConnectorInner {
@@ -256,7 +256,7 @@ impl UnixConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   pub fn start(
     addr: impl AsRef<Path>,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
     thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     let path = addr.as_ref();
@@ -300,7 +300,7 @@ impl UnixConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl AsRef<Path>, tii_server: Arc<TiiServer>) -> TiiResult<Self> {
+  pub fn start_unpooled(addr: impl AsRef<Path>, tii_server: Arc<Server>) -> TiiResult<Self> {
     Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }

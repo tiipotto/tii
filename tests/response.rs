@@ -1,28 +1,28 @@
 mod mock_stream;
 
 use mock_stream::MockStream;
-use tii::http::cookie::{SameSite, SetCookie};
-use tii::http::headers::HeaderName;
-use tii::http::response::Response;
-use tii::http::status::StatusCode;
+use tii::HttpHeaderName;
+use tii::Response;
+use tii::StatusCode;
+use tii::{SameSite, SetCookie};
 
 use std::time::Duration;
-use tii::http::request::HttpVersion;
-use tii::http::response_body::{ResponseBody, ResponseBodySink};
-use tii::stream::IntoConnectionStream;
+use tii::HttpVersion;
+use tii::IntoConnectionStream;
+use tii::{ResponseBody, ResponseBodySink};
 
 #[test]
 fn test_response() {
   let response = Response::new(StatusCode::OK)
     .with_body_slice(b"<body>test</body>\r\n")
-    .with_header(HeaderName::ContentType, "text/html")
+    .with_header(HttpHeaderName::ContentType, "text/html")
     .unwrap()
-    .with_header(HeaderName::ContentLanguage, "en-GB")
+    .with_header(HttpHeaderName::ContentLanguage, "en-GB")
     .unwrap()
-    .with_header(HeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
+    .with_header(HttpHeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
     .unwrap(); // this would never be manually set in prod, but is obviously required for testing
 
-  assert_eq!(response.get_header(&HeaderName::ContentType), Some("text/html"));
+  assert_eq!(response.get_header(&HttpHeaderName::ContentType), Some("text/html"));
 
   let expected_bytes: Vec<u8> = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Language: en-GB\r\nDate: Thu, 1 Jan 1970 00:00:00 GMT\r\nContent-Length: 19\r\n\r\n<body>test</body>\r\n".to_vec();
   let stream = MockStream::without_data();
@@ -50,14 +50,14 @@ fn test_chunked_response() {
 
   let response = Response::new(StatusCode::OK)
     .with_body(ResponseBody::chunked(chunker))
-    .with_header(HeaderName::ContentType, "text/html")
+    .with_header(HttpHeaderName::ContentType, "text/html")
     .unwrap()
-    .with_header(HeaderName::ContentLanguage, "en-GB")
+    .with_header(HttpHeaderName::ContentLanguage, "en-GB")
     .unwrap()
-    .with_header(HeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
+    .with_header(HttpHeaderName::Date, "Thu, 1 Jan 1970 00:00:00 GMT")
     .unwrap(); // this would never be manually set in prod, but is obviously required for testing
 
-  assert_eq!(response.get_header(&HeaderName::ContentType), Some("text/html"));
+  assert_eq!(response.get_header(&HttpHeaderName::ContentType), Some("text/html"));
 
   let expected_bytes: Vec<u8> = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Language: en-GB\r\nDate: Thu, 1 Jan 1970 00:00:00 GMT\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n5\r\nWorld\r\n2\r\nin\r\n6\r\nchunks\r\n0\r\n\r\n".to_vec();
   let stream = MockStream::without_data();
@@ -91,7 +91,7 @@ fn test_cookie_response() {
     );
 
   assert_eq!(
-    response.get_headers(&HeaderName::SetCookie),
+    response.get_headers(&HttpHeaderName::SetCookie),
     vec![
       "X-Example-Cookie=example-value; Max-Age=3600; Path=/; Secure",
       "X-Example-Token=example-token; Domain=example.com; SameSite=Strict; Secure"

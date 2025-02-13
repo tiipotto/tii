@@ -1,16 +1,16 @@
 use log::info;
 use tii::extras::{Connector, TcpConnector};
-use tii::http::method::Method;
-use tii::http::mime::{AcceptMimeType, MimeType};
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::HttpMethod;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
+use tii::{AcceptMimeType, MimeType};
 
 fn main() -> TiiResult<()> {
   colog::default_builder().filter_level(log::LevelFilter::Trace).init();
 
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.
     builder.router(|router| {
       router
@@ -40,7 +40,7 @@ fn main() -> TiiResult<()> {
         //Same but limited to http GET method
         .route_get("/only/get", echo_method)?
         // Tii also supports non-standard custom methods.
-        .route_method(Method::from("QUERY"), "/custom/stuff", echo_method)?
+        .route_method(HttpMethod::from("QUERY"), "/custom/stuff", echo_method)?
         // Begin is just a visual indent so you can group several other things together.
         // It does nothing else.
         .route_get("/path/param/{key1}/{key2}/{regex:.*}", path_param)?
@@ -52,7 +52,7 @@ fn main() -> TiiResult<()> {
             //You do have to explicitly write out "&RequestContext" tho otherwise rust gets confused.
             .endpoint(|ctx: &RequestContext| {
               Response::ok(
-                format!("This is a closure to {}!", ctx.request_head().path()),
+                format!("This is a closure to {}!", ctx.request_head().get_path()),
                 MimeType::TextPlain,
               )
             })?
@@ -100,7 +100,7 @@ fn contact(_: &RequestContext) -> TiiResult<Response> {
 fn generic(request: &RequestContext) -> TiiResult<Response> {
   let html = format!(
     "<html><body><h1>You just requested {}.</h1></body></html>",
-    request.request_head().path()
+    request.request_head().get_path()
   );
 
   Ok(Response::ok(html, MimeType::TextHtml))
@@ -119,7 +119,7 @@ fn pong(request: &RequestContext) -> TiiResult<Response> {
 }
 
 fn echo_method(request: &RequestContext) -> Response {
-  Response::ok(request.request_head().method().as_str(), MimeType::TextPlain)
+  Response::ok(request.request_head().get_method().as_str(), MimeType::TextPlain)
 }
 
 fn path_param(request: &RequestContext) -> Response {

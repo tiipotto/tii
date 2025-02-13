@@ -2,7 +2,7 @@ use crate::extras::connector::{ActiveConnection, ConnWait};
 use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
+use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
 use std::io;
@@ -25,7 +25,7 @@ struct TcpConnectorInner {
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl TcpConnectorInner {
@@ -320,7 +320,7 @@ impl TcpConnector {
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
     thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
     let mut addr_string = String::new();
@@ -368,7 +368,7 @@ impl TcpConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   ///
   /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(addr: impl ToSocketAddrs, tii_server: Arc<TiiServer>) -> TiiResult<Self> {
+  pub fn start_unpooled(addr: impl ToSocketAddrs, tii_server: Arc<Server>) -> TiiResult<Self> {
     Self::start(addr, tii_server, DefaultThreadAdapter)
   }
 }

@@ -28,7 +28,9 @@ struct WebSocketGuard {
 pub struct WebsocketSender(Arc<WebSocketGuard>);
 
 /// Creates a new WebSocket receiver sender pair.
-pub fn new(connection: &dyn ConnectionStream) -> (WebsocketSender, WebsocketReceiver) {
+pub fn new_web_socket_stream(
+  connection: &dyn ConnectionStream,
+) -> (WebsocketSender, WebsocketReceiver) {
   let guard = Arc::new(WebSocketGuard {
     closed: AtomicBool::new(false),
     write_mutex: Mutex::new(()),

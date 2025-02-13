@@ -1,9 +1,9 @@
 use crate::mock_stream::MockStream;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::{RequestHeadParsingError, TiiResult};
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
 use tii::TiiError;
+use tii::{RequestHeadParsingError, TiiResult};
 
 mod mock_stream;
 
@@ -13,7 +13,7 @@ fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
 
 #[test]
 pub fn tc29() {
-  let server = TiiBuilder::builder(|builder| {
+  let server = ServerBuilder::builder(|builder| {
     builder.router(|rt| rt.route_any("/*", dummy_route))?.with_max_head_buffer_size(512)?.ok()
   })
   .expect("ERROR");

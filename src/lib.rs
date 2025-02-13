@@ -2,21 +2,30 @@
 
 #![warn(missing_docs)]
 
-pub mod http;
-pub mod websocket;
+mod http;
+pub use http::*;
 
-mod default_functions;
-mod functional_traits;
-pub mod tii_builder;
-pub mod tii_error;
-pub use tii_error::TiiError;
-pub mod stream;
-pub mod tii_router;
-pub mod tii_router_builder;
-pub mod tii_server;
+mod websocket;
+pub use websocket::*;
+
+mod tii_builder;
+pub use tii_builder::*;
+
+mod tii_error;
+pub use tii_error::*;
+mod stream;
+pub use stream::*;
+mod tii_router;
+pub use tii_router::*;
+
+mod tii_router_builder;
+pub use tii_router_builder::*;
+mod tii_server;
+pub use tii_server::*;
 #[cfg(feature = "tls")]
 mod tls_stream;
-mod util;
+#[cfg(feature = "tls")]
+pub use tls_stream::{TlsCapableStream, TlsStream};
 
 /// Extra utilities that can be useful for many projects but should not be part of tii itself.
 /// This stuff might be moved to its own crate at some point.
@@ -24,5 +33,8 @@ mod util;
 #[cfg(feature = "extras")]
 pub mod extras;
 
-#[cfg(feature = "tls")]
-pub use tls_stream::{TiiTlsStream, TlsCapableStream};
+//Private modules
+mod default_functions;
+mod functional_traits;
+
+mod util;

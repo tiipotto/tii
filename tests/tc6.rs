@@ -1,11 +1,11 @@
 use crate::mock_stream::MockStream;
 use std::sync::atomic::AtomicUsize;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::response_body::ResponseBody;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::HttpVersion;
+use tii::RequestContext;
+use tii::ResponseBody;
+use tii::ServerBuilder;
+use tii::TiiResult;
+use tii::{Response, StatusCode};
 
 mod mock_stream;
 
@@ -13,7 +13,7 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http10, ctx.request_head().version());
+  assert_eq!(HttpVersion::Http10, ctx.request_head().get_version());
   assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
@@ -21,7 +21,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
 #[test]
 pub fn tc6() {
   let server =
-    TiiBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let stream = MockStream::with_str("GET /dummy HTTP/1.0\r\nHdr: test\r\n\r\n");
   let con = stream.to_stream();

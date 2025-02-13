@@ -1,15 +1,15 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use tii::http::cookie::Cookie;
-use tii::http::headers::{Header, HeaderName};
-use tii::http::method::Method;
-use tii::http::RequestHead;
+use tii::Cookie;
+use tii::HttpMethod;
+use tii::RequestHead;
+use tii::{HttpHeader, HttpHeaderName};
 
 use std::collections::VecDeque;
 use std::iter::FromIterator;
-use tii::http::request::HttpVersion;
-use tii::stream::IntoConnectionStream;
+use tii::HttpVersion;
+use tii::IntoConnectionStream;
 
 #[allow(deprecated)]
 #[test]
@@ -22,15 +22,15 @@ fn test_request_from_stream() {
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
-  assert_eq!(request.method(), &Method::Get);
-  assert_eq!(request.path(), expected_uri);
-  assert_eq!(request.query(), &[("foo".to_string(), "bar".to_string())]);
-  assert_eq!(request.version(), HttpVersion::Http11);
+  assert_eq!(request.get_method(), &HttpMethod::Get);
+  assert_eq!(request.get_path(), expected_uri);
+  assert_eq!(request.get_query(), &[("foo".to_string(), "bar".to_string())]);
+  assert_eq!(request.get_version(), HttpVersion::Http11);
 
   let mut expected_headers = Vec::new();
-  expected_headers.push(Header::new(HeaderName::Host, "localhost"));
+  expected_headers.push(HttpHeader::new(HttpHeaderName::Host, "localhost"));
 
-  let collected_headers = request.get_all_headers().cloned().collect::<Vec<_>>();
+  let collected_headers = request.iter_headers().cloned().collect::<Vec<_>>();
   assert_eq!(collected_headers, expected_headers);
 }
 
@@ -61,14 +61,14 @@ fn test_proxied_request_from_stream() {
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
-  assert_eq!(request.method(), &Method::Get);
-  assert_eq!(request.path(), expected_uri);
-  assert_eq!(request.version(), HttpVersion::Http11);
+  assert_eq!(request.get_method(), &HttpMethod::Get);
+  assert_eq!(request.get_path(), expected_uri);
+  assert_eq!(request.get_version(), HttpVersion::Http11);
 
   let mut expected_headers = Vec::new();
-  expected_headers.push(Header::new(HeaderName::Host, "localhost"));
-  expected_headers.push(Header::new("X-Forwarded-For", "9.10.11.12,13.14.15.16"));
-  let collected: Vec<Header> = request.get_all_headers().cloned().collect();
+  expected_headers.push(HttpHeader::new(HttpHeaderName::Host, "localhost"));
+  expected_headers.push(HttpHeader::new("X-Forwarded-For", "9.10.11.12,13.14.15.16"));
+  let collected: Vec<HttpHeader> = request.iter_headers().cloned().collect();
 
   assert_eq!(collected, expected_headers);
 }

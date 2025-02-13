@@ -3,8 +3,8 @@ use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
-use crate::{error_log, info_log, trace_log, TiiTlsStream};
+use crate::tii_server::Server;
+use crate::{error_log, info_log, trace_log, TlsStream};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::os::fd::AsRawFd;
@@ -29,7 +29,7 @@ struct TlsUnixConnectorInner {
   listener: UnixListener,
   waiter: ConnWait,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl TlsUnixConnectorInner {
@@ -164,7 +164,7 @@ impl TlsUnixConnectorInner {
           Ok(stream) => {
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
-                match TiiTlsStream::create(
+                match TlsStream::create(
                   stream,
                   tls_con,
                   thread_adapter_clone.as_ref(),
@@ -292,7 +292,7 @@ impl TlsUnixConnector {
   /// Returns an io::Error if it was unable to bind to the socket.
   pub fn start(
     addr: impl AsRef<Path>,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
     config: Arc<ServerConfig>,
     thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
@@ -344,7 +344,7 @@ impl TlsUnixConnector {
   pub fn start_unpooled(
     addr: impl AsRef<Path>,
     config: Arc<ServerConfig>,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
   ) -> TiiResult<Self> {
     Self::start(addr, tii_server, config, DefaultThreadAdapter)
   }

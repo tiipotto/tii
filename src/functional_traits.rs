@@ -1,10 +1,10 @@
 //! Defines traits for handler and filter functions.
 
-use crate::http::request_context::RequestContext;
-use crate::http::Response;
-use crate::stream::ConnectionStream;
-use crate::tii_error::TiiResult;
-use crate::websocket::stream::{WebsocketReceiver, WebsocketSender};
+use crate::ConnectionStream;
+use crate::RequestContext;
+use crate::Response;
+use crate::TiiResult;
+use crate::{WebsocketReceiver, WebsocketSender};
 use std::fmt::{Debug, Formatter};
 use std::thread;
 use std::thread::JoinHandle;
@@ -100,10 +100,10 @@ where
 /// ## Example
 /// The most basic request handler would be as follows:
 /// ```
-/// use tii::http::mime::MimeType;
+/// use tii::MimeType;
 ///
-/// fn handler(_: tii::http::RequestHead) -> tii::http::Response {
-///     tii::http::Response::ok("Success", MimeType::TextPlain)
+/// fn handler(_: tii::RequestHead) -> tii::Response {
+///     tii::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```
 pub trait HttpEndpoint: Send + Sync {

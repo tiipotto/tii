@@ -6,11 +6,11 @@
 
 use tii::extras::{builtin_endpoints, Connector, TcpConnector};
 
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 fn main() -> TiiResult<()> {
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
         .route_any("/", builtin_endpoints::serve_file("./examples/static/pages/index.html"))?

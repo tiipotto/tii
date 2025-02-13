@@ -1,9 +1,9 @@
 use tii::extras::{Connector, TcpConnector};
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::MimeType;
+use tii::RequestContext;
+use tii::Response;
+use tii::ServerBuilder;
+use tii::TiiResult;
 
 const HTML: &str = r##"
 <html>
@@ -32,7 +32,7 @@ const HTML: &str = r##"
 </html>"##;
 
 fn main() -> TiiResult<()> {
-  let tii_server = TiiBuilder::builder_arc(|builder| {
+  let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| router.route_any("/", home)?.route_any("/wildcard/*", wildcard))
   })?;
 
@@ -48,7 +48,7 @@ fn home(_: &RequestContext) -> TiiResult<Response> {
 fn wildcard(request: &RequestContext) -> TiiResult<Response> {
   let wildcard_path = request
     .request_head()
-    .path() // get the URI of the request
+    .get_path() // get the URI of the request
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option
 

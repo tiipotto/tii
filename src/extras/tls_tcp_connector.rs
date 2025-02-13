@@ -2,8 +2,8 @@ use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
 use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
-use crate::tii_server::TiiServer;
-use crate::{error_log, info_log, trace_log, TiiTlsStream};
+use crate::tii_server::Server;
+use crate::{error_log, info_log, trace_log, TlsStream};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::io;
@@ -27,7 +27,7 @@ struct TlsTcpConnectorInner {
   waiter: ConnWait,
   listener: TcpListener,
   shutdown_flag: AtomicBool,
-  tii_server: Arc<TiiServer>,
+  tii_server: Arc<Server>,
 }
 
 impl TlsTcpConnectorInner {
@@ -102,7 +102,7 @@ impl TlsTcpConnectorInner {
           Ok(stream) => {
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
-                match TiiTlsStream::create(
+                match TlsStream::create(
                   stream,
                   tls_con,
                   thread_adapter_clone.as_ref(),
@@ -352,7 +352,7 @@ impl TlsTcpConnector {
   /// The TCP listener will listen immediately in a background thread.
   pub fn start(
     addr: impl ToSocketAddrs,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
     config: Arc<ServerConfig>,
     thread_adapter: impl ThreadAdapter + 'static,
   ) -> TiiResult<Self> {
@@ -408,7 +408,7 @@ impl TlsTcpConnector {
   pub fn start_unpooled(
     addr: impl ToSocketAddrs,
     config: Arc<ServerConfig>,
-    tii_server: Arc<TiiServer>,
+    tii_server: Arc<Server>,
   ) -> TiiResult<Self> {
     Self::start(addr, tii_server, config, DefaultThreadAdapter)
   }

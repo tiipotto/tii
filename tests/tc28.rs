@@ -1,15 +1,15 @@
 use crate::mock_stream::MockStream;
-use tii::http::request::HttpVersion;
-use tii::http::request_context::RequestContext;
-use tii::http::response_body::ResponseBody;
-use tii::http::{Response, StatusCode};
-use tii::tii_builder::TiiBuilder;
-use tii::tii_error::TiiResult;
+use tii::HttpVersion;
+use tii::RequestContext;
+use tii::ResponseBody;
+use tii::ServerBuilder;
+use tii::TiiResult;
+use tii::{Response, StatusCode};
 
 mod mock_stream;
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().version());
+  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
   assert_eq!(ctx.get_path_param("param1"), Some("p1"));
   assert_eq!(ctx.get_path_param("param2"), Some("p2"));
   let regex1 = ctx.get_path_param("regex1").unwrap();
@@ -23,7 +23,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
 
 #[test]
 pub fn tc28() {
-  let server = TiiBuilder::default()
+  let server = ServerBuilder::default()
     .router(|rt| {
       rt.route_any("/dummy/{param1}/{param2}/{regex1:^([1-9][0-9]*)|0$}/{regex2:.*}", dummy_route)
     })

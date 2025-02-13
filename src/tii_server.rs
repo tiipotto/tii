@@ -3,13 +3,13 @@
 //! If no router wants to handle the request it also has a 404 handler.
 
 use crate::functional_traits::Router;
-use crate::http::headers::HeaderName;
-use crate::http::request::HttpVersion;
-use crate::http::request_context::RequestContext;
 use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
+use crate::HttpHeaderName;
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -43,7 +43,7 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 /// Struct that represents a built server capable of handling connections from some sources.
 /// It does NOT own any OS resources like server sockets / file descriptors.
 #[derive(Debug)]
-pub struct TiiServer {
+pub struct Server {
   shutdown: AtomicBool,
   routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
@@ -71,7 +71,7 @@ impl Default for Hooks {
   }
 }
 
-impl TiiServer {
+impl Server {
   #[expect(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
     routers: Vec<Box<dyn Router>>,
@@ -84,7 +84,7 @@ impl TiiServer {
     request_body_io_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
   ) -> Self {
-    TiiServer {
+    Server {
       shutdown: AtomicBool::new(false),
       routers,
       error_handler,
@@ -189,8 +189,8 @@ impl TiiServer {
       stream.set_read_timeout(self.request_body_io_timeout)?;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
-      if context.request_head().version() == HttpVersion::Http11
-        && context.request_head().get_header(&HeaderName::Upgrade) == Some("websocket")
+      if context.request_head().get_version() == HttpVersion::Http11
+        && context.request_head().get_header(&HttpHeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -224,13 +224,13 @@ impl TiiServer {
       // Will we do keep alive?
       let mut keep_alive = !self.is_shutdown()
           // is this http 1.1 because earlier does not support it.
-          && context.request_head().version() == HttpVersion::Http11
+          && context.request_head().get_version() == HttpVersion::Http11
           // Do we have a keep alive timeout that is not zero?
           && self.keep_alive_timeout.as_ref().map(|a| !a.is_zero()).unwrap_or(true)
           // did the client tell us not to do keep alive?
           && context
             .request_head()
-            .get_header(&HeaderName::Connection)
+            .get_header(&HttpHeaderName::Connection)
             .map(|e| e.eq_ignore_ascii_case("keep-alive"))
             .unwrap_or_default();
 
@@ -317,11 +317,11 @@ impl TiiServer {
     keep_alive: bool,
     mut response: Response,
   ) -> TiiResult<()> {
-    if context.request_head().version() == HttpVersion::Http11 {
+    if context.request_head().get_version() == HttpVersion::Http11 {
       let previous_headers = if keep_alive {
-        response.headers.replace_all(HeaderName::Connection, "Keep-Alive")
+        response.headers.replace_all(HttpHeaderName::Connection, "Keep-Alive")
       } else {
-        response.headers.replace_all(HeaderName::Connection, "Close")
+        response.headers.replace_all(HttpHeaderName::Connection, "Close")
       };
 
       if !previous_headers.is_empty() {
@@ -335,7 +335,7 @@ impl TiiServer {
 
     trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
 
-    response.write_to(context.request_head().version(), stream.as_stream_write()).inspect_err(
+    response.write_to(context.request_head().get_version(), stream.as_stream_write()).inspect_err(
       |e| {
         trace_log!("response.write_to {}", e);
       },
@@ -352,8 +352,8 @@ impl TiiServer {
 
     error_log!(
       "Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
-      &request.request_head().method(),
-      request.request_head().path(),
+      &request.request_head().get_method(),
+      request.request_head().get_path(),
       error
     );
 
@@ -361,7 +361,7 @@ impl TiiServer {
   }
 }
 
-impl Drop for TiiServer {
+impl Drop for Server {
   fn drop(&mut self) {
     self.shutdown();
     trace_log!("TiiServer::drop");

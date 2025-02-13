@@ -1,11 +1,11 @@
 //! Provides a number of useful handlers for Tii apps.
-use crate::http::headers::HeaderName;
-use crate::http::response_body::ResponseBody;
-use crate::http::{Response, StatusCode};
+use crate::HttpHeaderName;
+use crate::ResponseBody;
+use crate::{Response, StatusCode};
 
-use crate::http::mime::MimeType;
-use crate::http::request_context::RequestContext;
-use crate::tii_error::TiiResult;
+use crate::MimeType;
+use crate::RequestContext;
+use crate::TiiResult;
 use std::fs::{metadata, File};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -47,7 +47,7 @@ pub fn serve_file(file_path: &'static str) -> impl Fn(&RequestContext) -> TiiRes
 /// ## Examples
 /// - directory path of `.` will serve files relative to the current directory
 /// - directory path of `./static` will serve files from the static directory but with their whole URI,
-///     for example a request to `/images/ferris.png` will map to the file `./static/images/ferris.png`.
+///   for example a request to `/images/ferris.png` will map to the file `./static/images/ferris.png`.
 ///
 /// This is **not** equivalent to `serve_dir`, as `serve_dir` respects index files within nested directories.
 pub fn serve_as_file_path(
@@ -55,8 +55,11 @@ pub fn serve_as_file_path(
 ) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
-    let file_path =
-      request.request_head().path().strip_prefix('/').unwrap_or(request.request_head().path());
+    let file_path = request
+      .request_head()
+      .get_path()
+      .strip_prefix('/')
+      .unwrap_or(request.request_head().get_path());
     let path = format!("{}/{}", directory_path, file_path);
 
     let path_buf = PathBuf::from(path);
@@ -76,7 +79,7 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> Ti
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
     let uri_without_route = request
       .request_head()
-      .path()
+      .get_path()
       .strip_prefix(route_without_wildcard)
       .unwrap_or(request.routed_path());
 
@@ -84,10 +87,10 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> Ti
 
     if let Some(located) = located {
       match located {
-        LocatedPath::Directory => Ok(
-          Response::new(StatusCode::MovedPermanently)
-            .with_header(HeaderName::Location, format!("{}/", &request.request_head().path()))?,
-        ),
+        LocatedPath::Directory => Ok(Response::new(StatusCode::MovedPermanently).with_header(
+          HttpHeaderName::Location,
+          format!("{}/", &request.request_head().get_path()),
+        )?),
         LocatedPath::File(path) => try_file_open(&path),
       }
     } else {

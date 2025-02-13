@@ -1,4 +1,4 @@
-use tii::http::request::HttpVersion;
+use tii::HttpVersion;
 
 #[test]
 fn test_from_net_name() {

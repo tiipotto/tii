@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-  use tii::http::status::StatusCode;
+  use tii::StatusCode;
 
   #[test]
   fn test_from_code() {
