@@ -67,8 +67,8 @@ impl<T: HttpEndpoint + 'static> Clone for RouteWrapper<T> {
 
 /// For multi method routes!
 #[derive(Debug)]
-struct WsRouteWrapper<T: WebsocketEndpoint + 'static>(Arc<T>);
-impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WsRouteWrapper<T> {
+struct WSRouteWrapper<T: WebsocketEndpoint + 'static>(Arc<T>);
+impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WSRouteWrapper<T> {
   fn serve(
     &self,
     request: &RequestContext,
@@ -79,7 +79,7 @@ impl<T: WebsocketEndpoint + 'static> WebsocketEndpoint for WsRouteWrapper<T> {
   }
 }
 
-impl<T: WebsocketEndpoint + 'static> Clone for WsRouteWrapper<T> {
+impl<T: WebsocketEndpoint + 'static> Clone for WSRouteWrapper<T> {
   fn clone(&self) -> Self {
     Self(Arc::clone(&self.0))
   }
@@ -403,7 +403,7 @@ impl RouterBuilder {
   where
     T: WebsocketEndpoint + 'static,
   {
-    let wrapped = WsRouteWrapper(Arc::new(handler));
+    let wrapped = WSRouteWrapper(Arc::new(handler));
 
     self
       .ws_route_get(route, wrapped.clone())?

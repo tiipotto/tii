@@ -23,13 +23,13 @@ pub enum WsbAppError {
 }
 
 /// WebSocketApp builder/linker for setup and linking to Tii
-pub struct WsbAppBuilder {
+pub struct WSBAppBuilder {
   tii_link: Arc<Mutex<Sender<WebsocketContext>>>,
   state: State,
 }
 
 /// Represents a WebSocket app.
-pub struct WsbApp {
+pub struct WSBApp {
   state: State,
 }
 
@@ -120,7 +120,7 @@ impl<T> WsbEventHandler for T where T: Fn(WsbHandle) + Send + Sync + 'static {}
 pub trait WsbMessageHandler: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static {}
 impl<T> WsbMessageHandler for T where T: Fn(WsbHandle, WebsocketMessage) + Send + Sync + 'static {}
 
-impl Default for WsbAppBuilder {
+impl Default for WSBAppBuilder {
   fn default() -> Self {
     let (connect_hook, incoming_streams) = channel();
     let (broadcast_sender, outgoing_broadcasts) = channel();
@@ -143,10 +143,10 @@ impl Default for WsbAppBuilder {
   }
 }
 
-impl WsbAppBuilder {
+impl WSBAppBuilder {
   /// Returns the finalized App.
-  pub fn finalize(self) -> WsbApp {
-    WsbApp { state: self.state }
+  pub fn finalize(self) -> WSBApp {
+    WSBApp { state: self.state }
   }
 
   /// Returns a websocket endpoint that will service this WebSocketBroadcastApp.
@@ -203,7 +203,7 @@ impl WsbAppBuilder {
   }
 }
 
-impl WsbApp {
+impl WSBApp {
   /// Start the application on the main thread.
   /// This blocks until the Tii server has been dropped.
   pub fn run(self) -> Result<(), WsbAppError> {
