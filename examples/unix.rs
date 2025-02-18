@@ -45,7 +45,7 @@ mod unix {
   use tii::TiiResult;
 
   pub fn work() -> TiiResult<()> {
-    colog::default_builder().filter_level(log::LevelFilter::Trace).init();
+    trivial_log::init_std(log::LevelFilter::Trace).unwrap();
 
     let tii_server = ServerBuilder::builder_arc(|builder| {
       builder.router(|router| router.route_any("/*", handle))

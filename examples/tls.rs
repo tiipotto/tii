@@ -38,7 +38,7 @@ fn create_rust_tls_server_config() -> Arc<ServerConfig> {
 }
 
 fn main() -> TiiResult<()> {
-  colog::default_builder().filter_level(log::LevelFilter::Debug).init();
+  trivial_log::init_std(log::LevelFilter::Debug).unwrap();
 
   let app =
     ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;

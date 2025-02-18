@@ -2,37 +2,20 @@ use tii::TiiResult;
 
 #[cfg(unix)]
 mod unix {
-  use colog::format::{CologStyle, DefaultCologStyle};
   use std::io::{Read, Write};
   use std::os::unix::net::UnixStream;
   use std::thread::sleep;
   use std::time::Duration;
+
   use tii::extras::{Connector, UnixConnector};
-  use tii::MimeType;
-  use tii::RequestContext;
-  use tii::Response;
-  use tii::ServerBuilder;
-  use tii::TiiResult;
+  use tii::{MimeType, RequestContext, Response, ServerBuilder, TiiResult};
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {
     Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
   }
 
   pub fn unix_main() -> TiiResult<()> {
-    _ = colog::default_builder()
-      .format(|buf, record| {
-        let sep = DefaultCologStyle.line_separator();
-        let prefix = DefaultCologStyle.prefix_token(&record.level());
-        writeln!(
-          buf,
-          "{} {:?} {}",
-          prefix,
-          std::thread::current().id(),
-          record.args().to_string().replace('\n', &sep),
-        )
-      })
-      .filter_level(log::LevelFilter::Trace)
-      .try_init();
+    trivial_log::init_std(log::LevelFilter::Trace).unwrap();
 
     let tii_server = ServerBuilder::builder_arc(|builder| {
       builder
@@ -54,6 +37,7 @@ mod unix {
 
     sleep(Duration::from_secs(5));
     connector.shutdown_and_join(None);
+    trivial_log::free();
     Ok(())
   }
 }

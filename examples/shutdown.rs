@@ -1,37 +1,19 @@
-use colog::format::{CologStyle, DefaultCologStyle};
-use log::info;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
-use tii::extras;
-use tii::extras::Connector;
-use tii::MimeType;
-use tii::RequestContext;
-use tii::Response;
-use tii::ServerBuilder;
-use tii::TiiResult;
+
+use log::info;
+use tii::extras::{self, Connector};
+use tii::{MimeType, RequestContext, Response, ServerBuilder, TiiResult};
 
 fn hello(_: &RequestContext) -> TiiResult<Response> {
   Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
 }
 
 fn main() -> TiiResult<()> {
-  _ = colog::default_builder()
-    .format(|buf, record| {
-      let sep = DefaultCologStyle.line_separator();
-      let prefix = DefaultCologStyle.prefix_token(&record.level());
-      writeln!(
-        buf,
-        "{} {:?} {}",
-        prefix,
-        std::thread::current().id(),
-        record.args().to_string().replace('\n', &sep),
-      )
-    })
-    .filter_level(log::LevelFilter::Trace)
-    .try_init();
+  trivial_log::init_std(log::LevelFilter::Trace).unwrap();
 
   let tii_server = ServerBuilder::builder_arc(|builder| {
     builder
@@ -62,6 +44,7 @@ fn main() -> TiiResult<()> {
   let _listen = TcpListener::bind("0.0.0.0:8080")?;
 
   info!("Done");
+  trivial_log::free();
   Ok(())
 }
 
