@@ -1,14 +1,11 @@
-use log::info;
+use log::{info, LevelFilter};
 use tii::extras::{Connector, TcpConnector};
-use tii::HttpMethod;
-use tii::RequestContext;
-use tii::Response;
-use tii::ServerBuilder;
-use tii::TiiResult;
-use tii::{AcceptMimeType, MimeType};
+use tii::{
+  AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ServerBuilder, TiiResult,
+};
 
 fn main() -> TiiResult<()> {
-  colog::default_builder().filter_level(log::LevelFilter::Trace).init();
+  trivial_log::init_std(LevelFilter::Trace).unwrap();
 
   let tii_server = ServerBuilder::builder_arc(|builder| {
     //This example only has 1 router, you could have several by just calling .router(...) again.

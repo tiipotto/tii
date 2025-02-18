@@ -1,23 +1,22 @@
-use tii::extras::{builtin_endpoints, Connector, TcpConnector};
-
-use log::{info, LevelFilter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
-use tii::RequestContext;
-use tii::ServerBuilder;
-use tii::TiiResult;
-use tii::WebsocketMessage;
-use tii::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
+
+use log::{info, LevelFilter};
+use tii::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::{
+  ReadMessageTimeoutResult, RequestContext, ServerBuilder, TiiResult, WebsocketMessage,
+  WebsocketReceiver, WebsocketSender,
+};
 
 /// App state with a simple global atomic counter
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> TiiResult<()> {
-  //Install a simple "output" for the log crate, so we can see something in the console.
-  //Adjust level if it's too verbose for you.
-  colog::default_builder().filter_level(LevelFilter::Trace).init();
+  // Install a simple "output" for the log crate, so we can see something in the console.
+  // Adjust level if it's too verbose for you.
+  trivial_log::init_std(LevelFilter::Trace).unwrap();
 
-  //Visit localhost:8080 in a web-browser like firefox or chrome to see this example.
+  // Visit localhost:8080 in a web-browser like firefox or chrome to see this example.
   let tii_server = ServerBuilder::builder_arc(|builder| {
     builder.router(|router| {
       router
