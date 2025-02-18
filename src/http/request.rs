@@ -116,7 +116,6 @@ fn parse_status_line(start_line_buf: &Vec<u8>) -> TiiResult<&str> {
       //RFC 3986 section 2.2 Reserved Characters
       // TODO some of these chars are not valid for the status line... the status line is not the URI!
       b'!' => {}
-      b'#' => {}
       b'$' => {}
       b'&' => {}
       b'\'' => {}
@@ -141,6 +140,7 @@ fn parse_status_line(start_line_buf: &Vec<u8>) -> TiiResult<&str> {
       //Other Stuff
       b'%' => {}
       b' ' => {}
+      b'\\' => {} // curl doesnt escape this character
       b'\r' => {} // TODO we should check this later... this is only allowed as the second to last char...
       b'\n' => {} // TODO we should check this later... this is only allowed as the last char...
       other => {
