@@ -1,4 +1,5 @@
 use crate::mock_stream::MockStream;
+use log::LevelFilter;
 use tii::RequestContext;
 use tii::Response;
 use tii::ServerBuilder;
@@ -13,6 +14,7 @@ fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
 
 #[test]
 pub fn tc31() {
+  trivial_log::init_stdout(LevelFilter::Trace).unwrap();
   let server = ServerBuilder::builder(|builder| {
     builder.router(|rt| rt.route_any("/*", dummy_route))?.with_max_head_buffer_size(512)?.ok()
   })
@@ -22,9 +24,10 @@ pub fn tc31() {
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   match err {
-    TiiError::RequestHeadParsing(RequestHeadParsingError::PathInvalidUrlEncoding(dta)) => {
+    TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPathUrlEncoding(dta)) => {
       assert_eq!(dta.as_str(), "/%BF");
     }
     e => panic!("Unexpected error {e}"),
   }
+  trivial_log::free();
 }

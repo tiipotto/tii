@@ -1,7 +1,7 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::Cookie;
 use crate::HttpMethod;
+use crate::{trace_log, Cookie};
 use crate::{Headers, HttpHeader, HttpHeaderName};
 
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult, UserError};
@@ -106,6 +106,44 @@ pub struct RequestHead {
 
   /// A list of headers included in the request.
   headers: Headers,
+}
+
+fn validate_raw_path(raw_path: &str) -> TiiResult<()> {
+  //https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+  for n in raw_path.bytes() {
+    match n {
+      b'/' => {}
+      b'-' => {}
+      b'.' => {}
+      b'_' => {}
+      b'~' => {}
+      b'!' => {}
+      b'$' => {}
+      b'\'' => {}
+      b'(' => {}
+      b')' => {}
+      b'*' => {}
+      b'+' => {}
+      b',' => {}
+      b';' => {}
+      b'=' => {}
+      b':' => {}
+      b'@' => {}
+      b'%' => {}
+      //Curl doesn't escape this and it probably won't cause harm?
+      b'\\' => {}
+      _ => {
+        if !n.is_ascii_alphanumeric() {
+          trace_log!("validate_raw_path Err {raw_path} due to byte {n}");
+          return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(
+            raw_path.to_string(),
+          )));
+        }
+      }
+    }
+  }
+
+  Ok(())
 }
 
 fn parse_status_line(start_line_buf: &Vec<u8>) -> TiiResult<&str> {
@@ -241,6 +279,7 @@ impl RequestHead {
     let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
     if count == 0 {
+      //Unreachable unless stream implementation is shit. TC 42 tests this case.
       return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 
@@ -271,10 +310,11 @@ impl RequestHead {
     }
 
     let raw_path = unwrap_some(uri_iter.next());
+    validate_raw_path(raw_path)?;
 
     let path = urlencoding::decode(raw_path)
       .map_err(|_| {
-        TiiError::from(RequestHeadParsingError::PathInvalidUrlEncoding(raw_path.to_string()))
+        TiiError::from(RequestHeadParsingError::InvalidPathUrlEncoding(raw_path.to_string()))
       })?
       .to_string();
 
