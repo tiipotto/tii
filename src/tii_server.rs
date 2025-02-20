@@ -2,14 +2,14 @@
 //! It also handles http keep alive and rudimentary (fallback) error handling.
 //! If no router wants to handle the request it also has a 404 handler.
 
+use crate::HttpHeaderName;
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::functional_traits::Router;
 use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::HttpHeaderName;
-use crate::HttpVersion;
-use crate::RequestContext;
 use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};

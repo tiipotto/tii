@@ -1,5 +1,9 @@
 //! Contains the builder for a router
 
+use crate::AcceptMimeType;
+use crate::HttpMethod;
+use crate::RequestContext;
+use crate::TiiResult;
 use crate::default_functions::{
   default_error_handler, default_method_not_allowed_handler, default_not_acceptable_handler,
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
@@ -7,10 +11,6 @@ use crate::default_functions::{
 use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
 };
-use crate::AcceptMimeType;
-use crate::HttpMethod;
-use crate::RequestContext;
-use crate::TiiResult;
 use crate::{DefaultRouter, Response, Router};
 use crate::{ErrorHandler, NotRouteableHandler};
 use crate::{HttpRoute, WebSocketRoute};

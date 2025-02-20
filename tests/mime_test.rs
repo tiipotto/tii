@@ -127,9 +127,13 @@ fn test_acceptable_permits_group() {
   assert!(AcceptMimeType::Wildcard.permits_group(MimeGroup::Audio));
   assert!(!AcceptMimeType::from(MimeType::ApplicationJson).permits_group(MimeGroup::Application));
   assert!(!AcceptMimeType::from(MimeType::ApplicationJson).permits_group(MimeGroup::Video));
-  assert!(AcceptMimeType::from(MimeGroup::parse("fubar").unwrap())
-    .permits_group(MimeGroup::parse("fubar").unwrap()));
-  assert!(!AcceptMimeType::from(MimeGroup::parse("fubar").unwrap()).permits_group(MimeGroup::Video));
+  assert!(
+    AcceptMimeType::from(MimeGroup::parse("fubar").unwrap())
+      .permits_group(MimeGroup::parse("fubar").unwrap())
+  );
+  assert!(
+    !AcceptMimeType::from(MimeGroup::parse("fubar").unwrap()).permits_group(MimeGroup::Video)
+  );
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{CONNECTOR_SHUTDOWN_TIMEOUT, Connector, ConnectorMeta};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
@@ -34,7 +34,7 @@ impl TcpConnectorInner {
   fn next(&self) -> io::Result<TcpStream> {
     use std::os::windows::io::AsRawSocket;
     use windows_sys::Win32::Networking::WinSock::{
-      WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
+      POLLRDNORM, SOCKET_ERROR, WSAGetLastError, WSAPOLLFD, WSAPoll,
     };
 
     let windows_sock_handle = self.listener.as_raw_socket() as usize;
@@ -135,7 +135,12 @@ impl TcpConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
+          error_log!(
+            "tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.",
+            &self.addr_string,
+            this_connection,
+            err
+          );
         }
       }
 

@@ -1,13 +1,13 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::{error_log, HttpMethod};
-use crate::{trace_log, Cookie};
+use crate::{Cookie, trace_log};
 use crate::{Headers, HttpHeader, HttpHeaderName};
+use crate::{HttpMethod, error_log};
 
+use crate::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult, UserError};
 use crate::util::{unwrap_ok, unwrap_some};
 use crate::warn_log;
-use crate::ConnectionStream;
 use crate::{AcceptQualityMimeType, MimeType, QValue};
 use std::fmt::{Display, Formatter};
 use std::io::ErrorKind;
@@ -382,7 +382,9 @@ impl RequestHead {
 
     if count == 0 {
       //Unreachable unless stream implementation is shit. TC 42 tests this case.
-      error_log!("tii::RequestHead::new call to ConnectionStream::read_until returned 0 bytes, but this RequestHead::new is only called when the stream should have at least one byte buffered. Is the ConnectionStream impl buggy? Will return io::Error UnexpectedEof.");
+      error_log!(
+        "tii::RequestHead::new call to ConnectionStream::read_until returned 0 bytes, but this RequestHead::new is only called when the stream should have at least one byte buffered. Is the ConnectionStream impl buggy? Will return io::Error UnexpectedEof."
+      );
       return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 

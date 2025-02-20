@@ -1,9 +1,9 @@
 //! Contains all state that's needed to process a request.
 
+use crate::http::RequestHead;
 use crate::http::headers::HttpHeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
-use crate::http::RequestHead;
 use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
@@ -108,7 +108,7 @@ impl RequestContext {
         Some(other) => {
           return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
             other.to_string(),
-          )))
+          )));
         }
         None => {}
       }
@@ -349,13 +349,9 @@ impl RequestContext {
 fn consume_body(body: &RequestBody) -> io::Result<()> {
   let mut discarding_buffer = [0; 0x1_00_00]; //TODO heap alloc maybe? cfg-if!
   loop {
-    let discarded = body.read(discarding_buffer.as_mut_slice()).or_else(|e| {
-      if e.kind() == ErrorKind::UnexpectedEof {
-        Ok(0)
-      } else {
-        Err(e)
-      }
-    })?; //Not so unexpected eof!
+    let discarded = body
+      .read(discarding_buffer.as_mut_slice())
+      .or_else(|e| if e.kind() == ErrorKind::UnexpectedEof { Ok(0) } else { Err(e) })?; //Not so unexpected eof!
 
     if discarded == 0 {
       return Ok(());

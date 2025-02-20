@@ -186,7 +186,10 @@ impl WebsocketReceiver {
       let old_timeout = self.guard.stream.get_read_timeout()?.as_ref().cloned();
       if let Err(err) = self.guard.stream.set_read_timeout(timeout) {
         self.guard.closed.store(true, SeqCst);
-        error_log!("WebsocketReceiver::read_message_timeout error setting timeout for 1st byte of next frame {}", &err);
+        error_log!(
+          "WebsocketReceiver::read_message_timeout error setting timeout for 1st byte of next frame {}",
+          &err
+        );
         return Err(TiiError::from(err));
       }
       let res = self.guard.stream.ensure_readable();
@@ -194,7 +197,10 @@ impl WebsocketReceiver {
 
       if let Err(err) = res2 {
         self.guard.closed.store(true, SeqCst);
-        error_log!("WebsocketReceiver::read_message_timeout error setting timeout back to read timeout after waiting for 1st byte of next frame {}", &err);
+        error_log!(
+          "WebsocketReceiver::read_message_timeout error setting timeout back to read timeout after waiting for 1st byte of next frame {}",
+          &err
+        );
         return Err(TiiError::from(err));
       }
 
@@ -203,7 +209,10 @@ impl WebsocketReceiver {
           return Ok(ReadMessageTimeoutResult::Timeout);
         }
         self.guard.closed.store(true, SeqCst);
-        error_log!("WebsocketReceiver::read_message_timeout error while waiting for 1st byte of next frame {}", &err);
+        error_log!(
+          "WebsocketReceiver::read_message_timeout error while waiting for 1st byte of next frame {}",
+          &err
+        );
         return Err(TiiError::from(err));
       }
     }

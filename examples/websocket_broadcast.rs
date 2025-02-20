@@ -2,9 +2,9 @@ use std::error::Error;
 use std::thread::{self, spawn};
 use std::time::Duration;
 
-use tii::extras::{Connector, TcpConnector, WSBAppBuilder, WsbHandle};
 use tii::ServerBuilder;
 use tii::WebsocketMessage;
+use tii::extras::{Connector, TcpConnector, WSBAppBuilder, WsbHandle};
 
 fn main() -> Result<(), Box<dyn Error>> {
   let websocket_linker = WSBAppBuilder::default()
