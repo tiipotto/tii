@@ -1,6 +1,6 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::HttpMethod;
+use crate::{error_log, HttpMethod};
 use crate::{trace_log, Cookie};
 use crate::{Headers, HttpHeader, HttpHeaderName};
 
@@ -81,7 +81,7 @@ impl HttpVersion {
 
 /// Represents a request to the server.
 /// Contains parsed information about the request's data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RequestHead {
   /// The method used in making the request, e.g. "GET".
   method: HttpMethod,
@@ -109,6 +109,13 @@ pub struct RequestHead {
 }
 
 fn validate_raw_path(raw_path: &str) -> TiiResult<()> {
+  if !raw_path.starts_with("/") {
+    trace_log!("validate_raw_path Err {raw_path} because it does not start with /");
+    return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(
+      raw_path.to_string(),
+    )));
+  }
+
   //https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
   for n in raw_path.bytes() {
     match n {
@@ -273,13 +280,106 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
 }
 
 impl RequestHead {
+
+  /// Create a new RequestHead programmatically.
+  /// This is useful for unit testing endpoints.
+  pub fn new(method: HttpMethod, version: HttpVersion, path: impl ToString, query: Vec<(impl ToString, impl ToString)>, headers: Vec<HttpHeader>) -> TiiResult<Self> {
+    let mut path = path.to_string();
+    if validate_raw_path(path.as_str()).is_err() {
+      //Path is not yet url encoded, encode it...
+      let mut path_encoder = String::new();
+      for (idx, part) in path.split("/").enumerate() {
+        if idx == 0 {
+          if !part.is_empty() {
+            //Path does not start with /
+            return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(
+              path,
+            )));
+          }
+          continue;
+        }
+        path_encoder.push('/');
+        path_encoder.push_str(urlencoding::encode(part).as_ref());
+      }
+      validate_raw_path(&path_encoder)?;
+      path = path_encoder;
+    }
+
+    let query: Vec<(String, String)> = query.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).filter(|(k,v)| !k.is_empty() || !v.is_empty()).collect();
+    let mut query_string = String::new();
+    for (idx, (key, value)) in query.iter().enumerate() {
+      if idx == 0 {
+        query_string.push('?');
+      } else {
+        query_string.push('&');
+      }
+      query_string.push_str(urlencoding::encode(key).as_ref());
+      if !value.is_empty() {
+        query_string.push('=');
+        query_string.push_str(urlencoding::encode(value).as_ref());
+      }
+    }
+
+    if version == HttpVersion::Http09 {
+      if method != HttpMethod::Get {
+        return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::MethodNotSupportedByHttpVersion(version, method)));
+      }
+
+      if !headers.is_empty() {
+        return Err(TiiError::UserError(UserError::HeaderNotSupportedByHttpVersion(version)));
+      }
+
+      let status_line = format!("GET {}{}", path.as_str(), query_string.as_str());
+
+      return Ok(Self {
+        method: HttpMethod::Get,
+        version: HttpVersion::Http09,
+        status_line,
+        path,
+        query,
+        accept: vec![AcceptQualityMimeType::from_mime(MimeType::TextHtml, QValue::default())],
+        content_type: None,
+        headers: Default::default(),
+      });
+    }
+
+    let status_line = format!("{} {}{} {}", method, path.as_str(), query_string.as_str(), version);
+    let headers = Headers::from(headers);
+    let accept_hdr = headers.get(HttpHeaderName::Accept).unwrap_or("*/*");
+    let Some(accept) = AcceptQualityMimeType::parse(accept_hdr) else {
+      return Err(TiiError::UserError(UserError::IllegalAcceptHeaderValueSet(accept_hdr.to_string())));
+    };
+
+
+    let content_type = if let Some(ctype_raw) = headers.get(HttpHeaderName::ContentType) {
+      let Some(ctype) = MimeType::parse_from_content_type_header(ctype_raw) else {
+        return Err(TiiError::UserError(UserError::IllegalContentTypeHeaderValueSet(ctype_raw.to_string())));
+      };
+      Some(ctype)
+    } else {
+      None
+    };
+
+  Ok(Self {
+      method,
+      version,
+      status_line,
+      path,
+      query,
+      accept,
+      content_type,
+      headers,
+    })
+  }
+  
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn new(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
+  pub fn read(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
     let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
     if count == 0 {
       //Unreachable unless stream implementation is shit. TC 42 tests this case.
+      error_log!("tii::RequestHead::new call to ConnectionStream::read_until returned 0 bytes, but this RequestHead::new is only called when the stream should have at least one byte buffered. Is the ConnectionStream impl buggy? Will return io::Error UnexpectedEof.");
       return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 

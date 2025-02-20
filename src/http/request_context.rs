@@ -36,18 +36,36 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
+
+  /// Create a new RequestContext programmatically.
+  /// This is useful for unit testing endpoints.
+  pub fn new(id: u128, peer_address: impl ToString, local_address: impl ToString, head: RequestHead, body: Option<RequestBody>, stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>) -> Self {
+    Self {
+      id,
+      peer_address: peer_address.to_string(),
+      local_address: local_address.to_string(),
+      request: head,
+      body,
+      force_connection_close: false,
+      stream_meta,
+      routed_path: None,
+      path_params: None,
+      properties: None,
+    }
+  }
+
   /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
   /// Errors on IO-Error or malformed RequestHead.
-  pub fn new(
+  pub fn read(
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     max_head_buffer_size: usize,
-  ) -> TiiResult<RequestContext> {
+  ) -> TiiResult<Self> {
     let id = util::next_id();
     let peer_address = stream.peer_addr()?;
     let local_address = stream.local_addr()?;
 
-    let req = RequestHead::new(stream, max_head_buffer_size)?;
+    let req = RequestHead::read(stream, max_head_buffer_size)?;
 
     if req.get_version() == HttpVersion::Http09 {
       return Ok(RequestContext {

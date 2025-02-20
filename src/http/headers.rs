@@ -29,6 +29,10 @@ impl Headers {
     Self::default()
   }
 
+  pub fn from(headers: Vec<HttpHeader>) -> Self {
+    Self(headers)
+  }
+
   /// Get the number of headers in the collection.
   pub fn len(&self) -> usize {
     self.0.len()
