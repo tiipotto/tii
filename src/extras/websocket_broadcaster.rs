@@ -152,7 +152,7 @@ impl WSBAppBuilder {
 
   /// Returns a websocket endpoint that will service this WebSocketBroadcastApp.
   /// Add this endpoint to a websocket route in a TiiBuilder.
-  pub fn endpoint(&self) -> impl WebsocketEndpoint {
+  pub fn endpoint(&self) -> impl WebsocketEndpoint + use<> {
     let hook = self.tii_link.clone();
     move |request: &RequestContext, receiver: WebsocketReceiver, sender: WebsocketSender| {
       let hook = util::unwrap_poison(hook.lock());
