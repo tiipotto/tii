@@ -135,22 +135,22 @@ impl Frame {
     let mut buf = [0, 0];
 
     // Set the header bits
-    buf[0] = (self.fin as u8) << 7
-      | (self.rsv[0] as u8) << 6
-      | (self.rsv[1] as u8) << 5
-      | (self.rsv[2] as u8) << 4
+    buf[0] = ((self.fin as u8) << 7)
+      | ((self.rsv[0] as u8) << 6)
+      | ((self.rsv[1] as u8) << 5)
+      | ((self.rsv[2] as u8) << 4)
       | self.opcode as u8;
 
     // Write Header Bits + Length information
     if self.length < 126 {
-      buf[1] = (self.mask as u8) << 7 | self.length as u8;
+      buf[1] = ((self.mask as u8) << 7) | self.length as u8;
       write.write_all(&buf)?;
     } else if self.length < 65536 {
-      buf[1] = (self.mask as u8) << 7 | 126;
+      buf[1] = ((self.mask as u8) << 7) | 126;
       write.write_all(&buf)?;
       write.write_all(&(self.length as u16).to_be_bytes())?;
     } else {
-      buf[1] = (self.mask as u8) << 7 | 127;
+      buf[1] = ((self.mask as u8) << 7) | 127;
       write.write_all(&buf)?;
       write.write_all(&(self.length).to_be_bytes())?;
     }

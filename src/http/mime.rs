@@ -1331,6 +1331,11 @@ impl MimeType {
     }
   }
 
+  /// returns the AcceptQualityMimeType for this MimeType with the given QValue
+  pub fn into_accept(self, q: QValue) -> AcceptQualityMimeType {
+    AcceptQualityMimeType::from_mime(self, q)
+  }
+
   /// This fn parses the mime type and assumes that its in the format of a valid Content-Type header.
   pub fn parse_from_content_type_header<T: AsRef<str>>(value: T) -> Option<Self> {
     Self::parse(unwrap_some(value.as_ref().split(";").next())) //strips ; charset=utf-8 or ; boundry=..., which we don't care about here.

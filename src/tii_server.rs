@@ -183,7 +183,7 @@ impl Server {
       stream.set_read_timeout(self.read_timeout)?;
 
       let mut context =
-        RequestContext::new(stream.as_ref(), meta.as_ref().cloned(), self.max_head_buffer_size)?;
+        RequestContext::read(stream.as_ref(), meta.as_ref().cloned(), self.max_head_buffer_size)?;
       count += 1;
 
       stream.set_read_timeout(self.request_body_io_timeout)?;

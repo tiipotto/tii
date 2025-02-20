@@ -75,6 +75,7 @@ pub enum UserError {
   ImmutableRequestHeaderRemoved(HttpHeaderName),
   ImmutableResponseHeaderModified(HttpHeaderName),
   RequestHeadBufferTooSmall(usize),
+  HeaderNotSupportedByHttpVersion(HttpVersion),
 }
 
 impl Display for UserError {
