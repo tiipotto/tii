@@ -280,10 +280,15 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
 }
 
 impl RequestHead {
-
   /// Create a new RequestHead programmatically.
   /// This is useful for unit testing endpoints.
-  pub fn new(method: HttpMethod, version: HttpVersion, path: impl ToString, query: Vec<(impl ToString, impl ToString)>, headers: Vec<HttpHeader>) -> TiiResult<Self> {
+  pub fn new(
+    method: HttpMethod,
+    version: HttpVersion,
+    path: impl ToString,
+    query: Vec<(impl ToString, impl ToString)>,
+    headers: Vec<HttpHeader>,
+  ) -> TiiResult<Self> {
     let mut path = path.to_string();
     if validate_raw_path(path.as_str()).is_err() {
       //Path is not yet url encoded, encode it...
@@ -292,9 +297,7 @@ impl RequestHead {
         if idx == 0 {
           if !part.is_empty() {
             //Path does not start with /
-            return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(
-              path,
-            )));
+            return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(path)));
           }
           continue;
         }
@@ -305,7 +308,11 @@ impl RequestHead {
       path = path_encoder;
     }
 
-    let query: Vec<(String, String)> = query.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).filter(|(k,v)| !k.is_empty() || !v.is_empty()).collect();
+    let query: Vec<(String, String)> = query
+      .into_iter()
+      .map(|(k, v)| (k.to_string(), v.to_string()))
+      .filter(|(k, v)| !k.is_empty() || !v.is_empty())
+      .collect();
     let mut query_string = String::new();
     for (idx, (key, value)) in query.iter().enumerate() {
       if idx == 0 {
@@ -322,7 +329,9 @@ impl RequestHead {
 
     if version == HttpVersion::Http09 {
       if method != HttpMethod::Get {
-        return Err(TiiError::RequestHeadParsing(RequestHeadParsingError::MethodNotSupportedByHttpVersion(version, method)));
+        return Err(TiiError::RequestHeadParsing(
+          RequestHeadParsingError::MethodNotSupportedByHttpVersion(version, method),
+        ));
       }
 
       if !headers.is_empty() {
@@ -347,31 +356,25 @@ impl RequestHead {
     let headers = Headers::from(headers);
     let accept_hdr = headers.get(HttpHeaderName::Accept).unwrap_or("*/*");
     let Some(accept) = AcceptQualityMimeType::parse(accept_hdr) else {
-      return Err(TiiError::UserError(UserError::IllegalAcceptHeaderValueSet(accept_hdr.to_string())));
+      return Err(TiiError::UserError(UserError::IllegalAcceptHeaderValueSet(
+        accept_hdr.to_string(),
+      )));
     };
-
 
     let content_type = if let Some(ctype_raw) = headers.get(HttpHeaderName::ContentType) {
       let Some(ctype) = MimeType::parse_from_content_type_header(ctype_raw) else {
-        return Err(TiiError::UserError(UserError::IllegalContentTypeHeaderValueSet(ctype_raw.to_string())));
+        return Err(TiiError::UserError(UserError::IllegalContentTypeHeaderValueSet(
+          ctype_raw.to_string(),
+        )));
       };
       Some(ctype)
     } else {
       None
     };
 
-  Ok(Self {
-      method,
-      version,
-      status_line,
-      path,
-      query,
-      accept,
-      content_type,
-      headers,
-    })
+    Ok(Self { method, version, status_line, path, query, accept, content_type, headers })
   }
-  
+
   /// Attempts to read and parse one HTTP request from the given reader.
   pub fn read(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);

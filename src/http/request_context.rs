@@ -36,10 +36,16 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
-
   /// Create a new RequestContext programmatically.
   /// This is useful for unit testing endpoints.
-  pub fn new(id: u128, peer_address: impl ToString, local_address: impl ToString, head: RequestHead, body: Option<RequestBody>, stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>) -> Self {
+  pub fn new(
+    id: u128,
+    peer_address: impl ToString,
+    local_address: impl ToString,
+    head: RequestHead,
+    body: Option<RequestBody>,
+    stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+  ) -> Self {
     Self {
       id,
       peer_address: peer_address.to_string(),
