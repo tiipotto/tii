@@ -93,7 +93,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: 1.85
       - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
