@@ -197,11 +197,12 @@ fn parse_status_line(start_line_buf: &Vec<u8>) -> TiiResult<&str> {
     }
   }
 
-  // We could use the unsafe variant here without issue to prevent double validation our validation is stricter than str validation.
-  Ok(
-    std::str::from_utf8(start_line_buf)
-      .map_err(|_| RequestHeadParsingError::StatusLineContainsInvalidBytes)?,
-  )
+  if let Ok(res) = std::str::from_utf8(start_line_buf) {
+    return Ok(res);
+  }
+
+  error_log!("parse_status_line: fatal error std::str::from_utf8 with buf failed utf8 validation even tho it succeeded ascii validation. buf={start_line_buf:?}");
+  crate::util::unreachable()
 }
 
 fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
