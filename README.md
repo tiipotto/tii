@@ -3,40 +3,38 @@ tii is fast compiling low-latency HTTP/1.1 web server, with support for static c
 tii is currently under active development.
 While it does work, large amounts of breaking changes are expected.
 
-## Example
-For a larger example that uses most features of tii see the examples/basic.rs file!
-```rust
+## Quick Start
+For a larger example that uses most features of tii see [basic](./examples/basic.rs). There are many more [examples](./examples).
+
+```rust no_run
 use std::net::TcpListener;
 use std::time::Duration;
-use tii::http::mime::MimeType;
-use tii::http::request_context::RequestContext;
-use tii::http::Response;
-use tii::tii_builder::TiiBuilder;
 
+use tii::{MimeType, RequestContext, Response, ServerBuilder};
 
 fn hello_world(request: &RequestContext) -> Response {
-    let response_body = format!("Path: {} Hello, World!", request.request_head().path());
-    Response::ok(response_body, MimeType::TextPlain)
+  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  Response::ok(response_body, MimeType::TextPlain)
 }
-fn main() {
-    let tii_server = TiiBuilder::builder(|builder| {
-        builder.router(|router| {
-            router.route_get("/*", hello_world)
-        })?
-        .with_keep_alive_timeout(Some(Duration::ZERO)) //We disable http keep alive.
-    }).unwrap();
 
-    // This does not spawn any threads, everything will be done in the main thread!
-    // Connections will be processed 1 at a time.
-    let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
-    for tcp_stream in tcp_listen.incoming() {
-        if let Err(err) = tii_server.handle_connection(tcp_stream.unwrap()) {
-            eprintln!("Error handling request: {}", err);
-        }
+fn main() {
+  let tii_server = ServerBuilder::builder(|builder| {
+    builder
+      .router(|router| router.route_get("/*", hello_world))?
+      .with_keep_alive_timeout(Some(Duration::ZERO)) //We disable http keep alive.
+  })
+  .unwrap();
+
+  // This does not spawn any threads, everything will be done in the main thread!
+  // Connections will be processed 1 at a time.
+  let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
+  for tcp_stream in tcp_listen.incoming() {
+    if let Err(err) = tii_server.handle_connection(tcp_stream.unwrap()) {
+      eprintln!("Error handling request: {}", err);
     }
+  }
 }
 ```
-
 
 ## Goals
 - Simplicity (simple source, but also simple to use)
@@ -44,9 +42,9 @@ fn main() {
 - Fast compile times (*1)
 - Safety (unsafe_code is denied) (*2)
 
-(*1) if rust-tls is not enabled, rust-tls itself takes "forever" to build
+(*1) With default features. Some features, such as `rust-tls`, may increase compile times.
 
-(*2) there are 2 unsafe blocks in the "extras" feature which is not enabled by default.
+(*2) With default features. There are 2 unsafe blocks with the "extras" feature.
 * 1 (Windows) call wsock WSAPoll to check if a TCPListener can accept a connection without blocking forever.
 * 2 (Unix) call libc::shutdown on a TCPListener/UnixListener making it return from accept with an io error immediately.
 
@@ -234,22 +232,24 @@ Tii does not do or need this by default, only if you enable and use some feature
 some functions will offer a way for you to pass a thread pool. It is very obvious to the user when this is the case.
 
 Your custom thread pool will have to implement the tii::ThreadAdapter trait. This trait requires your implementation
-to provide a single "spawn" function that runs the given task and returns some type of join handle. 
+to provide a single "spawn" function that runs the given task and returns some type of join handle.
 It should not be hard or much effort to implement this trait for any given thread pool.
 
-If your thread pool does not support join handles then you can return a noop join handle (`ThreadAdapterJoinHandle::default()`) 
+If your thread pool does not support join handles then you can return a noop join handle (`ThreadAdapterJoinHandle::default()`)
 that does nothing when join() is called. The join handle is not used for critical synchronization or passing return values.
-It is only used to ensure that resources are actually freed already and to log panics that may have occurred 
-in user code in the separate thread. If you do not care about immediate freeing of resources (they are still freed but just in the "background") 
+It is only used to ensure that resources are actually freed already and to log panics that may have occurred
+in user code in the separate thread. If you do not care about immediate freeing of resources (they are still freed but just in the "background")
 or logging panic messages then returning a noop join handle is acceptable.
 
 The default "TheadAdapter" implementation looks like this:
 ```rust
+use tii::{ThreadAdapter, TiiResult, ThreadAdapterJoinHandle};
+
 #[derive(Debug)]
 pub(crate) struct DefaultThreadAdapter;
 impl ThreadAdapter for DefaultThreadAdapter {
   fn spawn(&self, task: Box<dyn FnOnce() + Send>) -> TiiResult<ThreadAdapterJoinHandle> {
-    let hdl : JoinHandle<()> = thread::Builder::new().spawn(task)?;
+    let hdl : std::thread::JoinHandle<()> = std::thread::Builder::new().spawn(task)?;
     Ok(ThreadAdapterJoinHandle::new(Box::new(move || hdl.join())))
   }
 }
