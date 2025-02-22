@@ -219,3 +219,7 @@ macro_rules! error_log {
       let _ = &($($arg)+);
   }
 }
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDocTests;
