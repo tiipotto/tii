@@ -214,13 +214,26 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
   let mut current_key = Vec::new();
   let mut current_value = Vec::new();
   let mut matching_value = false;
-  for n in raw_query.as_bytes() {
-    match *n {
+  let mut matching_percent = 0;
+  for n in raw_query.as_bytes().iter().copied() {
+    if matching_percent != 0 {
+      match n {
+        b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' => {
+          matching_percent -= 1;
+        }
+        _ => {
+          return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
+        }
+      }
+    }
+
+    match n {
       b'=' => {
         if matching_value {
           return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
         }
         matching_value = true;
+        continue;
       }
       b'&' => {
         if !matching_value {
@@ -229,51 +242,49 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
 
         let key = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_key.as_slice())))
           .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-          .to_string();
+          .replace('+', " ");
 
         let value = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_value.as_slice())))
           .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-          .to_string();
+          .replace('+', " ");
 
         query.push((key, value));
 
         matching_value = false;
         current_key = Vec::new();
-        current_value = Vec::new()
+        current_value = Vec::new();
+        continue;
+      }
+      b'%' => {
+        matching_percent = 2;
       }
       b'!' | b'$' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b'-' | b'.' | b'/' | b':' | b';'
-      | b'@' | b'_' | b'~' => {
-        if matching_value {
-          current_value.push(*n);
-        } else {
-          current_key.push(*n);
-        }
-      }
+      | b'@' | b'_' | b'~' => {}
       other => {
         if !other.is_ascii_alphanumeric() {
           return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
         }
-
-        if matching_value {
-          current_value.push(*n);
-        } else {
-          current_key.push(*n);
-        }
       }
+    }
+
+    if matching_value {
+      current_value.push(n);
+    } else {
+      current_key.push(n);
     }
   }
 
-  if !matching_value {
+  if !matching_value || matching_percent != 0 {
     return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
   }
 
   let key = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_key.as_slice())))
     .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-    .to_string();
+    .replace('+', " ");
 
   let value = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_value.as_slice())))
     .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-    .to_string();
+    .replace('+', " ");
 
   query.push((key, value));
 
@@ -420,7 +431,7 @@ impl RequestHead {
       .map_err(|_| {
         TiiError::from(RequestHeadParsingError::InvalidPathUrlEncoding(raw_path.to_string()))
       })?
-      .to_string();
+      .replace('+', " ");
 
     let raw_query = uri_iter.next().unwrap_or("");
     let query = parse_raw_query(raw_query)?;
