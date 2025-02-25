@@ -1,6 +1,4 @@
 //! Provides functionality for http request bodies
-//! TODO docs before release
-#![allow(missing_docs)]
 
 use crate::util::{unwrap_poison, unwrap_some};
 use crate::{error_log, TiiResult};
@@ -11,20 +9,39 @@ use std::io::{Cursor, Error, ErrorKind, Read, Take};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
+/// Request body abstraction that will implement a generic read/write interface that does not require mut self to operate upon and can be shared with threads.
+/// Peculiarities like transfer and content encoding are handled by the inner implementation and hidden from the actual endpoints.
+///
+/// # Concerning equality
+/// Instances of RequestBody are only considered equal if they refer to the exact same underlying stream.
+/// The content of the stream is not considered when determining equality as that would require consuming the stream.
 #[derive(Debug, Clone)]
+#[repr(transparent)]
 pub struct RequestBody(Arc<Mutex<RequestBodyInner>>);
 
+impl Eq for RequestBody {}
+impl PartialEq for RequestBody {
+  fn eq(&self, other: &Self) -> bool {
+    Arc::ptr_eq(&self.0, &other.0)
+  }
+}
+
 impl RequestBody {
+
+  /// For unit tests or mocks, will mimic new_with_content_length
+  /// This will call to_vec() on the slice.
   pub fn new_with_data_ref<T: AsRef<[u8]>>(data: T) -> RequestBody {
     Self::new_with_data(data.as_ref().to_vec())
   }
 
+  /// For unit tests or mocks, will mimic new_with_content_length
   pub fn new_with_data(data: Vec<u8>) -> RequestBody {
     let len = data.len() as u64;
     let cursor = Cursor::new(data);
     Self::new_with_content_length(Box::new(cursor) as Box<dyn Read + Send + 'static>, len)
   }
 
+  /// Uncompressed stream with known length.
   pub fn new_with_content_length<T: Read + Send + 'static>(read: T, len: u64) -> RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::WithContentLength(
       RequestBodyWithContentLength {
@@ -33,6 +50,8 @@ impl RequestBody {
       },
     ))))
   }
+
+  /// Uncompressed Chunked stream. Content length is not known.
   pub fn new_chunked<T: Read + Send + 'static>(read: T) -> RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::Chunked(RequestBodyChunked {
       read: Box::new(read) as Box<dyn Read + Send>,
@@ -42,6 +61,8 @@ impl RequestBody {
     }))))
   }
 
+  /// Chunked stream that is gzip compressed.
+  /// Neither compressed nor uncompressed content lengths are known.
   pub fn new_gzip_chunked<T: Read + Send + 'static>(read: T) -> TiiResult<RequestBody> {
     let inner = RequestBodyInner::Chunked(RequestBodyChunked {
       read: Box::new(read) as Box<dyn Read + Send>,
@@ -53,7 +74,22 @@ impl RequestBody {
     Ok(RequestBody(Arc::new(Mutex::new(RequestBodyInner::Gzip(GzipRequestBody::new(inner)?)))))
   }
 
-  pub fn new_gzip_with_content_length<T: Read + Send + 'static>(
+  /// GZIP stream with a known length of the uncompressed data.
+  /// The size of the gzip payload is presumably smaller (not guaranteed) but otherwise unknown.
+  pub fn new_gzip_with_uncompressed_length<T: Read + Send + 'static>(
+    read: T,
+    len: u64,
+  ) -> TiiResult<RequestBody> {
+    let decoder = gzip::Decoder::new(read).inspect_err(|e| {
+      error_log!("Could not decode gzip header of request body: {}", e);
+    })?;
+
+    Ok(Self::new_with_content_length(decoder, len))
+  }
+
+  /// GZIP stream with a known length of the compressed data.
+  /// The length of the uncompressed data is not known.
+  pub fn new_gzip_with_compressed_content_length<T: Read + Send + 'static>(
     read: T,
     len: u64,
   ) -> TiiResult<RequestBody> {
@@ -67,22 +103,32 @@ impl RequestBody {
 }
 
 impl RequestBody {
+
+  /// Turns this struct into a generic Box<Read> impl.
+  /// Useful for calling some external library functions.
   pub fn as_read(&self) -> impl Read + '_ {
     Box::new(self)
   }
 
+  /// same as `std::io::Read` trait
   pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
     unwrap_poison(self.0.lock())?.deref_mut().read(buf)
   }
 
+  /// same as `std::io::Read` trait
   pub fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
     unwrap_poison(self.0.lock())?.deref_mut().read_to_end(buf)
   }
 
+  /// same as `std::io::Read` trait
   pub fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
     unwrap_poison(self.0.lock())?.deref_mut().read_exact(buf)
   }
 
+  /// Returns the amount of bytes that can be read until the request body is fully consumes.
+  /// Some types of request bodies do not know this in this case None is returned.
+  /// # Errors
+  /// If the read mutex was poisoned.
   pub fn remaining(&self) -> io::Result<Option<u64>> {
     Ok(match unwrap_poison(self.0.lock())?.deref_mut() {
       RequestBodyInner::WithContentLength(wc) => Some(wc.data.limit()),

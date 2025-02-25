@@ -236,9 +236,8 @@ impl RequestContext {
           path_params: None,
         })
       }
-      (Some("gzip"), None) | (Some("x-gzip"), None) => {
-        trace_log!("Request {id} has gzip request body");
-        //gzip+Content-Length
+      (None, Some("x-gzip")) | (None, Some("gzip")) => {
+        trace_log!("Request {id} has gzip request body with length of uncompressed content");
         let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
@@ -248,7 +247,37 @@ impl RequestContext {
         })?;
 
         let body =
-          RequestBody::new_gzip_with_content_length(stream.new_ref_read(), content_length)?;
+            RequestBody::new_gzip_with_uncompressed_length(stream.new_ref_read(), content_length)?;
+
+        Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: Some(body),
+          //TODO, i have seen gzip produce trailer bytes in the past that are just padding
+          //and I am not confident enough that libflate consumes them.
+          //Until I have verified that libflate consumes the trailerbytes without fail we should not enable keep alive.
+          force_connection_close: true,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        })
+      }
+      (Some("gzip"), None) | (Some("x-gzip"), None) => {
+        trace_log!("Request {id} has gzip request body with length of compressed content");
+        //gzip+Content-Length of zipped stuff
+        let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
+          return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
+        };
+
+        let content_length: u64 = content_length.parse().map_err(|_| {
+          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+        })?;
+
+        let body =
+          RequestBody::new_gzip_with_compressed_content_length(stream.new_ref_read(), content_length)?;
         Ok(RequestContext {
           id,
           peer_address,
@@ -262,7 +291,7 @@ impl RequestContext {
           path_params: None,
         })
       }
-      (Some("gzip"), Some("chunked")) | (Some("x-gzip"), Some("chunked")) => {
+      (Some("gzip"), Some("chunked")) | (Some("x-gzip"), Some("chunked")) | (None, Some("gzip, chunked")) | (None, Some("x-gzip, chunked")) => {
         trace_log!("Request {id} has chunked gzip request body");
         let body = RequestBody::new_gzip_chunked(stream.new_ref_read())?;
         Ok(RequestContext {
