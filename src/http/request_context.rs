@@ -247,7 +247,7 @@ impl RequestContext {
         })?;
 
         let body =
-            RequestBody::new_gzip_with_uncompressed_length(stream.new_ref_read(), content_length)?;
+          RequestBody::new_gzip_with_uncompressed_length(stream.new_ref_read(), content_length)?;
 
         Ok(RequestContext {
           id,
@@ -276,8 +276,10 @@ impl RequestContext {
           TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
         })?;
 
-        let body =
-          RequestBody::new_gzip_with_compressed_content_length(stream.new_ref_read(), content_length)?;
+        let body = RequestBody::new_gzip_with_compressed_content_length(
+          stream.new_ref_read(),
+          content_length,
+        )?;
         Ok(RequestContext {
           id,
           peer_address,
@@ -291,7 +293,10 @@ impl RequestContext {
           path_params: None,
         })
       }
-      (Some("gzip"), Some("chunked")) | (Some("x-gzip"), Some("chunked")) | (None, Some("gzip, chunked")) | (None, Some("x-gzip, chunked")) => {
+      (Some("gzip"), Some("chunked"))
+      | (Some("x-gzip"), Some("chunked"))
+      | (None, Some("gzip, chunked"))
+      | (None, Some("x-gzip, chunked")) => {
         trace_log!("Request {id} has chunked gzip request body");
         let body = RequestBody::new_gzip_chunked(stream.new_ref_read())?;
         Ok(RequestContext {

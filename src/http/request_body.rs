@@ -27,7 +27,6 @@ impl PartialEq for RequestBody {
 }
 
 impl RequestBody {
-
   /// For unit tests or mocks, will mimic new_with_content_length
   /// This will call to_vec() on the slice.
   pub fn new_with_data_ref<T: AsRef<[u8]>>(data: T) -> RequestBody {
@@ -103,7 +102,6 @@ impl RequestBody {
 }
 
 impl RequestBody {
-
   /// Turns this struct into a generic Box<Read> impl.
   /// Useful for calling some external library functions.
   pub fn as_read(&self) -> impl Read + '_ {
