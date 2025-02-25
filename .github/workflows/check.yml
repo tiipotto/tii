@@ -43,7 +43,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
-      VALGRINDFLAGS=: "--error-exitcode=1 --leak-check=full --show-leak-kinds=all"
+      VALGRINDFLAGS: "--error-exitcode=1 --leak-check=full --show-leak-kinds=all"
     steps:
       - name: Update sources
         run: sudo apt update
