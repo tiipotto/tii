@@ -43,11 +43,14 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
+      VALGRINDFLAGS=: "--error-exitcode=1 --leak-check=full --show-leak-kinds=all"
     steps:
       - name: Update sources
         run: sudo apt update
       - name: Install valgrind
         run: sudo apt install valgrind
+      - name: Install cargo valgrind
+        run: cargo install cargo-valgrind
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -59,6 +62,7 @@ jobs:
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_multiple
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_unix
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/websocket_broadcast 5
+          cargo valgrind test --all-features
 
   build_linux:
     name: Build Linux
