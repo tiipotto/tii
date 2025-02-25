@@ -22,6 +22,9 @@ regex = "1.11.1"
 sha1 = "0.10.6"
 base64 = "0.22.1"
 defer-heavy = "0.1.0"
+#GZIP/ZLIB in pure rust
+libflate = "2.1.0"
+
 
 ## SSL
 rustls = { version = "0.23.23", optional = true }

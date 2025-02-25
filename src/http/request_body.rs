@@ -3,6 +3,8 @@
 #![allow(missing_docs)]
 
 use crate::util::{unwrap_poison, unwrap_some};
+use crate::{error_log, TiiResult};
+use libflate::gzip;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{Cursor, Error, ErrorKind, Read, Take};
@@ -39,6 +41,29 @@ impl RequestBody {
       remaining_chunk_length: 0,
     }))))
   }
+
+  pub fn new_gzip_chunked<T: Read + Send + 'static>(read: T) -> TiiResult<RequestBody> {
+    let inner = RequestBodyInner::Chunked(RequestBodyChunked {
+      read: Box::new(read) as Box<dyn Read + Send>,
+      eof: false,
+      err: false,
+      remaining_chunk_length: 0,
+    });
+
+    Ok(RequestBody(Arc::new(Mutex::new(RequestBodyInner::Gzip(GzipRequestBody::new(inner)?)))))
+  }
+
+  pub fn new_gzip_with_content_length<T: Read + Send + 'static>(
+    read: T,
+    len: u64,
+  ) -> TiiResult<RequestBody> {
+    let inner = RequestBodyInner::WithContentLength(RequestBodyWithContentLength {
+      err: false,
+      data: (Box::new(read) as Box<dyn Read + Send>).take(len),
+    });
+
+    Ok(RequestBody(Arc::new(Mutex::new(RequestBodyInner::Gzip(GzipRequestBody::new(inner)?)))))
+  }
 }
 
 impl RequestBody {
@@ -47,24 +72,15 @@ impl RequestBody {
   }
 
   pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-    match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.read(buf),
-      RequestBodyInner::Chunked(body) => body.read(buf),
-    }
+    unwrap_poison(self.0.lock())?.deref_mut().read(buf)
   }
 
   pub fn read_to_end(&self, buf: &mut Vec<u8>) -> io::Result<usize> {
-    match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.read_to_end(buf),
-      RequestBodyInner::Chunked(body) => body.read_to_end(buf),
-    }
+    unwrap_poison(self.0.lock())?.deref_mut().read_to_end(buf)
   }
 
   pub fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
-    match unwrap_poison(self.0.lock())?.deref_mut() {
-      RequestBodyInner::WithContentLength(body) => body.read_exact(buf),
-      RequestBodyInner::Chunked(body) => body.read_exact(buf),
-    }
+    unwrap_poison(self.0.lock())?.deref_mut().read_exact(buf)
   }
 
   pub fn remaining(&self) -> io::Result<Option<u64>> {
@@ -84,8 +100,38 @@ impl Read for &RequestBody {
 #[derive(Debug)]
 enum RequestBodyInner {
   WithContentLength(RequestBodyWithContentLength),
-  Chunked(RequestBodyChunked), //Gzipped(...)
-                               //...
+  Chunked(RequestBodyChunked),
+  Gzip(GzipRequestBody),
+  //Gzipped(...)   //..
+}
+
+impl Read for RequestBodyInner {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    match self {
+      RequestBodyInner::WithContentLength(body) => body.read(buf),
+      RequestBodyInner::Chunked(body) => body.read(buf),
+      RequestBodyInner::Gzip(body) => body.read(buf),
+    }
+  }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+struct GzipRequestBody(gzip::Decoder<Box<RequestBodyInner>>);
+
+impl GzipRequestBody {
+  fn new(inner: RequestBodyInner) -> TiiResult<Self> {
+    let decoder = gzip::Decoder::new(Box::new(inner)).inspect_err(|e| {
+      error_log!("Could not decode gzip header of request body: {}", e);
+    })?;
+    Ok(Self(decoder))
+  }
+}
+
+impl Read for GzipRequestBody {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    self.0.read(buf)
+  }
 }
 
 struct RequestBodyWithContentLength {
