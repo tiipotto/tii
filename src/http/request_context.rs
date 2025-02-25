@@ -212,7 +212,7 @@ impl RequestContext {
             local_address,
             request: req,
             body: Some(RequestBody::new_with_content_length(stream.new_ref_read(), content_length)),
-            force_connection_close: true,
+            force_connection_close: false,
             properties: None,
             routed_path: None,
             stream_meta,
