@@ -388,7 +388,11 @@ impl RequestHead {
   }
 
   /// Attempts to read and parse one HTTP request from the given reader.
-  pub fn read(stream: &dyn ConnectionStream, max_head_buffer_size: usize) -> TiiResult<Self> {
+  pub fn read(
+    id: u128,
+    stream: &dyn ConnectionStream,
+    max_head_buffer_size: usize,
+  ) -> TiiResult<Self> {
     let mut start_line_buf: Vec<u8> = Vec::with_capacity(256);
     let count = stream.read_until(0xA, max_head_buffer_size, &mut start_line_buf)?;
 
@@ -399,13 +403,26 @@ impl RequestHead {
     }
 
     if count == max_head_buffer_size {
+      error_log!(
+        "Request {} Client sent more than {} bytes for status line",
+        id,
+        max_head_buffer_size
+      );
       return Err(RequestHeadParsingError::StatusLineTooLong(start_line_buf).into());
     }
+
+    trace_log!(
+      "Request {} received {} bytes of data until 0xA (\\n) byte for status line",
+      id,
+      count
+    );
 
     let start_line_string = parse_status_line(&start_line_buf)?;
 
     let status_line =
       start_line_string.strip_suffix("\r\n").ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
+
+    trace_log!("Request {} status line: {}", id, status_line);
 
     let mut start_line = status_line.split(' ');
 
@@ -462,17 +479,26 @@ impl RequestHead {
       let count = stream.read_until(0xA, max_head_buffer_size, &mut line_buf)?;
 
       if count == max_head_buffer_size {
+        error_log!(
+          "Request {id} Client sent more than {max_head_buffer_size} bytes for header line"
+        );
         return Err(RequestHeadParsingError::HeaderLineTooLong(line_buf).into());
       }
+
+      trace_log!(
+        "Request {id} received {count} bytes of data until 0xA (\\n) byte for header line"
+      );
 
       let line = std::str::from_utf8(&line_buf)
         .map_err(|_| RequestHeadParsingError::HeaderLineIsNotUsAscii)?;
 
       if line == "\r\n" {
+        trace_log!("Request {id} Client sent CRLF, end of header section");
         break;
       }
 
       let line = line.strip_suffix("\r\n").ok_or(RequestHeadParsingError::HeaderLineNoCRLF)?;
+      trace_log!("Request {id} next header line: {line}");
 
       let mut line_parts = line.splitn(2, ": ");
       let name = unwrap_some(line_parts.next()).trim();

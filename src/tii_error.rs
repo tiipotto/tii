@@ -45,7 +45,9 @@ pub enum RequestHeadParsingError {
   HeaderLineTooLong(Vec<u8>),
   HttpVersionNotSupported(String),
   TransferEncodingNotSupported(String),
+  ContentEncodingNotSupported(String),
   InvalidContentLength(String),
+  ContentLengthHeaderMissing,
   InvalidQueryString(String),
   /// An error occurred during the WebSocket handshake.
   MissingSecWebSocketKeyHeader,

@@ -7,8 +7,8 @@ use crate::http::RequestHead;
 use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
-use crate::util;
 use crate::util::unwrap_some;
+use crate::{error_log, info_log, trace_log, util};
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
@@ -60,96 +60,15 @@ impl RequestContext {
     }
   }
 
-  /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
-  /// Errors on IO-Error or malformed RequestHead.
-  pub fn read(
-    stream: &dyn ConnectionStream,
+  fn new_http09(
+    id: u128,
+    local_address: String,
+    peer_address: String,
+    req: RequestHead,
+    _stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
-    max_head_buffer_size: usize,
-  ) -> TiiResult<Self> {
-    let id = util::next_id();
-    let peer_address = stream.peer_addr()?;
-    let local_address = stream.local_addr()?;
-
-    let req = RequestHead::read(stream, max_head_buffer_size)?;
-
-    if req.get_version() == HttpVersion::Http09 {
-      return Ok(RequestContext {
-        id,
-        peer_address,
-        local_address,
-        request: req,
-        body: None,
-        force_connection_close: true,
-        properties: None,
-        routed_path: None,
-        stream_meta,
-        path_params: None,
-      });
-    }
-
-    if req.get_version() == HttpVersion::Http11 {
-      match req.get_header(&HttpHeaderName::TransferEncoding) {
-        Some("chunked") => {
-          let body = RequestBody::new_chunked(stream.new_ref_read());
-          return Ok(RequestContext {
-            id,
-            peer_address,
-            local_address,
-            request: req,
-            body: Some(body),
-            force_connection_close: false,
-            properties: None,
-            routed_path: None,
-            stream_meta,
-            path_params: None,
-          });
-        }
-        Some(other) => {
-          return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
-            other.to_string(),
-          )))
-        }
-        None => {}
-      }
-    }
-
-    if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
-      let content_length: u64 = content_length.parse().map_err(|_| {
-        TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
-      })?;
-
-      let is_http_10 = req.get_version() == HttpVersion::Http10;
-
-      if content_length == 0 {
-        return Ok(RequestContext {
-          id,
-          peer_address,
-          local_address,
-          request: req,
-          body: None,
-          force_connection_close: is_http_10,
-          properties: None,
-          routed_path: None,
-          stream_meta,
-          path_params: None,
-        });
-      }
-
-      let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
-      return Ok(RequestContext {
-        id,
-        peer_address,
-        local_address,
-        request: req,
-        body: Some(body),
-        force_connection_close: is_http_10,
-        properties: None,
-        routed_path: None,
-        stream_meta,
-        path_params: None,
-      });
-    }
+  ) -> TiiResult<RequestContext> {
+    trace_log!("Request {id} is http 0.9");
 
     Ok(RequestContext {
       id,
@@ -163,6 +82,290 @@ impl RequestContext {
       stream_meta,
       path_params: None,
     })
+  }
+
+  fn new_http10(
+    id: u128,
+    local_address: String,
+    peer_address: String,
+    req: RequestHead,
+    stream: &dyn ConnectionStream,
+    stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+  ) -> TiiResult<RequestContext> {
+    trace_log!("Request {id} is http 1.0");
+
+    if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
+      let content_length: u64 = content_length.parse().map_err(|_| {
+        TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+      })?;
+
+      if content_length == 0 {
+        trace_log!("Request {id} has no request body");
+        return Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: None,
+          force_connection_close: true,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        });
+      }
+
+      trace_log!("Request {id} has {content_length} bytes of request body");
+      let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
+      return Ok(RequestContext {
+        id,
+        peer_address,
+        local_address,
+        request: req,
+        body: Some(body),
+        force_connection_close: true,
+        properties: None,
+        routed_path: None,
+        stream_meta,
+        path_params: None,
+      });
+    }
+
+    trace_log!(
+      "Request {id} did not sent Content-Length header. Assuming that it has no request body"
+    );
+    Ok(RequestContext {
+      id,
+      peer_address,
+      local_address,
+      request: req,
+      body: None,
+      force_connection_close: true,
+      properties: None,
+      routed_path: None,
+      stream_meta,
+      path_params: None,
+    })
+  }
+
+  fn new_http11(
+    id: u128,
+    local_address: String,
+    peer_address: String,
+    req: RequestHead,
+    stream: &dyn ConnectionStream,
+    stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+  ) -> TiiResult<RequestContext> {
+    trace_log!("Request {id} is http 1.1");
+
+    let content_length =
+      if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
+        Some(content_length.parse::<u64>().map_err(|_| {
+          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+        })?)
+      } else {
+        None
+      };
+
+    match (
+      req.get_header(&HttpHeaderName::ContentEncoding),
+      req.get_header(&HttpHeaderName::TransferEncoding),
+    ) {
+      (None, None) => match content_length {
+        None => {
+          trace_log!(
+            "Request {id} did not sent Content-Length header. Assuming that it has no request body"
+          );
+          Ok(RequestContext {
+            id,
+            peer_address,
+            local_address,
+            request: req,
+            body: None,
+            force_connection_close: true,
+            properties: None,
+            routed_path: None,
+            stream_meta,
+            path_params: None,
+          })
+        }
+        Some(0) => {
+          trace_log!("Request {id} has no request body");
+          Ok(RequestContext {
+            id,
+            peer_address,
+            local_address,
+            request: req,
+            body: None,
+            force_connection_close: false,
+            properties: None,
+            routed_path: None,
+            stream_meta,
+            path_params: None,
+          })
+        }
+        Some(content_length) => {
+          trace_log!("Request {id} has {content_length} bytes of request body");
+          Ok(RequestContext {
+            id,
+            peer_address,
+            local_address,
+            request: req,
+            body: Some(RequestBody::new_with_content_length(stream.new_ref_read(), content_length)),
+            force_connection_close: false,
+            properties: None,
+            routed_path: None,
+            stream_meta,
+            path_params: None,
+          })
+        }
+      },
+      (None, Some("chunked")) => {
+        trace_log!("Request {id} has chunked request body");
+        let body = RequestBody::new_chunked(stream.new_ref_read());
+        Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: Some(body),
+          force_connection_close: false,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        })
+      }
+      (None, Some("x-gzip")) | (None, Some("gzip")) => {
+        trace_log!("Request {id} has gzip request body with length of uncompressed content");
+        let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
+          return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
+        };
+
+        let content_length: u64 = content_length.parse().map_err(|_| {
+          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+        })?;
+
+        let body =
+          RequestBody::new_gzip_with_uncompressed_length(stream.new_ref_read(), content_length)?;
+
+        Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: Some(body),
+          //TODO, i have seen gzip produce trailer bytes in the past that are just padding
+          //and I am not confident enough that libflate consumes them.
+          //Until I have verified that libflate consumes the trailerbytes without fail we should not enable keep alive.
+          force_connection_close: true,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        })
+      }
+      (Some("gzip"), None) | (Some("x-gzip"), None) => {
+        trace_log!("Request {id} has gzip request body with length of compressed content");
+        //gzip+Content-Length of zipped stuff
+        let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
+          return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
+        };
+
+        let content_length: u64 = content_length.parse().map_err(|_| {
+          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
+        })?;
+
+        let body = RequestBody::new_gzip_with_compressed_content_length(
+          stream.new_ref_read(),
+          content_length,
+        )?;
+        Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: Some(body),
+          force_connection_close: false,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        })
+      }
+      (Some("gzip"), Some("chunked"))
+      | (Some("x-gzip"), Some("chunked"))
+      | (None, Some("gzip, chunked"))
+      | (None, Some("x-gzip, chunked")) => {
+        trace_log!("Request {id} has chunked gzip request body");
+        let body = RequestBody::new_gzip_chunked(stream.new_ref_read())?;
+        Ok(RequestContext {
+          id,
+          peer_address,
+          local_address,
+          request: req,
+          body: Some(body),
+          force_connection_close: false,
+          properties: None,
+          routed_path: None,
+          stream_meta,
+          path_params: None,
+        })
+      }
+      (other_encoding, other_transfer) => {
+        match other_transfer {
+          Some("chunked") | None => (),
+          Some(other) => {
+            error_log!("Request {id} has transfer encoding: {}", other);
+            return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
+              other.to_string(),
+            )));
+          }
+        }
+
+        let Some(other_encoding) = other_encoding else {
+          error_log!(
+            "BUG! Fatal unreachable syntax/encoding reached {:?} {:?}",
+            other_encoding,
+            other_transfer
+          );
+          util::unreachable();
+        };
+
+        error_log!("Request {id} has content encoding: {}", other_encoding);
+
+        Err(TiiError::from(RequestHeadParsingError::ContentEncodingNotSupported(
+          other_encoding.to_string(),
+        )))
+      }
+    }
+  }
+
+  /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
+  /// Errors on IO-Error or malformed RequestHead.
+  pub fn read(
+    stream: &dyn ConnectionStream,
+    stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    max_head_buffer_size: usize,
+  ) -> TiiResult<RequestContext> {
+    let id = util::next_id();
+    let peer_address = stream.peer_addr()?;
+    let local_address = stream.local_addr()?;
+    info_log!("Request {id} local: {} peer: {}", &local_address, &peer_address);
+
+    let req = RequestHead::read(id, stream, max_head_buffer_size)?;
+
+    match req.get_version() {
+      HttpVersion::Http09 => {
+        Self::new_http09(id, local_address, peer_address, req, stream, stream_meta)
+      }
+      HttpVersion::Http10 => {
+        Self::new_http10(id, local_address, peer_address, req, stream, stream_meta)
+      }
+      HttpVersion::Http11 => {
+        Self::new_http11(id, local_address, peer_address, req, stream, stream_meta)
+      }
+    }
   }
 
   /// unique id for this request.
