@@ -274,17 +274,17 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
     }
   }
 
-  if !matching_value {
+  if !matching_value || matching_percent != 0 {
     return Err(RequestHeadParsingError::InvalidQueryString(raw_query.to_string()).into());
   }
 
   let key = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_key.as_slice())))
     .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-    .to_string();
+    .replace('+', " ");
 
   let value = urlencoding::decode(unwrap_ok(std::str::from_utf8(current_value.as_slice())))
     .map_err(|_| RequestHeadParsingError::InvalidQueryString(raw_query.to_string()))?
-    .to_string();
+    .replace('+', " ");
 
   query.push((key, value));
 
