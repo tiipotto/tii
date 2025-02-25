@@ -102,7 +102,7 @@ impl RequestBody {
 }
 
 impl RequestBody {
-  /// Turns this struct into a generic Box<Read> impl.
+  /// Turns this struct into a generic `Box Read` impl.
   /// Useful for calling some external library functions.
   pub fn as_read(&self) -> impl Read + '_ {
     Box::new(self)
