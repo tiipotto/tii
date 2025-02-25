@@ -54,5 +54,5 @@ pub fn tc53_b() {
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
 
-  trivial_log::free();
+  //trivial_log::free();
 }
