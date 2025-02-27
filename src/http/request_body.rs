@@ -160,21 +160,43 @@ impl Read for RequestBodyInner {
 }
 
 #[derive(Debug)]
-#[repr(transparent)]
-struct GzipRequestBody(gzip::Decoder<Box<RequestBodyInner>>);
+struct GzipRequestBody {
+  err: bool,
+  decoder: Option<gzip::Decoder<Box<RequestBodyInner>>>,
+}
 
 impl GzipRequestBody {
   fn new(inner: RequestBodyInner) -> TiiResult<Self> {
     let decoder = gzip::Decoder::new(Box::new(inner)).inspect_err(|e| {
       error_log!("Could not decode gzip header of request body: {}", e);
     })?;
-    Ok(Self(decoder))
+    Ok(Self { err: false, decoder: Some(decoder) })
   }
 }
 
 impl Read for GzipRequestBody {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    self.0.read(buf)
+    if self.err {
+      return Err(Error::new(ErrorKind::BrokenPipe, "Previous IO Error reading body"));
+    }
+    let Some(dec) = self.decoder.as_mut() else {
+      return Ok(0);
+    };
+
+    let count = dec.read(buf).inspect_err(|_| self.err = true)?;
+    if count == 0 {
+      //This is needed to consume the trailer of chunked stream see tc53_c for this.
+      let mut small_buf = [0u8];
+      let count = unwrap_some(self.decoder.take())
+        .into_inner()
+        .read(small_buf.as_mut_slice())
+        .inspect_err(|_| self.err = true)?;
+      if count != 0 {
+        self.err = true;
+        return Err(Error::new(ErrorKind::BrokenPipe, "Gzip decoded did not fully consume data"));
+      }
+    }
+    Ok(count)
   }
 }
 

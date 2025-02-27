@@ -8,7 +8,7 @@ use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
-use crate::{error_log, info_log, trace_log, util};
+use crate::{error_log, info_log, trace_log, util, warn_log};
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
@@ -173,16 +173,53 @@ impl RequestContext {
     ) {
       (None, None) => match content_length {
         None => {
+          if req.get_header(&HttpHeaderName::Connection) != Some("keep-alive") {
+            trace_log!(
+              "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was not explicitly requested, so will send Connection: close");
+
+            return Ok(RequestContext {
+              id,
+              peer_address,
+              local_address,
+              request: req,
+              body: None,
+              force_connection_close: true,
+              properties: None,
+              routed_path: None,
+              stream_meta,
+              path_params: None,
+            });
+          }
+
+          if req.get_method().is_likely_to_have_request_body() {
+            warn_log!(
+            "Request {id} did not sent Content-Length header but did request Connection: keep-alive. Assuming that it has no request body. The request method {} usually has a body, will force Connection: close to be safe.", req.get_method()
+            );
+
+            return Ok(RequestContext {
+              id,
+              peer_address,
+              local_address,
+              request: req,
+              body: None,
+              force_connection_close: true,
+              properties: None,
+              routed_path: None,
+              stream_meta,
+              path_params: None,
+            });
+          }
+
           trace_log!(
-            "Request {id} did not sent Content-Length header. Assuming that it has no request body"
-          );
+            "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was requested, so will trust the client that the request actually has no body.");
+
           Ok(RequestContext {
             id,
             peer_address,
             local_address,
             request: req,
             body: None,
-            force_connection_close: true,
+            force_connection_close: false,
             properties: None,
             routed_path: None,
             stream_meta,
@@ -238,13 +275,10 @@ impl RequestContext {
       }
       (None, Some("x-gzip")) | (None, Some("gzip")) => {
         trace_log!("Request {id} has gzip request body with length of uncompressed content");
-        let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
+        let Some(content_length) = content_length else {
+          error_log!("Request {id} not implemented no transfer encoding, Content-Encoding: gzip/x-gzip without Content-Length header");
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
-
-        let content_length: u64 = content_length.parse().map_err(|_| {
-          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
-        })?;
 
         let body =
           RequestBody::new_gzip_with_uncompressed_length(stream.new_ref_read(), content_length)?;
@@ -268,14 +302,15 @@ impl RequestContext {
       (Some("gzip"), None) | (Some("x-gzip"), None) => {
         trace_log!("Request {id} has gzip request body with length of compressed content");
         //gzip+Content-Length of zipped stuff
-        let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) else {
+        let Some(content_length) = content_length else {
+          error_log!("Request {id} not implemented Transfer-Encoding: gzip/x-gzip, no Content-Encoding without Content-Length header");
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
 
-        let content_length: u64 = content_length.parse().map_err(|_| {
-          TiiError::from(RequestHeadParsingError::InvalidContentLength(content_length.to_string()))
-        })?;
-
+        //TODO curl, hyper and several http server implementation disagree on how this should be handled.
+        //Its safe to assume that no client will ever send this...
+        //We may have to read the full rfc eventually, the rfc only mentions that this exists and
+        //This impl is honestly based upon some forum comments of a obscure http proxy.
         let body = RequestBody::new_gzip_with_compressed_content_length(
           stream.new_ref_read(),
           content_length,
@@ -316,7 +351,7 @@ impl RequestContext {
         match other_transfer {
           Some("chunked") | None => (),
           Some(other) => {
-            error_log!("Request {id} has transfer encoding: {}", other);
+            error_log!("Request {id} has unimplemented transfer encoding: {}", other);
             return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
               other.to_string(),
             )));
@@ -332,7 +367,7 @@ impl RequestContext {
           util::unreachable();
         };
 
-        error_log!("Request {id} has content encoding: {}", other_encoding);
+        error_log!("Request {id} has unimplemented content encoding: {}", other_encoding);
 
         Err(TiiError::from(RequestHeadParsingError::ContentEncodingNotSupported(
           other_encoding.to_string(),
