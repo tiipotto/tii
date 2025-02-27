@@ -27,7 +27,17 @@ pub enum HttpMethod {
 
 impl PartialEq<HttpMethod> for &HttpMethod {
   fn eq(&self, other: &HttpMethod) -> bool {
-    self == other
+    match self {
+      HttpMethod::Get => matches!(other, HttpMethod::Get),
+      HttpMethod::Head => matches!(other, HttpMethod::Head),
+      HttpMethod::Post => matches!(other, HttpMethod::Post),
+      HttpMethod::Put => matches!(other, HttpMethod::Put),
+      HttpMethod::Delete => matches!(other, HttpMethod::Delete),
+      HttpMethod::Options => matches!(other, HttpMethod::Options),
+      HttpMethod::Trace => matches!(other, HttpMethod::Trace),
+      HttpMethod::Patch => matches!(other, HttpMethod::Patch),
+      HttpMethod::Custom(name) => name.eq(other.as_str()),
+    }
   }
 }
 
@@ -116,10 +126,7 @@ impl HttpMethod {
   /// a 'Connection: close' since there may be a body that Tii cannot parse. The body is never parsed in
   /// this instance anyway.
   pub fn is_likely_to_have_request_body(&self) -> bool {
-    match self {
-      HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Custom(_) => true,
-      _ => false,
-    }
+    matches!(self, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Custom(_))
   }
 }
 

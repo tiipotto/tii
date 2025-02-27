@@ -66,12 +66,11 @@ pub fn tc53_b() {
   trivial_log::free();
 }
 
-
 #[test]
 pub fn tc53_c() {
   trivial_log::init_stderr(LevelFilter::Trace).unwrap();
   let server =
-      ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
+    ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
   let mut data = Vec::<u8>::new();
   data.extend_from_slice(b"POST /dummy HTTP/1.1\r\n");
