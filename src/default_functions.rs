@@ -16,7 +16,8 @@ pub(crate) fn default_error_handler(
   error: TiiError,
 ) -> TiiResult<Response> {
   error_log!(
-    "Internal Server Error {} {} {:?}",
+    "Request {} Internal Server Error {} {} {:?}",
+    request.id(),
     &request.request_head().get_method(),
     request.request_head().get_path(),
     error
@@ -28,7 +29,8 @@ pub(crate) fn default_fallback_not_found_handler(
   request: &mut RequestContext,
 ) -> TiiResult<Response> {
   info_log!(
-    "Fallback: Not found {} {}",
+    "Request {} Fallback: Not found {} {}",
+    request.id(),
     &request.request_head().get_method(),
     request.request_head().get_path()
   );
@@ -40,7 +42,8 @@ pub(crate) fn default_not_found_handler(
   _: &[Routeable],
 ) -> TiiResult<Response> {
   info_log!(
-    "Not found {} {}",
+    "Request {} Not found {} {}",
+    request.id(),
     &request.request_head().get_method(),
     request.request_head().get_path()
   );
@@ -52,7 +55,8 @@ pub(crate) fn default_not_acceptable_handler(
   _: &[Routeable],
 ) -> TiiResult<Response> {
   info_log!(
-    "Not Acceptable {} {}",
+    "Request {} Not Acceptable {} {}",
+    request.id(),
     &request.request_head().get_method(),
     request.request_head().get_path()
   );
@@ -64,8 +68,9 @@ pub(crate) fn default_method_not_allowed_handler(
   routes: &[Routeable],
 ) -> TiiResult<Response> {
   info_log!(
-    "Method not allowed {} {}",
-    &request.request_head().get_method(),
+    "Request {} Method not allowed {} {}",
+    request.id(),
+    request.request_head().get_method(),
     request.request_head().get_path()
   );
   let mut methods = HashSet::new();
@@ -86,8 +91,9 @@ pub(crate) fn default_unsupported_media_type_handler(
   _: &[Routeable],
 ) -> TiiResult<Response> {
   info_log!(
-    "Unsupported Media Type {} {} {:?}",
-    &request.request_head().get_method(),
+    "Request {} Unsupported Media Type {} {} {:?}",
+    request.id(),
+    request.request_head().get_method(),
     request.request_head().get_path(),
     request.request_head().get_content_type()
   );

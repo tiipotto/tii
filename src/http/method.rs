@@ -25,6 +25,12 @@ pub enum HttpMethod {
   Custom(String),
 }
 
+impl PartialEq<HttpMethod> for &HttpMethod {
+  fn eq(&self, other: &HttpMethod) -> bool {
+    self == other
+  }
+}
+
 static WELL_KNOWN: &[HttpMethod] = &[
   HttpMethod::Get,
   HttpMethod::Head,
@@ -102,6 +108,17 @@ impl HttpMethod {
       HttpMethod::Trace => "TRACE",
       HttpMethod::Patch => "PATCH",
       HttpMethod::Custom(meth) => meth.as_str(),
+    }
+  }
+
+  /// returns true if the server expects that a request that does NOT have a Content-Length: 0 header
+  /// with this header may have a body anyway. If this returns true then Tii will be forced to emit
+  /// a 'Connection: close' since there may be a body that Tii cannot parse. The body is never parsed in
+  /// this instance anyway.
+  pub fn is_likely_to_have_request_body(&self) -> bool {
+    match self {
+      HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Custom(_) => true,
+      _ => false,
     }
   }
 }
