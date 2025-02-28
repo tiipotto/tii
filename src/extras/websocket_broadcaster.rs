@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::{io, thread, time::Duration};
 
 use crate::{error_log, info_log, util, warn_log};
-use crate::{ReadMessageTimeoutResult, WebsocketReceiver, WebsocketSender};
-use crate::{RequestContext, WebsocketEndpoint, WebsocketMessage};
+use crate::{
+  RequestContext, WebsocketEndpoint, WebsocketMessage, WebsocketReceiver, WebsocketSender,
+};
 
 type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
 
@@ -430,9 +431,9 @@ fn exec(es: ExecState) {
       break;
     }
     let Some(ref mh) = es.message_handler else { break };
-    match ws_receiver.read_message_timeout(Some(es.timeout)) {
+    match ws_receiver.read_message() {
       Ok(message) => match message {
-        ReadMessageTimeoutResult::Message(m) => {
+        Some(m) => {
           match m {
             WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
               (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
@@ -449,8 +450,8 @@ fn exec(es: ExecState) {
             WebsocketMessage::Pong => (), // do nothing
           }
         }
-        ReadMessageTimeoutResult::Timeout | ReadMessageTimeoutResult::Closed => {
-          if let Some(dh) = es.disconnect_handler {
+        None => {
+          if let Some(ref dh) = es.disconnect_handler {
             (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
           }
           break;
