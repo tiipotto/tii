@@ -7,6 +7,8 @@ use tii::ServerBuilder;
 use tii::WebsocketMessage;
 
 fn main() -> Result<(), Box<dyn Error>> {
+  trivial_log::init_std(log::LevelFilter::Debug).unwrap();
+
   let websocket_linker = WSBAppBuilder::default()
     .with_message_handler(message_handler)
     .with_connect_handler(connect_handler)
@@ -43,6 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   // This explicit drop and join is optional. In this case, it gets sanity checked with Valgrind
   drop(app);
   websocket_thread.join().unwrap();
+  trivial_log::free();
   Ok(())
 }
 
