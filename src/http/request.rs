@@ -398,13 +398,13 @@ impl RequestHead {
 
     if count == 0 {
       //Unreachable unless stream implementation is shit. TC 42 tests this case.
-      error_log!("tii::RequestHead::new call to ConnectionStream::read_until returned 0 bytes, but this RequestHead::new is only called when the stream should have at least one byte buffered. Is the ConnectionStream impl buggy? Will return io::Error UnexpectedEof.");
+      error_log!("tii: RequestHead::new call to ConnectionStream::read_until returned 0 bytes, but this RequestHead::new is only called when the stream should have at least one byte buffered. Is the ConnectionStream impl buggy? Will return io::Error UnexpectedEof.");
       return Err(TiiError::from_io_kind(ErrorKind::UnexpectedEof));
     }
 
     if count == max_head_buffer_size {
       error_log!(
-        "Request {} Client sent more than {} bytes for status line",
+        "tii: Request {} Client sent more than {} bytes for status line",
         id,
         max_head_buffer_size
       );
@@ -412,7 +412,7 @@ impl RequestHead {
     }
 
     trace_log!(
-      "Request {} received {} bytes of data until 0xA (\\n) byte for status line",
+      "tii: Request {} received {} bytes of data until 0xA (\\n) byte for status line",
       id,
       count
     );
@@ -422,7 +422,7 @@ impl RequestHead {
     let status_line =
       start_line_string.strip_suffix("\r\n").ok_or(RequestHeadParsingError::StatusLineNoCRLF)?;
 
-    trace_log!("Request {} status line: {}", id, status_line);
+    trace_log!("tii: Request {} status line: {}", id, status_line);
 
     let mut start_line = status_line.split(' ');
 
@@ -480,25 +480,35 @@ impl RequestHead {
 
       if count == max_head_buffer_size {
         error_log!(
-          "Request {id} Client sent more than {max_head_buffer_size} bytes for header line"
+          "tii: Request {id} Client sent more than {max_head_buffer_size} bytes for header line"
         );
         return Err(RequestHeadParsingError::HeaderLineTooLong(line_buf).into());
       }
 
       trace_log!(
-        "Request {id} received {count} bytes of data until 0xA (\\n) byte for header line"
+        "tii: Request {id} received {count} bytes of data until 0xA (\\n) byte for header line"
       );
 
       let line = std::str::from_utf8(&line_buf)
         .map_err(|_| RequestHeadParsingError::HeaderLineIsNotUsAscii)?;
 
       if line == "\r\n" {
-        trace_log!("Request {id} Client sent CRLF, end of header section");
+        trace_log!("tii: Request {id} Client sent CRLF, end of header section");
         break;
       }
 
       let line = line.strip_suffix("\r\n").ok_or(RequestHeadParsingError::HeaderLineNoCRLF)?;
-      trace_log!("Request {id} next header line: {line}");
+      #[cfg(feature = "log")]
+      {
+        if log::max_level() == log::Level::Trace {
+          if line.starts_with("Authorization:") {
+            trace_log!("tii: Request {id} next header line: Authorization: ***MASKED***");
+          } else {
+            trace_log!("tii: Request {id} next header line: {line}");
+          }
+        }
+      }
+
 
       let mut line_parts = line.splitn(2, ": ");
       let name = unwrap_some(line_parts.next()).trim();
@@ -521,7 +531,7 @@ impl RequestHead {
     if accept.is_none() {
       // TODO should this be a hard error?
       warn_log!(
-        "Request to '{}' has invalid Accept header '{}' will assume 'Accept: */*'",
+        "tii: Request to '{}' has invalid Accept header '{}' will assume 'Accept: */*'",
         path.as_str(),
         accept_hdr
       );
@@ -533,7 +543,7 @@ impl RequestHead {
       let ctype = MimeType::parse_from_content_type_header(ctype_raw);
       if ctype.is_none() {
         warn_log!(
-         "Request to '{}' has invalid Content-Type header '{}' will assume 'Content-Type: application/octet-stream'",
+         "tii: Request to '{}' has invalid Content-Type header '{}' will assume 'Content-Type: application/octet-stream'",
           path.as_str(),
           ctype_raw
         );
@@ -750,6 +760,18 @@ impl RequestHead {
   /// Returns the first header or None
   pub fn get_header(&self, name: impl AsRef<str>) -> Option<&str> {
     self.headers.get(name)
+  }
+
+  /// Returns true if the client indicates that it accepts gzip.
+  pub fn accepts_gzip(&self) -> bool {
+    let Some(accept_enc) = self.get_header(HttpHeaderName::AcceptEncoding) else {
+      return false;
+    };
+
+    //we have to match "gzip" " gzip," " gzip" "gzip,"
+    //as well as the same variant with x-gzip
+    //this is not perfect, we should later improve this by parsing the header to an Enum.
+    accept_enc.contains("gzip")
   }
 
   /// Returns the all header values of empty Vec.

@@ -7,10 +7,10 @@ use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::HttpHeaderName;
-use crate::HttpVersion;
+use crate::{HttpVersion};
 use crate::RequestContext;
 use crate::{error_log, trace_log};
+use crate::{warn_log, HttpHeaderName};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -163,6 +163,8 @@ impl Server {
       return Err(TiiError::from_io_kind(ErrorKind::ConnectionAborted));
     }
 
+    trace_log!("tii: tii:Server -> New connection");
+
     let stream = stream.into_connection_stream();
 
     stream.set_read_timeout(self.connection_timeout)?;
@@ -194,7 +196,7 @@ impl Server {
       {
         //Http 1.0 or 0.9 does not have web sockets
 
-        trace_log!("WebsocketConnectionRequested");
+        trace_log!("tii: Request {} is a web socket connection request", context.id());
 
         for router in self.routers.iter() {
           //Note, it's not a good idea to further handle errors form web socket router as
@@ -254,56 +256,58 @@ impl Server {
 
       keep_alive &= !context.is_connection_close_forced();
 
+      let id = context.id();
+
       self.write_response(stream.as_ref(), context, keep_alive, response)?;
 
       // Can we do keep alive?
       if !keep_alive {
-        trace_log!("NoKeepAlive");
+        trace_log!("tii: Request {} will NOT do keep alive", id);
         break;
       }
 
-      trace_log!("KeepAliveRespected");
+      trace_log!("tii: Request {} will attempt to do keep alive", id);
     }
 
-    trace_log!("ConnectionClosed");
+    trace_log!("tii: tii:Server -> Connection closed");
     Ok(())
   }
 
   fn handle_keep_alive(&self, stream: &dyn ConnectionStream) -> TiiResult<bool> {
     if self.is_shutdown() {
-      trace_log!("Keep-alive server shutting down...");
+      trace_log!("tii: Keep-alive server shutting down...");
       return Ok(false);
     }
 
     if stream.available() > 0 {
-      trace_log!("Keep-alive client sent data. Processing next request...");
+      trace_log!("tii: Keep-alive client sent data. Processing next request...");
       return Ok(true);
     }
     stream.set_read_timeout(self.keep_alive_timeout)?;
     match stream.ensure_readable() {
       Ok(true) => {
-        trace_log!("Keep-alive client sent data. Processing next request...");
+        trace_log!("tii: Keep-alive client sent data. Processing next request...");
         Ok(true)
       }
       Ok(false) => {
-        trace_log!("Keep-alive client disconnected before timeout expired.");
+        trace_log!("tii: Keep-alive client disconnected before timeout expired.");
         Ok(false)
       }
       Err(err) => match err.kind() {
         ErrorKind::UnexpectedEof => {
-          trace_log!("Keep-alive client disconnected before timeout expired.");
+          trace_log!("tii: Keep-alive client disconnected before timeout expired.");
           Ok(false)
         }
         ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::BrokenPipe => {
-          trace_log!("Keep-alive OS reset connection before timeout expired.");
+          trace_log!("tii: Keep-alive OS reset connection before timeout expired.");
           Ok(false)
         }
         ErrorKind::TimedOut | ErrorKind::WouldBlock => {
-          trace_log!("Keep-alive time out closing connection.");
+          trace_log!("tii: Keep-alive time out closing connection.");
           Ok(false)
         }
         _ => {
-          error_log!("Keep-alive unspecified error when waiting for data {}", &err);
+          error_log!("tii: Keep-alive unspecified error when waiting for data {}", &err);
           Err(err.into())
         }
       },
@@ -313,11 +317,11 @@ impl Server {
   fn write_response(
     &self,
     stream: &dyn ConnectionStream,
-    context: RequestContext,
+    request: RequestContext,
     keep_alive: bool,
     mut response: Response,
   ) -> TiiResult<()> {
-    if context.request_head().get_version() == HttpVersion::Http11 {
+    if request.request_head().get_version() == HttpVersion::Http11 {
       let previous_headers = if keep_alive {
         response.headers.replace_all(HttpHeaderName::Connection, "Keep-Alive")
       } else {
@@ -325,7 +329,7 @@ impl Server {
       };
 
       if !previous_headers.is_empty() {
-        trace_log!("Endpoint has set banned header 'Connection' {:?}", previous_headers);
+        error_log!("tii: Request {} Endpoint has set banned header 'Connection' {:?}", request.id(), previous_headers);
         return Err(TiiError::new_io(
           io::ErrorKind::InvalidInput,
           "Endpoint has set banned header 'Connection'",
@@ -333,17 +337,42 @@ impl Server {
       }
     }
 
-    trace_log!("RequestRespondedWith HTTP {}", response.status_code.code());
+    trace_log!("tii: Request {} responding with HTTP {}", request.id(), response.status_code.code());
 
-    response.write_to(context.request_head().get_version(), stream.as_stream_write()).inspect_err(
+    if let Some(enc) = response.body().and_then(|a| a.get_content_encoding()) {
+      if enc == "gzip" && !request.request_head().accepts_gzip() {
+        warn_log!("tii: Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
+      }
+    }
+
+    #[cfg(feature = "log")]
+    let status = response.get_status_code_number();
+
+    response.write_to(request.request_head().get_version(), stream.as_stream_write()).inspect_err(
       |e| {
-        trace_log!("response.write_to {}", e);
+        error_log!("tii: Request {} response.write_to error={}", request.id(), e);
       },
     )?;
 
-    trace_log!("RequestServedSuccess");
+    #[cfg(feature = "log")]
+    {
+      let now: u128 = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map(|a| a.as_millis())
+        .unwrap_or_default();
+      let diff = now.checked_sub(request.get_timestamp()).unwrap_or_default();
+      crate::info_log!(
+        "tii: Request {} from {} to {} {} ({}) served in {}ms",
+        request.id(),
+        request.peer_address(),
+        request.request_head().get_method(),
+        request.request_head().get_path(),
+        status,
+        diff
+      );
+    }
 
-    context.consume_request_body()?;
+    request.consume_request_body()?;
     Ok(())
   }
 
@@ -351,7 +380,8 @@ impl Server {
     request.force_connection_close();
 
     error_log!(
-      "Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
+      "tii: Request {} Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
+      request.id(),
       &request.request_head().get_method(),
       request.request_head().get_path(),
       error
@@ -364,6 +394,6 @@ impl Server {
 impl Drop for Server {
   fn drop(&mut self) {
     self.shutdown();
-    trace_log!("TiiServer::drop");
+    trace_log!("tii: Server::drop");
   }
 }

@@ -1,3 +1,4 @@
+use log::LevelFilter;
 use std::net::TcpListener;
 use std::time::Duration;
 use tii::MimeType;
@@ -10,6 +11,8 @@ fn hello_world(request: &RequestContext) -> Response {
   Response::ok(response_body, MimeType::TextPlain)
 }
 fn main() {
+  trivial_log::init_stdout(LevelFilter::Info).unwrap();
+
   let tii_server = ServerBuilder::builder(|builder| {
     builder
       .router(|router| router.route_get("/*", hello_world))?

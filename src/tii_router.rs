@@ -8,11 +8,11 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::HttpHeaderName;
 use crate::HttpMethod;
 use crate::HttpVersion;
 use crate::RequestContext;
 use crate::{trace_log, util};
+use crate::{warn_log, HttpHeaderName};
 use crate::{AcceptMimeType, QValue};
 use crate::{Response, StatusCode};
 use base64::Engine;
@@ -638,6 +638,12 @@ impl DefaultRouter {
           let resp = self.call_response_filters(request, resp)?;
           if resp.status_code != StatusCode::SwitchingProtocols {
             return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
+          }
+
+          if let Some(enc) = resp.body().and_then(|a| a.get_content_encoding()) {
+            if enc == "gzip" && !request.request_head().accepts_gzip() {
+              warn_log!("Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
+            }
           }
 
           resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal

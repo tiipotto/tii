@@ -46,7 +46,7 @@ impl UnixConnectorInner {
       if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
-            "unix_connector[{}]: shutdown failed to wake up the listener thread",
+            "tii: unix_connector[{}]: shutdown failed to wake up the listener thread",
             self.path.display()
           );
           return;
@@ -58,7 +58,7 @@ impl UnixConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
+        error_log!("tii: unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
       }
     }
   }
@@ -104,19 +104,19 @@ impl Connector for UnixConnector {
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "unix_connector[{}]: listener thread panicked: {}",
+            "tii: unix_connector[{}]: listener thread panicked: {}",
             self.inner.path.display(),
             msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "unix_connector[{}]: listener thread panicked: {}",
+            "tii: unix_connector[{}]: listener thread panicked: {}",
             self.inner.path.display(),
             msg
           );
         } else {
           error_log!(
-            "unix_connector[{}]: listener thread panicked: {:?}",
+            "tii: unix_connector[{}]: listener thread panicked: {:?}",
             self.inner.path.display(),
             err
           );
@@ -136,14 +136,14 @@ impl UnixConnectorInner {
 
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("unix_connector[{}]: listening...", self.path.display());
+    info_log!("tii: unix_connector[{}]: listening...", self.path.display());
     for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("unix_connector[{}]: shutdown", self.path.display());
+        info_log!("tii: unix_connector[{}]: shutdown", self.path.display());
         break;
       }
 
-      info_log!("unix_connector[{}]: connection {this_connection} accepted", self.path.display());
+      info_log!("tii: unix_connector[{}]: connection {this_connection} accepted", self.path.display());
       let path_clone = self.path.clone();
       let server_clone = self.tii_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));
@@ -158,14 +158,14 @@ impl UnixConnectorInner {
           {
             Ok(_) => {
               info_log!(
-                "unix_connector[{}]: connection {this_connection} processed successfully",
+                "tii: unix_connector[{}]: connection {this_connection} processed successfully",
                 path_clone.display()
               );
             }
             Err(err) => {
               // User code errored, like return Err in an Error handler.
               error_log!(
-                "unix_connector[{}]: connection {} tii server returned err={}",
+                "tii: unix_connector[{}]: connection {} tii server returned err={}",
                 path_clone.display(),
                 this_connection,
                 err
@@ -175,7 +175,7 @@ impl UnixConnectorInner {
           Err(err) => {
             // This may just affect a single connection and is likely to recover on its own?
             error_log!(
-              "unix_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              "tii: unix_connector[{}]: connection {} failed to accept a unix socket connection err={}",
               path_clone.display(),
               this_connection,
               err
@@ -192,7 +192,7 @@ impl UnixConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
+          error_log!("tii: unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
         }
       }
 
@@ -209,7 +209,7 @@ impl UnixConnectorInner {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
-              "unix_connector[{}]: connection {} thread panicked: {}",
+              "tii: unix_connector[{}]: connection {} thread panicked: {}",
               self.path.display(),
               this_connection,
               msg
@@ -221,13 +221,13 @@ impl UnixConnectorInner {
       });
     }
 
-    trace_log!("unix_connector[{}]: waiting for shutdown to finish", self.path.display());
+    trace_log!("tii: unix_connector[{}]: waiting for shutdown to finish", self.path.display());
     //Wait for all threads to finish
     for mut con in active_connection {
       let this_connection = con.id;
       if !con.done_flag.load(Ordering::SeqCst) {
         trace_log!(
-          "unix_connector[{}]: connection {} is not yet done. blocking...",
+          "tii: unix_connector[{}]: connection {} is not yet done. blocking...",
           self.path.display(),
           this_connection
         );
@@ -237,7 +237,7 @@ impl UnixConnectorInner {
       if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
-            "tls_unix_connector[{}]: connection {} thread panicked: {}",
+            "tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
             self.path.display(),
             this_connection,
             msg
@@ -246,7 +246,7 @@ impl UnixConnectorInner {
       }
     }
 
-    info_log!("unix_connector[{}]: shutdown done", self.path.display());
+    info_log!("tii: unix_connector[{}]: shutdown done", self.path.display());
   }
 }
 

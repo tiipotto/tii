@@ -76,15 +76,15 @@ impl TcpConnectorInner {
     }
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("tcp_connector[{}]: listening...", &self.addr_string);
+    info_log!("tii: tcp_connector[{}]: listening...", &self.addr_string);
     for this_connection in 1u128.. {
       let stream = self.next();
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("tcp_connector[{}]: shutdown", &self.addr_string);
+        info_log!("tii: tcp_connector[{}]: shutdown", &self.addr_string);
         break;
       }
 
-      info_log!("tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
+      info_log!("tii: tcp_connector[{}]: connection {this_connection} accepted", &self.addr_string);
       let path_clone = self.addr_string.clone();
       let server_clone = self.tii_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));
@@ -99,7 +99,7 @@ impl TcpConnectorInner {
             match server_clone.handle_connection_with_meta(stream, ConnectorMeta::Tcp) {
               Ok(_) => {
                 info_log!(
-                  "tcp_connector[{}]: connection {} processed successfully",
+                  "tii: tcp_connector[{}]: connection {} processed successfully",
                   path_clone,
                   this_connection
                 );
@@ -107,7 +107,7 @@ impl TcpConnectorInner {
               Err(err) => {
                 // User code errored, like return Err in an Error handler.
                 error_log!(
-                  "tcp_connector[{}]: connection {} tii server returned err={}",
+                  "tii: tcp_connector[{}]: connection {} tii server returned err={}",
                   path_clone,
                   this_connection,
                   err
@@ -118,7 +118,7 @@ impl TcpConnectorInner {
           Err(err) => {
             // This may just affect a single connection and is likely to recover on its own?
             error_log!(
-              "tcp_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              "tii: tcp_connector[{}]: connection {} failed to accept a unix socket connection err={}",
               path_clone,
               this_connection,
               err
@@ -135,7 +135,7 @@ impl TcpConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
+          error_log!("tii: tcp_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", &self.addr_string, this_connection, err);
         }
       }
 
@@ -152,7 +152,7 @@ impl TcpConnectorInner {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
-              "tcp_connector[{}]: connection {} thread panicked: {}",
+              "tii: tcp_connector[{}]: connection {} thread panicked: {}",
               &self.addr_string,
               this_connection,
               msg
@@ -172,7 +172,7 @@ impl TcpConnectorInner {
       let this_connection = con.id;
       if !con.done_flag.load(Ordering::SeqCst) {
         trace_log!(
-          "tcp_connector[{}]: connection {} is not yet done. blocking...",
+          "tii: tcp_connector[{}]: connection {} is not yet done. blocking...",
           &self.addr_string,
           this_connection
         );
@@ -182,7 +182,7 @@ impl TcpConnectorInner {
       if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
-            "tcp_connector[{}]: connection {} thread panicked: {}",
+            "tii: tcp_connector[{}]: connection {} thread panicked: {}",
             &self.addr_string,
             this_connection,
             msg
@@ -191,7 +191,7 @@ impl TcpConnectorInner {
       }
     }
 
-    info_log!("tcp_connector[{}]: shutdown done", &self.addr_string);
+    info_log!("tii: tcp_connector[{}]: shutdown done", &self.addr_string);
   }
 }
 
@@ -214,7 +214,7 @@ impl TcpConnectorInner {
       if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
-            "tcp_connector[{}]: shutdown failed to wake up the listener thread",
+            "tii: tcp_connector[{}]: shutdown failed to wake up the listener thread",
             &self.addr_string
           );
           return;
@@ -226,7 +226,7 @@ impl TcpConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
+        error_log!("tii: tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
       }
     }
   }
@@ -296,13 +296,13 @@ impl Connector for TcpConnector {
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "tcp_connector[{}]: listener thread panicked: {}",
+            "tii: tcp_connector[{}]: listener thread panicked: {}",
             &self.inner.addr_string,
             msg
           );
         } else {
           error_log!(
-            "tcp_connector[{}]: listener thread panicked: {:?}",
+            "tii: tcp_connector[{}]: listener thread panicked: {:?}",
             &self.inner.addr_string,
             err
           );
