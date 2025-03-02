@@ -646,7 +646,7 @@ impl DefaultRouter {
             }
           }
 
-          resp.write_to(HttpVersion::Http11, stream)?; //Errors here are fatal
+          resp.write_to(request.id(), HttpVersion::Http11, stream)?; //Errors here are fatal
 
           let (sender, receiver) = crate::new_web_socket_stream(stream);
           handler.handler.serve(request, receiver, sender)?;

@@ -506,15 +506,20 @@ impl Response {
 
   ///
   /// Write the request to a streaming output. This consumes the request object.
+  /// # Parameters
+  /// `request_id` for logging purposes only
+  /// `version` http version of the response
+  /// `destination` the stream to write to.
   ///
   pub fn write_to<T: ConnectionStreamWrite + ?Sized>(
     mut self,
+    request_id: u128,
     version: HttpVersion,
     destination: &T,
   ) -> io::Result<()> {
     if version == HttpVersion::Http09 {
       if let Some(body) = self.body.as_mut() {
-        body.write_to(destination)?;
+        body.write_to(request_id, destination)?;
       }
 
       return Ok(());
@@ -554,7 +559,7 @@ impl Response {
           }
         }
         destination.write_all(b"\r\n")?;
-        body.write_to(destination)?;
+        body.write_to(request_id, destination)?;
         destination.flush()?;
         return Ok(());
       }
@@ -575,7 +580,7 @@ impl Response {
 
       destination.write_all(b"\r\n")?;
 
-      body.write_to(destination)?;
+      body.write_to(request_id, destination)?;
       destination.flush()?;
       return Ok(());
     }

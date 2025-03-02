@@ -1,7 +1,7 @@
+use libflate::gzip;
 use std::io;
 use std::io::Write;
 use std::sync::LockResult;
-use libflate::gzip;
 
 fn do_abort() -> ! {
   #[cfg(feature = "backtrace")]
@@ -63,7 +63,10 @@ pub const fn three_digit_to_utf(num: u16) -> [u8; 3] {
 }
 
 pub fn new_gzip_encoder<T: Write>(write: T) -> io::Result<gzip::Encoder<T>> {
-  gzip::Encoder::with_options(write, gzip::EncodeOptions::default().header(gzip::HeaderBuilder::new().modification_time(0).finish()))
+  gzip::Encoder::with_options(
+    write,
+    gzip::EncodeOptions::default().header(gzip::HeaderBuilder::new().modification_time(0).finish()),
+  )
 }
 
 #[cfg(not(target_has_atomic = "64"))]

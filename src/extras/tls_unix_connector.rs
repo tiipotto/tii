@@ -60,7 +60,11 @@ impl TlsUnixConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tii: tls_unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
+        error_log!(
+          "tii: tls_unix_connector[{}]: shutdown failed: errno={}",
+          self.path.display(),
+          errno
+        );
       }
     }
   }

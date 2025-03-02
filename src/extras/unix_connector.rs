@@ -58,7 +58,11 @@ impl UnixConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tii: unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
+        error_log!(
+          "tii: unix_connector[{}]: shutdown failed: errno={}",
+          self.path.display(),
+          errno
+        );
       }
     }
   }
@@ -143,7 +147,10 @@ impl UnixConnectorInner {
         break;
       }
 
-      info_log!("tii: unix_connector[{}]: connection {this_connection} accepted", self.path.display());
+      info_log!(
+        "tii: unix_connector[{}]: connection {this_connection} accepted",
+        self.path.display()
+      );
       let path_clone = self.path.clone();
       let server_clone = self.tii_server.clone();
       let done_flag = Arc::new(AtomicBool::new(false));

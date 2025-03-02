@@ -509,7 +509,6 @@ impl RequestHead {
         }
       }
 
-
       let mut line_parts = line.splitn(2, ": ");
       let name = unwrap_some(line_parts.next()).trim();
 

@@ -13,9 +13,20 @@ fn in_memory(request: &RequestContext) -> Response {
 
 fn chunked(request: &RequestContext) -> Response {
   let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  let a = vec![b'A'; 4096];
+  let b = vec![b'B'; 4096];
+  let c = vec![b'C'; 4096];
+
   Response::ok(
     ResponseBody::chunked_gzip(move |sink| {
       sink.write_all(response_body.as_bytes())?;
+      sink.write_all(b"\r\n")?;
+      sink.write_all(&a)?;
+      sink.write_all(b"\r\n")?;
+      sink.write_all(&b)?;
+      sink.write_all(b"\r\n")?;
+      sink.write_all(&c)?;
+      sink.write_all(b"\r\n")?;
       Ok(())
     }),
     MimeType::TextPlain,

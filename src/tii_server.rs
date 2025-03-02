@@ -7,7 +7,7 @@ use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::{HttpVersion};
+use crate::HttpVersion;
 use crate::RequestContext;
 use crate::{error_log, trace_log};
 use crate::{warn_log, HttpHeaderName};
@@ -329,7 +329,11 @@ impl Server {
       };
 
       if !previous_headers.is_empty() {
-        error_log!("tii: Request {} Endpoint has set banned header 'Connection' {:?}", request.id(), previous_headers);
+        error_log!(
+          "tii: Request {} Endpoint has set banned header 'Connection' {:?}",
+          request.id(),
+          previous_headers
+        );
         return Err(TiiError::new_io(
           io::ErrorKind::InvalidInput,
           "Endpoint has set banned header 'Connection'",
@@ -337,7 +341,11 @@ impl Server {
       }
     }
 
-    trace_log!("tii: Request {} responding with HTTP {}", request.id(), response.status_code.code());
+    trace_log!(
+      "tii: Request {} responding with HTTP {}",
+      request.id(),
+      response.status_code.code()
+    );
 
     if let Some(enc) = response.body().and_then(|a| a.get_content_encoding()) {
       if enc == "gzip" && !request.request_head().accepts_gzip() {
@@ -348,7 +356,7 @@ impl Server {
     #[cfg(feature = "log")]
     let status = response.get_status_code_number();
 
-    response.write_to(request.request_head().get_version(), stream.as_stream_write()).inspect_err(
+    response.write_to(request.id(), request.request_head().get_version(), stream.as_stream_write()).inspect_err(
       |e| {
         error_log!("tii: Request {} response.write_to error={}", request.id(), e);
       },

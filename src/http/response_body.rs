@@ -3,12 +3,14 @@
 #![allow(missing_docs)]
 
 use crate::stream::ConnectionStreamWrite;
+use crate::trace_log;
 use crate::util::unwrap_some;
 use libflate::gzip;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use defer_heavy::defer;
 
 pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()>;
 
@@ -158,7 +160,7 @@ impl ResponseBody {
     Self(ResponseBodyInner::ChunkedGzipStream(Some(Box::new(streamer))))
   }
 
-  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(&mut self, stream: &T) -> io::Result<()> {
+  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(&mut self, request_id: u128, stream: &T) -> io::Result<()> {
     match &mut self.0 {
       ResponseBodyInner::FixedSizeBinaryData(data)
       | ResponseBodyInner::ExternallyGzippedData(data) => stream.write_all(data.as_slice()),
@@ -199,14 +201,14 @@ impl ResponseBody {
       })?(&StreamSink(stream.as_stream_write())),
 
       ResponseBodyInner::ChunkedStream(handler) => {
-        let sink = ChunkedSink(stream.as_stream_write());
+        let sink = ChunkedSink(request_id, stream.as_stream_write());
         handler.take().ok_or_else(|| {
           io::Error::new(io::ErrorKind::UnexpectedEof, "stream can only be written once")
         })?(&sink)?;
         sink.finish()
       }
       ResponseBodyInner::ChunkedGzipStream(handler) => {
-        let sink = GzipChunkedSink::new(stream.as_stream_write())?;
+        let sink = GzipChunkedSink::new(request_id, stream.as_stream_write())?;
         handler.take().ok_or_else(|| {
           io::Error::new(io::ErrorKind::UnexpectedEof, "stream can only be written once")
         })?(&sink)?;
@@ -214,7 +216,7 @@ impl ResponseBody {
       }
       ResponseBodyInner::ChunkedGzipFile(file) => {
         file.seek(io::SeekFrom::Start(0))?;
-        let sink = GzipChunkedSink::new(stream.as_stream_write())?;
+        let sink = GzipChunkedSink::new(request_id, stream.as_stream_write())?;
         let mut io_buf = [0u8; 0x1_00_00];
         loop {
           let count = file.read(io_buf.as_mut_slice())?;
@@ -288,30 +290,43 @@ impl ResponseBodySink for StreamSink<'_> {
   }
 }
 
-struct GzipChunkedSink<'a>(RefCell<Option<gzip::Encoder<ChunkedSink<'a>>>>);
+struct GzipChunkedSink<'a>(u128, RefCell<Option<gzip::Encoder<BufWriter<ChunkedSink<'a>>>>>);
 
 impl<'a> GzipChunkedSink<'a> {
-  fn new(stream: &'a dyn ConnectionStreamWrite) -> io::Result<GzipChunkedSink<'a>> {
-    Ok(Self(RefCell::new(Some(crate::util::new_gzip_encoder(ChunkedSink(stream))?))))
+  fn new(request_id: u128, stream: &'a dyn ConnectionStreamWrite) -> io::Result<GzipChunkedSink<'a>> {
+    // We need BufWriter here because the gzip encoder calls write with like 2-4 bytes at a time.
+    // We don't want to emit a http chunk every single time the gzip encoder writes a single symbol
+    // the overhead would be several 100%.
+    // If we use the BufWriter the overhead only exist when gzip calls flush().
+    // This only happens when there is significant data buffered so it's reasonable to emit a chunk then.
+    Ok(Self(request_id, RefCell::new(Some(crate::util::new_gzip_encoder(BufWriter::new(ChunkedSink(request_id,
+      stream,
+    )))?))))
   }
 }
 
 impl GzipChunkedSink<'_> {
   fn finish(&self) -> io::Result<()> {
+    trace_log!("tii: Request {} GzipChunkedSink::finish", self.0);
+    defer! {
+      trace_log!("tii: Request {} GzipChunkedSink::finish done", self.0);
+    }
     //Safety, this function will panic/abort if called more than once
-    unwrap_some(self.0.borrow_mut().take()).finish().into_result()?.finish()
+    unwrap_some(self.1.borrow_mut().take()).finish().into_result()?.into_inner()?.finish()
   }
 }
 
 impl ResponseBodySink for GzipChunkedSink<'_> {
   fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+    trace_log!("tii: Request {} GzipChunkedSink::write with {} bytes", self.0, buffer.len());
     //Safety, this function will panic/abort if called after finish
-    unwrap_some(self.0.borrow_mut().as_mut()).write(buffer)
+    unwrap_some(self.1.borrow_mut().as_mut()).write(buffer)
   }
 
   fn write_all(&self, buffer: &[u8]) -> io::Result<()> {
+    trace_log!("tii: Request {} GzipChunkedSink::write_all with {} bytes", self.0, buffer.len());
     //Safety, this function will panic/abort if called after finish
-    unwrap_some(self.0.borrow_mut().as_mut()).write_all(buffer)
+    unwrap_some(self.1.borrow_mut().as_mut()).write_all(buffer)
   }
 
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
@@ -321,7 +336,7 @@ impl ResponseBodySink for GzipChunkedSink<'_> {
 
 static CHUNK_LUT: [&'static [u8]; 8096] = tii_procmacro::hex_chunked_lut!(8096);
 
-struct ChunkedSink<'a>(&'a dyn ConnectionStreamWrite);
+struct ChunkedSink<'a>(u128, &'a dyn ConnectionStreamWrite);
 
 impl Write for ChunkedSink<'_> {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -345,14 +360,16 @@ impl ResponseBodySink for ChunkedSink<'_> {
       return Ok(());
     }
 
+    trace_log!("tii: Request {} ChunkedSink -> Emitting a HTTP chunk with {} bytes", self.0, buffer.len());
+
     if let Some(lut) = CHUNK_LUT.get(buffer.len()) {
-      self.0.write_all(lut)?;
+      self.1.write_all(lut)?;
     } else {
-      self.0.write_all(format!("{:X}\r\n", buffer.len()).as_bytes())?;
+      self.1.write_all(format!("{:X}\r\n", buffer.len()).as_bytes())?;
     }
 
-    self.0.write_all(buffer)?;
-    self.0.write_all(b"\r\n")
+    self.1.write_all(buffer)?;
+    self.1.write_all(b"\r\n")
   }
 
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
@@ -362,7 +379,8 @@ impl ResponseBodySink for ChunkedSink<'_> {
 
 impl ChunkedSink<'_> {
   fn finish(&self) -> io::Result<()> {
-    self.0.write_all(b"0\r\n\r\n")
+    trace_log!("tii: Request {} ChunkedSink -> Emitting trailer", self.0);
+    self.1.write_all(b"0\r\n\r\n")
   }
 }
 
