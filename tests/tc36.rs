@@ -73,7 +73,9 @@ pub fn tc36() {
     .expect("ERR")
     .build();
 
-  let stream = MockStream::with_str("GET /dummy?bla=xxxx&bla=yyyyy&mog=bog&mog=log&zog=fog&zog=hog&rm=1&rm=2 HTTP/1.1\r\nHdr: test\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy?bla=xxxx&bla=yyyyy&mog=bog&mog=log&zog=fog&zog=hog&rm=1&rm=2 HTTP/1.1\r\nHdr: test\r\n\r\n",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let data = stream.copy_written_data_to_string();

@@ -5,13 +5,13 @@ mod inner {
   use std::str::FromStr;
   use std::thread::sleep;
   use std::time::Duration;
-  use tii::extras;
-  use tii::extras::Connector;
   use tii::MimeType;
   use tii::RequestContext;
   use tii::Response;
   use tii::ServerBuilder;
   use tii::TiiResult;
+  use tii::extras;
+  use tii::extras::Connector;
 
   fn hello(_: &RequestContext) -> TiiResult<Response> {
     Ok(Response::ok("<html><body><h1>Hello</h1></body></html>", MimeType::TextHtml))
@@ -37,7 +37,10 @@ mod inner {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut response = Vec::new();
     stream.read_to_end(&mut response)?;
-    assert_eq!(std::str::from_utf8(response.as_slice())?, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: Close\r\nContent-Length: 40\r\n\r\n<html><body><h1>Hello</h1></body></html>");
+    assert_eq!(
+      std::str::from_utf8(response.as_slice())?,
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: Close\r\nContent-Length: 40\r\n\r\n<html><body><h1>Hello</h1></body></html>"
+    );
 
     sleep(Duration::from_secs(5));
     println!("Calling shutdown...");

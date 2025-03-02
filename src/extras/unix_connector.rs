@@ -1,5 +1,5 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{CONNECTOR_SHUTDOWN_TIMEOUT, Connector, ConnectorMeta};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
@@ -192,7 +192,12 @@ impl UnixConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
+          error_log!(
+            "unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.",
+            self.path.display(),
+            err,
+            this_connection
+          );
         }
       }
 

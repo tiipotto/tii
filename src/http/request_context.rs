@@ -1,9 +1,9 @@
 //! Contains all state that's needed to process a request.
 
+use crate::http::RequestHead;
 use crate::http::headers::HttpHeaderName;
 use crate::http::request::HttpVersion;
 use crate::http::request_body::RequestBody;
-use crate::http::RequestHead;
 use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
@@ -175,7 +175,8 @@ impl RequestContext {
         None => {
           if req.get_header(&HttpHeaderName::Connection) != Some("keep-alive") {
             trace_log!(
-              "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was not explicitly requested, so will send Connection: close");
+              "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was not explicitly requested, so will send Connection: close"
+            );
 
             return Ok(RequestContext {
               id,
@@ -193,7 +194,8 @@ impl RequestContext {
 
           if req.get_method().is_likely_to_have_request_body() {
             warn_log!(
-            "Request {id} did not sent Content-Length header but did request Connection: keep-alive. Assuming that it has no request body. The request method {} usually has a body, will force Connection: close to be safe.", req.get_method()
+              "Request {id} did not sent Content-Length header but did request Connection: keep-alive. Assuming that it has no request body. The request method {} usually has a body, will force Connection: close to be safe.",
+              req.get_method()
             );
 
             return Ok(RequestContext {
@@ -211,7 +213,8 @@ impl RequestContext {
           }
 
           trace_log!(
-            "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was requested, so will trust the client that the request actually has no body.");
+            "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was requested, so will trust the client that the request actually has no body."
+          );
 
           Ok(RequestContext {
             id,
@@ -276,7 +279,9 @@ impl RequestContext {
       (None, Some("x-gzip")) | (None, Some("gzip")) => {
         trace_log!("Request {id} has gzip request body with length of uncompressed content");
         let Some(content_length) = content_length else {
-          error_log!("Request {id} not implemented no transfer encoding, Content-Encoding: gzip/x-gzip without Content-Length header");
+          error_log!(
+            "Request {id} not implemented no transfer encoding, Content-Encoding: gzip/x-gzip without Content-Length header"
+          );
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
 
@@ -303,7 +308,9 @@ impl RequestContext {
         trace_log!("Request {id} has gzip request body with length of compressed content");
         //gzip+Content-Length of zipped stuff
         let Some(content_length) = content_length else {
-          error_log!("Request {id} not implemented Transfer-Encoding: gzip/x-gzip, no Content-Encoding without Content-Length header");
+          error_log!(
+            "Request {id} not implemented Transfer-Encoding: gzip/x-gzip, no Content-Encoding without Content-Length header"
+          );
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
 
@@ -587,13 +594,9 @@ impl RequestContext {
 fn consume_body(body: &RequestBody) -> io::Result<()> {
   let mut discarding_buffer = [0; 0x1_00_00]; //TODO heap alloc maybe? cfg-if!
   loop {
-    let discarded = body.read(discarding_buffer.as_mut_slice()).or_else(|e| {
-      if e.kind() == ErrorKind::UnexpectedEof {
-        Ok(0)
-      } else {
-        Err(e)
-      }
-    })?; //Not so unexpected eof!
+    let discarded = body
+      .read(discarding_buffer.as_mut_slice())
+      .or_else(|e| if e.kind() == ErrorKind::UnexpectedEof { Ok(0) } else { Err(e) })?; //Not so unexpected eof!
 
     if discarded == 0 {
       return Ok(());

@@ -1,5 +1,9 @@
 //! Contains the impl of the router.
 
+use crate::HttpHeaderName;
+use crate::HttpMethod;
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
   RouterWebSocketServingResponse, WebsocketEndpoint,
@@ -8,13 +12,9 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::HttpHeaderName;
-use crate::HttpMethod;
-use crate::HttpVersion;
-use crate::RequestContext;
-use crate::{trace_log, util};
 use crate::{AcceptMimeType, QValue};
 use crate::{Response, StatusCode};
+use crate::{trace_log, util};
 use base64::Engine;
 use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
