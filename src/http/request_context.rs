@@ -8,18 +8,20 @@ use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
-use crate::{error_log, info_log, trace_log, util, warn_log};
+use crate::{debug_log, error_log, trace_log, util, warn_log};
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
 #[derive(Debug)]
 pub struct RequestContext {
   id: u128,
+  timestamp: u128,
   peer_address: String,
   local_address: String,
   request: RequestHead,
@@ -48,6 +50,10 @@ impl RequestContext {
   ) -> Self {
     Self {
       id,
+      timestamp: SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|a| a.as_millis())
+        .unwrap_or(0),
       peer_address: peer_address.to_string(),
       local_address: local_address.to_string(),
       request: head,
@@ -62,16 +68,18 @@ impl RequestContext {
 
   fn new_http09(
     id: u128,
+    timestamp: u128,
     local_address: String,
     peer_address: String,
     req: RequestHead,
     _stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   ) -> TiiResult<RequestContext> {
-    trace_log!("Request {id} is http 0.9");
+    trace_log!("tii: Request {id} is http 0.9");
 
     Ok(RequestContext {
       id,
+      timestamp,
       peer_address,
       local_address,
       request: req,
@@ -86,13 +94,14 @@ impl RequestContext {
 
   fn new_http10(
     id: u128,
+    timestamp: u128,
     local_address: String,
     peer_address: String,
     req: RequestHead,
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   ) -> TiiResult<RequestContext> {
-    trace_log!("Request {id} is http 1.0");
+    trace_log!("tii: Request {id} is http 1.0");
 
     if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
       let content_length: u64 = content_length.parse().map_err(|_| {
@@ -100,9 +109,10 @@ impl RequestContext {
       })?;
 
       if content_length == 0 {
-        trace_log!("Request {id} has no request body");
+        trace_log!("tii: Request {id} has no request body");
         return Ok(RequestContext {
           id,
+          timestamp,
           peer_address,
           local_address,
           request: req,
@@ -115,10 +125,11 @@ impl RequestContext {
         });
       }
 
-      trace_log!("Request {id} has {content_length} bytes of request body");
+      trace_log!("tii: Request {id} has {content_length} bytes of request body");
       let body = RequestBody::new_with_content_length(stream.new_ref_read(), content_length);
       return Ok(RequestContext {
         id,
+        timestamp,
         peer_address,
         local_address,
         request: req,
@@ -132,10 +143,11 @@ impl RequestContext {
     }
 
     trace_log!(
-      "Request {id} did not sent Content-Length header. Assuming that it has no request body"
+      "tii: Request {id} did not sent Content-Length header. Assuming that it has no request body"
     );
     Ok(RequestContext {
       id,
+      timestamp,
       peer_address,
       local_address,
       request: req,
@@ -150,13 +162,14 @@ impl RequestContext {
 
   fn new_http11(
     id: u128,
+    timestamp: u128,
     local_address: String,
     peer_address: String,
     req: RequestHead,
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   ) -> TiiResult<RequestContext> {
-    trace_log!("Request {id} is http 1.1");
+    trace_log!("tii: Request {id} is http 1.1");
 
     let content_length =
       if let Some(content_length) = req.get_header(&HttpHeaderName::ContentLength) {
@@ -175,10 +188,11 @@ impl RequestContext {
         None => {
           if req.get_header(&HttpHeaderName::Connection) != Some("keep-alive") {
             trace_log!(
-              "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was not explicitly requested, so will send Connection: close");
+              "tii: Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was not explicitly requested, so will send Connection: close");
 
             return Ok(RequestContext {
               id,
+              timestamp,
               peer_address,
               local_address,
               request: req,
@@ -193,11 +207,12 @@ impl RequestContext {
 
           if req.get_method().is_likely_to_have_request_body() {
             warn_log!(
-            "Request {id} did not sent Content-Length header but did request Connection: keep-alive. Assuming that it has no request body. The request method {} usually has a body, will force Connection: close to be safe.", req.get_method()
+            "tii: Request {id} did not sent Content-Length header but did request Connection: keep-alive. Assuming that it has no request body. The request method {} usually has a body, will force Connection: close to be safe.", req.get_method()
             );
 
             return Ok(RequestContext {
               id,
+              timestamp,
               peer_address,
               local_address,
               request: req,
@@ -211,10 +226,11 @@ impl RequestContext {
           }
 
           trace_log!(
-            "Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was requested, so will trust the client that the request actually has no body.");
+            "tii: Request {id} did not sent Content-Length header. Assuming that it has no request body. Connection: keep-alive was requested, so will trust the client that the request actually has no body.");
 
           Ok(RequestContext {
             id,
+            timestamp,
             peer_address,
             local_address,
             request: req,
@@ -227,9 +243,10 @@ impl RequestContext {
           })
         }
         Some(0) => {
-          trace_log!("Request {id} has no request body");
+          trace_log!("tii: Request {id} has no request body");
           Ok(RequestContext {
             id,
+            timestamp,
             peer_address,
             local_address,
             request: req,
@@ -242,9 +259,10 @@ impl RequestContext {
           })
         }
         Some(content_length) => {
-          trace_log!("Request {id} has {content_length} bytes of request body");
+          trace_log!("tii: Request {id} has {content_length} bytes of request body");
           Ok(RequestContext {
             id,
+            timestamp,
             peer_address,
             local_address,
             request: req,
@@ -258,10 +276,11 @@ impl RequestContext {
         }
       },
       (None, Some("chunked")) => {
-        trace_log!("Request {id} has chunked request body");
+        trace_log!("tii: Request {id} has chunked request body");
         let body = RequestBody::new_chunked(stream.new_ref_read());
         Ok(RequestContext {
           id,
+          timestamp,
           peer_address,
           local_address,
           request: req,
@@ -274,9 +293,9 @@ impl RequestContext {
         })
       }
       (None, Some("x-gzip")) | (None, Some("gzip")) => {
-        trace_log!("Request {id} has gzip request body with length of uncompressed content");
+        trace_log!("tii: Request {id} has gzip request body with length of uncompressed content");
         let Some(content_length) = content_length else {
-          error_log!("Request {id} not implemented no transfer encoding, Content-Encoding: gzip/x-gzip without Content-Length header");
+          error_log!("tii: Request {id} not implemented no transfer encoding, Content-Encoding: gzip/x-gzip without Content-Length header");
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
 
@@ -285,6 +304,7 @@ impl RequestContext {
 
         Ok(RequestContext {
           id,
+          timestamp,
           peer_address,
           local_address,
           request: req,
@@ -300,10 +320,10 @@ impl RequestContext {
         })
       }
       (Some("gzip"), None) | (Some("x-gzip"), None) => {
-        trace_log!("Request {id} has gzip request body with length of compressed content");
+        trace_log!("tii: Request {id} has gzip request body with length of compressed content");
         //gzip+Content-Length of zipped stuff
         let Some(content_length) = content_length else {
-          error_log!("Request {id} not implemented Transfer-Encoding: gzip/x-gzip, no Content-Encoding without Content-Length header");
+          error_log!("tii: Request {id} not implemented Transfer-Encoding: gzip/x-gzip, no Content-Encoding without Content-Length header");
           return Err(TiiError::from(RequestHeadParsingError::ContentLengthHeaderMissing));
         };
 
@@ -317,6 +337,7 @@ impl RequestContext {
         )?;
         Ok(RequestContext {
           id,
+          timestamp,
           peer_address,
           local_address,
           request: req,
@@ -332,10 +353,11 @@ impl RequestContext {
       | (Some("x-gzip"), Some("chunked"))
       | (None, Some("gzip, chunked"))
       | (None, Some("x-gzip, chunked")) => {
-        trace_log!("Request {id} has chunked gzip request body");
+        trace_log!("tii: Request {id} has chunked gzip request body");
         let body = RequestBody::new_gzip_chunked(stream.new_ref_read())?;
         Ok(RequestContext {
           id,
+          timestamp,
           peer_address,
           local_address,
           request: req,
@@ -351,7 +373,7 @@ impl RequestContext {
         match other_transfer {
           Some("chunked") | None => (),
           Some(other) => {
-            error_log!("Request {id} has unimplemented transfer encoding: {}", other);
+            error_log!("tii: Request {id} has unimplemented transfer encoding: {}", other);
             return Err(TiiError::from(RequestHeadParsingError::TransferEncodingNotSupported(
               other.to_string(),
             )));
@@ -360,14 +382,14 @@ impl RequestContext {
 
         let Some(other_encoding) = other_encoding else {
           error_log!(
-            "BUG! Fatal unreachable syntax/encoding reached {:?} {:?}",
+            "tii: BUG! Fatal unreachable syntax/encoding reached {:?} {:?}",
             other_encoding,
             other_transfer
           );
           util::unreachable();
         };
 
-        error_log!("Request {id} has unimplemented content encoding: {}", other_encoding);
+        error_log!("tii: Request {id} has unimplemented content encoding: {}", other_encoding);
 
         Err(TiiError::from(RequestHeadParsingError::ContentEncodingNotSupported(
           other_encoding.to_string(),
@@ -383,22 +405,24 @@ impl RequestContext {
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     max_head_buffer_size: usize,
   ) -> TiiResult<RequestContext> {
+    let now: u128 =
+      SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|a| a.as_millis()).unwrap_or(0);
     let id = util::next_id();
     let peer_address = stream.peer_addr()?;
     let local_address = stream.local_addr()?;
-    info_log!("Request {id} local: {} peer: {}", &local_address, &peer_address);
+    debug_log!("tii: Request {id} local: {} peer: {}", &local_address, &peer_address);
 
     let req = RequestHead::read(id, stream, max_head_buffer_size)?;
 
     match req.get_version() {
       HttpVersion::Http09 => {
-        Self::new_http09(id, local_address, peer_address, req, stream, stream_meta)
+        Self::new_http09(id, now, local_address, peer_address, req, stream, stream_meta)
       }
       HttpVersion::Http10 => {
-        Self::new_http10(id, local_address, peer_address, req, stream, stream_meta)
+        Self::new_http10(id, now, local_address, peer_address, req, stream, stream_meta)
       }
       HttpVersion::Http11 => {
-        Self::new_http11(id, local_address, peer_address, req, stream, stream_meta)
+        Self::new_http11(id, now, local_address, peer_address, req, stream, stream_meta)
       }
     }
   }
@@ -406,6 +430,14 @@ impl RequestContext {
   /// unique id for this request.
   pub fn id(&self) -> u128 {
     self.id
+  }
+
+  /// returns the timestamp when this request began parsing from the stream.
+  /// This timestamp is in unix epoch millis.
+  /// Meaning milliseconds passed since Midnight 1. Jan 1970 in UTC timezone (UK/England).
+  /// The time source of this timestamp is not monotonic.
+  pub fn get_timestamp(&self) -> u128 {
+    self.timestamp
   }
 
   /// address of the peer we are talking to, entirely socket dependant.

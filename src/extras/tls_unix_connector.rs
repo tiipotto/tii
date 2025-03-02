@@ -48,7 +48,7 @@ impl TlsUnixConnectorInner {
       if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
         if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
           error_log!(
-            "tls_unix_connector[{}]: shutdown failed to wake up the listener thread",
+            "tii: tls_unix_connector[{}]: shutdown failed to wake up the listener thread",
             self.path.display()
           );
           return;
@@ -60,7 +60,11 @@ impl TlsUnixConnectorInner {
       //This is very unlikely, I have NEVER seen this happen.
       let errno = *libc::__errno_location();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!("tls_unix_connector[{}]: shutdown failed: errno={}", self.path.display(), errno);
+        error_log!(
+          "tii: tls_unix_connector[{}]: shutdown failed: errno={}",
+          self.path.display(),
+          errno
+        );
       }
     }
   }
@@ -106,19 +110,19 @@ impl Connector for TlsUnixConnector {
       Err(err) => {
         if let Some(msg) = err.downcast_ref::<&'static str>() {
           error_log!(
-            "tls_unix_connector[{}]: listener thread panicked: {}",
+            "tii: tls_unix_connector[{}]: listener thread panicked: {}",
             self.inner.path.display(),
             msg
           );
         } else if let Some(msg) = err.downcast_ref::<String>() {
           error_log!(
-            "tls_unix_connector[{}]: listener thread panicked: {}",
+            "tii: tls_unix_connector[{}]: listener thread panicked: {}",
             self.inner.path.display(),
             msg
           );
         } else {
           error_log!(
-            "tls_unix_connector[{}]: listener thread panicked: {:?}",
+            "tii: tls_unix_connector[{}]: listener thread panicked: {:?}",
             self.inner.path.display(),
             err
           );
@@ -138,15 +142,15 @@ impl TlsUnixConnectorInner {
 
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("tls_unix_connector[{}]: listening...", self.path.display());
+    info_log!("tii: tls_unix_connector[{}]: listening...", self.path.display());
     for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("tls_unix_connector[{}]: shutdown", self.path.display());
+        info_log!("tii: tls_unix_connector[{}]: shutdown", self.path.display());
         break;
       }
 
       info_log!(
-        "tls_unix_connector[{}]: connection {this_connection} accepted",
+        "tii: tls_unix_connector[{}]: connection {this_connection} accepted",
         self.path.display()
       );
       let path_clone = self.path.clone();
@@ -172,7 +176,7 @@ impl TlsUnixConnectorInner {
                   Ok(conn) => conn,
                   Err(err) => {
                     error_log!(
-                "tls_unix_connector[{}]: connection {} failed to construct TiiTlsStream err={}",
+                "tii: tls_unix_connector[{}]: connection {} failed to construct TiiTlsStream err={}",
                 path_clone.display(),
                 this_connection,
                 err);
@@ -182,7 +186,7 @@ impl TlsUnixConnectorInner {
               }
               Err(err) => {
                 error_log!(
-                "tls_unix_connector[{}]: connection {} failed to construct rust-tls ServerConnection err={}",
+                "tii: tls_unix_connector[{}]: connection {} failed to construct rust-tls ServerConnection err={}",
                 path_clone.display(),
                 this_connection,
                 err);
@@ -193,14 +197,14 @@ impl TlsUnixConnectorInner {
             match server_clone.handle_connection_with_meta(tls_stream, ConnectorMeta::TlsUnix) {
               Ok(_) => {
                 info_log!(
-                "tls_unix_connector[{}]: connection {this_connection} processed successfully",
+                "tii: tls_unix_connector[{}]: connection {this_connection} processed successfully",
                 path_clone.display()
               );
               }
               Err(err) => {
                 // User code errored, like return Err in an Error handler.
                 error_log!(
-                "tls_unix_connector[{}]: connection {} tii server returned err={}",
+                "tii: tls_unix_connector[{}]: connection {} tii server returned err={}",
                 path_clone.display(),
                 this_connection,
                 err
@@ -211,7 +215,7 @@ impl TlsUnixConnectorInner {
           Err(err) => {
             // This may just affect a single connection and is likely to recover on its own?
             error_log!(
-              "tls_unix_connector[{}]: connection {} failed to accept a unix socket connection err={}",
+              "tii: tls_unix_connector[{}]: connection {} failed to accept a unix socket connection err={}",
               path_clone.display(),
               this_connection,
               err
@@ -228,7 +232,7 @@ impl TlsUnixConnectorInner {
         }
         Err(err) => {
           //May recover on its own courtesy of the OS once load decreases.
-          error_log!("tls_unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
+          error_log!("tii: tls_unix_connector[{}]: connection {} failed to spawn new thread to handle the connection err={}, will drop connection.", self.path.display(), err, this_connection);
         }
       }
 
@@ -245,7 +249,7 @@ impl TlsUnixConnectorInner {
           let this_connection = con.id;
           crate::util::panic_msg(err, |msg| {
             error_log!(
-              "tls_unix_connector[{}]: connection {} thread panicked: {}",
+              "tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
               self.path.display(),
               this_connection,
               msg
@@ -257,13 +261,13 @@ impl TlsUnixConnectorInner {
       });
     }
 
-    trace_log!("tls_unix_connector[{}]: waiting for shutdown to finish", self.path.display());
+    trace_log!("tii: tls_unix_connector[{}]: waiting for shutdown to finish", self.path.display());
     //Wait for all threads to finish
     for mut con in active_connection {
       let this_connection = con.id;
       if !con.done_flag.load(Ordering::SeqCst) {
         trace_log!(
-          "tls_unix_connector[{}]: connection {} is not yet done. blocking...",
+          "tii: tls_unix_connector[{}]: connection {} is not yet done. blocking...",
           self.path.display(),
           this_connection
         );
@@ -273,7 +277,7 @@ impl TlsUnixConnectorInner {
       if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
         crate::util::panic_msg(err, |msg| {
           error_log!(
-            "tls_unix_connector[{}]: connection {} thread panicked: {}",
+            "tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
             self.path.display(),
             this_connection,
             msg
@@ -282,7 +286,7 @@ impl TlsUnixConnectorInner {
       }
     }
 
-    info_log!("tls_unix_connector[{}]: shutdown done", self.path.display());
+    info_log!("tii: tls_unix_connector[{}]: shutdown done", self.path.display());
   }
 }
 

@@ -419,6 +419,21 @@ impl Response {
     self
   }
 
+  /// Returns the status code and reason phrase of this request.
+  pub fn get_status_code(&self) -> &StatusCode {
+    &self.status_code
+  }
+
+  /// Returns the number value of the status code
+  pub fn get_status_code_number(&self) -> u16 {
+    self.status_code.code()
+  }
+
+  /// Sets the status code and reason phrase of this request.
+  pub fn set_status_code(&mut self, status_code: StatusCode) {
+    self.status_code = status_code;
+  }
+
   /// Adds the header to the Response.
   pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
     match &hdr.as_ref().into() {
@@ -491,25 +506,30 @@ impl Response {
 
   ///
   /// Write the request to a streaming output. This consumes the request object.
+  /// # Parameters
+  /// `request_id` for logging purposes only
+  /// `version` http version of the response
+  /// `destination` the stream to write to.
   ///
   pub fn write_to<T: ConnectionStreamWrite + ?Sized>(
     mut self,
+    request_id: u128,
     version: HttpVersion,
     destination: &T,
   ) -> io::Result<()> {
     if version == HttpVersion::Http09 {
       if let Some(body) = self.body.as_mut() {
-        body.write_to(destination)?;
+        body.write_to(request_id, destination)?;
       }
 
       return Ok(());
     }
 
-    destination.write(version.as_net_str().as_bytes())?;
-    destination.write(b" ")?;
-    destination.write(self.status_code.code_as_utf())?;
-    destination.write(b" ")?;
-    destination.write(self.status_code.status_line().as_bytes())?;
+    destination.write_all(version.as_net_str().as_bytes())?;
+    destination.write_all(b" ")?;
+    destination.write_all(self.status_code.code_as_utf())?;
+    destination.write_all(b" ")?;
+    destination.write_all(self.status_code.status_line().as_bytes())?;
 
     for header in self.headers.iter() {
       // TODO should we even have these checks here? they should not be possible.
@@ -521,31 +541,51 @@ impl Response {
         crate::util::unreachable();
       }
 
-      destination.write(b"\r\n")?;
+      destination.write_all(b"\r\n")?;
       //TODO remove this clone
-      destination.write(header.name.to_string().as_bytes())?;
-      destination.write(b": ")?;
-      destination.write(header.value.as_bytes())?;
+      destination.write_all(header.name.to_string().as_bytes())?;
+      destination.write_all(b": ")?;
+      destination.write_all(header.value.as_bytes())?;
     }
 
     if let Some(body) = self.body.as_mut() {
       if body.is_chunked() {
-        destination.write(b"\r\nTransfer-Encoding: chunked\r\n\r\n")?;
-        body.write_to(destination)?;
+        destination.write_all(b"\r\nTransfer-Encoding: chunked\r\n")?;
+        if let Some(enc) = body.get_content_encoding() {
+          if self.headers.get(HttpHeaderName::ContentEncoding).is_none() {
+            destination.write_all(b"Content-Encoding: ")?;
+            destination.write_all(enc.as_bytes())?;
+            destination.write_all(b"\r\n")?;
+          }
+        }
+        destination.write_all(b"\r\n")?;
+        body.write_to(request_id, destination)?;
         destination.flush()?;
         return Ok(());
       }
 
+      destination.write_all(b"\r\n")?;
+
       if let Some(len) = body.content_length() {
-        destination.write(format!("\r\nContent-Length: {}\r\n\r\n", len).as_bytes())?;
+        destination.write(format!("Content-Length: {}\r\n", len).as_bytes())?;
       }
 
-      body.write_to(destination)?;
+      if let Some(enc) = body.get_content_encoding() {
+        if self.headers.get(HttpHeaderName::ContentEncoding).is_none() {
+          destination.write_all(b"Content-Encoding: ")?;
+          destination.write_all(enc.as_bytes())?;
+          destination.write_all(b"\r\n")?;
+        }
+      }
+
+      destination.write_all(b"\r\n")?;
+
+      body.write_to(request_id, destination)?;
       destination.flush()?;
       return Ok(());
     }
 
-    destination.write(b"\r\nContent-Length: 0\r\n\r\n")?;
+    destination.write_all(b"\r\nContent-Length: 0\r\n\r\n")?;
     destination.flush()?;
     Ok(())
   }

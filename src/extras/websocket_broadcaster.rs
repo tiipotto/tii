@@ -262,7 +262,7 @@ impl WSBApp {
       loop {
         if let Some(sd) = &self.state.shutdown {
           if sd.try_recv().is_ok() {
-            info_log!("shutdown received in WebSocketApp");
+            info_log!("tii: shutdown received in WebSocketApp");
             break;
           }
         }
@@ -273,7 +273,7 @@ impl WSBApp {
           Err(RecvTimeoutError::Timeout) => continue,
           // The TiiServer has exit, so we tell everybody to exit
           Err(RecvTimeoutError::Disconnected) => {
-            info_log!("WebsocketApp initializing shutdown, due to Tii exiting");
+            info_log!("tii: WebsocketApp initializing shutdown, due to Tii exiting");
             sd_flag.store(true, Ordering::SeqCst);
             break;
           }
@@ -309,7 +309,7 @@ impl WSBApp {
       for t in threads {
         let j = t.join();
         if let Err(e) = j {
-          warn_log!("{:?} while doing join of `exec` thread.", e);
+          warn_log!("tii: {:?} while doing join of `exec` thread.", e);
         }
       }
       Ok::<(), io::Error>(())
@@ -324,7 +324,7 @@ impl WSBApp {
         return match exec_thread.join() {
           Ok(et) => Err(WsbAppError::ExecThread(et)),
           Err(e) => {
-            error_log!("Unexpected exec_thread panic: {:?}.", e);
+            error_log!("tii: Unexpected exec_thread panic: {:?}.", e);
             Err(WsbAppError::Panic)
           }
         };
@@ -333,7 +333,7 @@ impl WSBApp {
         return match exec_thread.join() {
           Ok(bt) => Err(WsbAppError::BroadcastThread(bt)),
           Err(e) => {
-            error_log!("Unexpected broadcast_thread panic: {:?}.", e);
+            error_log!("tii: Unexpected broadcast_thread panic: {:?}.", e);
             Err(WsbAppError::Panic)
           }
         };
@@ -343,12 +343,12 @@ impl WSBApp {
     }
 
     if let Err(e) = exec_thread.join() {
-      error_log!("{:?} while doing join of `exec` thread.", e);
+      error_log!("tii: {:?} while doing join of `exec` thread.", e);
       return Err(WsbAppError::Panic);
     }
 
     if let Err(e) = broadcast_thread.join() {
-      error_log!("{:?} while doing join of `exec` thread.", e);
+      error_log!("tii: {:?} while doing join of `exec` thread.", e);
       return Err(WsbAppError::Panic);
     }
     Ok(())
@@ -458,7 +458,7 @@ fn exec(es: ExecState) {
         }
       },
       Err(e) => {
-        error_log!("ws_app read: {:?} occurred", &e);
+        error_log!("tii: ws_app read: {:?} occurred", &e);
         if let Some(dh) = es.disconnect_handler {
           (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
         }
@@ -468,9 +468,9 @@ fn exec(es: ExecState) {
   });
 
   if let Err(e) = read_thread.join() {
-    error_log!("ws_app read: {:?} occurred", &e);
+    error_log!("tii: ws_app read: {:?} occurred", &e);
   }
   if let Err(e) = write_thread.join() {
-    error_log!("ws_app read: {:?} occurred", &e);
+    error_log!("tii: ws_app read: {:?} occurred", &e);
   }
 }

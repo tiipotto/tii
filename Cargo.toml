@@ -13,7 +13,7 @@ categories = ["web-programming::http-server", "network-programming"]
 
 [dependencies]
 backtrace = { version = "0.3.74", optional = true }
-tii-procmacro = { version = "0.0.1" }
+tii-procmacro = { version = "0.0.2" }
 getrandom = { version = "0.3", optional = true }
 log = { version = "^0.4.25", optional = true }
 unowned-buf = "0.1.2"
@@ -96,3 +96,12 @@ required-features = ["extras", "log"]
 [[example]]
 name = "websocket_broadcast"
 required-features = ["extras"]
+
+[[example]]
+name = "gzip"
+required-features = ["extras", "log"]
+
+
+[[example]]
+name = "hello_world"
+required-features = ["log"]
