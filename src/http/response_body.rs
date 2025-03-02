@@ -5,12 +5,12 @@
 use crate::stream::ConnectionStreamWrite;
 use crate::trace_log;
 use crate::util::unwrap_some;
+use defer_heavy::defer;
 use libflate::gzip;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use defer_heavy::defer;
 
 pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()>;
 
@@ -160,7 +160,11 @@ impl ResponseBody {
     Self(ResponseBodyInner::ChunkedGzipStream(Some(Box::new(streamer))))
   }
 
-  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(&mut self, request_id: u128, stream: &T) -> io::Result<()> {
+  pub fn write_to<T: ConnectionStreamWrite + ?Sized>(
+    &mut self,
+    request_id: u128,
+    stream: &T,
+  ) -> io::Result<()> {
     match &mut self.0 {
       ResponseBodyInner::FixedSizeBinaryData(data)
       | ResponseBodyInner::ExternallyGzippedData(data) => stream.write_all(data.as_slice()),
@@ -223,7 +227,7 @@ impl ResponseBody {
           if count == 0 {
             break;
           }
-          sink.write_all(&io_buf[..count])?;
+          sink.write_all(unwrap_some(io_buf.get(..count)))?;
         }
         sink.finish()
       }
@@ -231,12 +235,12 @@ impl ResponseBody {
   }
 
   pub fn is_chunked(&self) -> bool {
-    match self.0 {
+    matches!(
+      self.0,
       ResponseBodyInner::ChunkedStream(_)
-      | ResponseBodyInner::ChunkedGzipStream(_)
-      | ResponseBodyInner::ChunkedGzipFile(_) => true,
-      _ => false,
-    }
+        | ResponseBodyInner::ChunkedGzipStream(_)
+        | ResponseBodyInner::ChunkedGzipFile(_)
+    )
   }
 
   pub fn get_content_encoding(&self) -> Option<&'static str> {
@@ -293,15 +297,21 @@ impl ResponseBodySink for StreamSink<'_> {
 struct GzipChunkedSink<'a>(u128, RefCell<Option<gzip::Encoder<BufWriter<ChunkedSink<'a>>>>>);
 
 impl<'a> GzipChunkedSink<'a> {
-  fn new(request_id: u128, stream: &'a dyn ConnectionStreamWrite) -> io::Result<GzipChunkedSink<'a>> {
+  fn new(
+    request_id: u128,
+    stream: &'a dyn ConnectionStreamWrite,
+  ) -> io::Result<GzipChunkedSink<'a>> {
     // We need BufWriter here because the gzip encoder calls write with like 2-4 bytes at a time.
     // We don't want to emit a http chunk every single time the gzip encoder writes a single symbol
     // the overhead would be several 100%.
     // If we use the BufWriter the overhead only exist when gzip calls flush().
     // This only happens when there is significant data buffered so it's reasonable to emit a chunk then.
-    Ok(Self(request_id, RefCell::new(Some(crate::util::new_gzip_encoder(BufWriter::new(ChunkedSink(request_id,
-      stream,
-    )))?))))
+    Ok(Self(
+      request_id,
+      RefCell::new(Some(crate::util::new_gzip_encoder(BufWriter::new(ChunkedSink(
+        request_id, stream,
+      )))?)),
+    ))
   }
 }
 
@@ -334,7 +344,7 @@ impl ResponseBodySink for GzipChunkedSink<'_> {
   }
 }
 
-static CHUNK_LUT: [&'static [u8]; 8096] = tii_procmacro::hex_chunked_lut!(8096);
+static CHUNK_LUT: [&[u8]; 8096] = tii_procmacro::hex_chunked_lut!(8096);
 
 struct ChunkedSink<'a>(u128, &'a dyn ConnectionStreamWrite);
 
@@ -360,7 +370,11 @@ impl ResponseBodySink for ChunkedSink<'_> {
       return Ok(());
     }
 
-    trace_log!("tii: Request {} ChunkedSink -> Emitting a HTTP chunk with {} bytes", self.0, buffer.len());
+    trace_log!(
+      "tii: Request {} ChunkedSink -> Emitting a HTTP chunk with {} bytes",
+      self.0,
+      buffer.len()
+    );
 
     if let Some(lut) = CHUNK_LUT.get(buffer.len()) {
       self.1.write_all(lut)?;

@@ -356,11 +356,11 @@ impl Server {
     #[cfg(feature = "log")]
     let status = response.get_status_code_number();
 
-    response.write_to(request.id(), request.request_head().get_version(), stream.as_stream_write()).inspect_err(
-      |e| {
+    response
+      .write_to(request.id(), request.request_head().get_version(), stream.as_stream_write())
+      .inspect_err(|e| {
         error_log!("tii: Request {} response.write_to error={}", request.id(), e);
-      },
-    )?;
+      })?;
 
     #[cfg(feature = "log")]
     {
