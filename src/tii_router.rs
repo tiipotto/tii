@@ -8,7 +8,7 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::HttpMethod;
+use crate::{HttpMethod, ResponseContext};
 use crate::HttpVersion;
 use crate::RequestContext;
 use crate::{trace_log, util};
@@ -640,7 +640,7 @@ impl DefaultRouter {
             return Ok(RouterWebSocketServingResponse::HandledWithoutProtocolSwitch(resp));
           }
 
-          if let Some(enc) = resp.body().and_then(|a| a.get_content_encoding()) {
+          if let Some(enc) = resp.get_body().and_then(|a| a.get_content_encoding()) {
             if enc == "gzip" && !request.request_head().accepts_gzip() {
               warn_log!("Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
             }
@@ -711,11 +711,20 @@ impl DefaultRouter {
   fn call_response_filters(
     &self,
     request: &mut RequestContext,
-    mut resp: Response,
+    resp: Response,
   ) -> TiiResult<Response> {
+
+    let mut resp = ResponseContext::new(request, resp);
     for filter in self.response_filters.iter() {
-      resp = filter.filter(request, resp).or_else(|e| self.call_error_handler(request, e))?;
+      filter.filter(&mut resp).or_else(|e| {
+        // TODO we should give the error handler
+        // TODO a shot at the response now that we dont move ownership into the filter anymore.
+        let result = self.call_error_handler(resp.get_request_mut(), e)?;
+        resp.set_response(result);
+        TiiResult::Ok(())
+      })?;
     }
+    let (_, resp) = resp.unwrap();
     Ok(resp)
   }
 

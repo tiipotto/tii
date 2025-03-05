@@ -8,7 +8,7 @@ use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
-use crate::{debug_log, error_log, trace_log, util, warn_log};
+use crate::{debug_log, error_log, trace_log, util, warn_log, TypeSystem};
 use std::any::Any;
 use std::collections::HashMap;
 use std::io;
@@ -28,13 +28,10 @@ pub struct RequestContext {
   body: Option<RequestBody>,
   force_connection_close: bool,
   stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
-
   routed_path: Option<String>,
-
   path_params: Option<HashMap<String, String>>,
-
-  ///TODO the key may be a candidate for `Rc<str>` instead of "String"?
   properties: Option<HashMap<String, Box<dyn Any + Send>>>,
+  type_system: TypeSystem,
 }
 
 impl RequestContext {
@@ -47,6 +44,7 @@ impl RequestContext {
     head: RequestHead,
     body: Option<RequestBody>,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    type_system: TypeSystem,
   ) -> Self {
     Self {
       id,
@@ -63,6 +61,7 @@ impl RequestContext {
       routed_path: None,
       path_params: None,
       properties: None,
+      type_system,
     }
   }
 
@@ -74,6 +73,7 @@ impl RequestContext {
     req: RequestHead,
     _stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    type_system: TypeSystem,
   ) -> TiiResult<RequestContext> {
     trace_log!("tii: Request {id} is http 0.9");
 
@@ -89,6 +89,7 @@ impl RequestContext {
       routed_path: None,
       stream_meta,
       path_params: None,
+      type_system,
     })
   }
 
@@ -100,6 +101,7 @@ impl RequestContext {
     req: RequestHead,
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    type_system: TypeSystem,
   ) -> TiiResult<RequestContext> {
     trace_log!("tii: Request {id} is http 1.0");
 
@@ -122,6 +124,7 @@ impl RequestContext {
           routed_path: None,
           stream_meta,
           path_params: None,
+          type_system,
         });
       }
 
@@ -139,6 +142,7 @@ impl RequestContext {
         routed_path: None,
         stream_meta,
         path_params: None,
+        type_system,
       });
     }
 
@@ -157,6 +161,7 @@ impl RequestContext {
       routed_path: None,
       stream_meta,
       path_params: None,
+      type_system,
     })
   }
 
@@ -168,6 +173,7 @@ impl RequestContext {
     req: RequestHead,
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
+    type_system: TypeSystem,
   ) -> TiiResult<RequestContext> {
     trace_log!("tii: Request {id} is http 1.1");
 
@@ -202,6 +208,7 @@ impl RequestContext {
               routed_path: None,
               stream_meta,
               path_params: None,
+              type_system,
             });
           }
 
@@ -222,6 +229,7 @@ impl RequestContext {
               routed_path: None,
               stream_meta,
               path_params: None,
+              type_system,
             });
           }
 
@@ -240,6 +248,7 @@ impl RequestContext {
             routed_path: None,
             stream_meta,
             path_params: None,
+            type_system,
           })
         }
         Some(0) => {
@@ -256,6 +265,7 @@ impl RequestContext {
             routed_path: None,
             stream_meta,
             path_params: None,
+            type_system,
           })
         }
         Some(content_length) => {
@@ -272,6 +282,7 @@ impl RequestContext {
             routed_path: None,
             stream_meta,
             path_params: None,
+            type_system,
           })
         }
       },
@@ -290,6 +301,7 @@ impl RequestContext {
           routed_path: None,
           stream_meta,
           path_params: None,
+          type_system,
         })
       }
       (None, Some("x-gzip")) | (None, Some("gzip")) => {
@@ -317,6 +329,7 @@ impl RequestContext {
           routed_path: None,
           stream_meta,
           path_params: None,
+          type_system,
         })
       }
       (Some("gzip"), None) | (Some("x-gzip"), None) => {
@@ -347,6 +360,7 @@ impl RequestContext {
           routed_path: None,
           stream_meta,
           path_params: None,
+          type_system,
         })
       }
       (Some("gzip"), Some("chunked"))
@@ -367,6 +381,7 @@ impl RequestContext {
           routed_path: None,
           stream_meta,
           path_params: None,
+          type_system,
         })
       }
       (other_encoding, other_transfer) => {
@@ -404,6 +419,7 @@ impl RequestContext {
     stream: &dyn ConnectionStream,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     max_head_buffer_size: usize,
+    type_system: TypeSystem,
   ) -> TiiResult<RequestContext> {
     let now: u128 =
       SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|a| a.as_millis()).unwrap_or(0);
@@ -415,15 +431,36 @@ impl RequestContext {
     let req = RequestHead::read(id, stream, max_head_buffer_size)?;
 
     match req.get_version() {
-      HttpVersion::Http09 => {
-        Self::new_http09(id, now, local_address, peer_address, req, stream, stream_meta)
-      }
-      HttpVersion::Http10 => {
-        Self::new_http10(id, now, local_address, peer_address, req, stream, stream_meta)
-      }
-      HttpVersion::Http11 => {
-        Self::new_http11(id, now, local_address, peer_address, req, stream, stream_meta)
-      }
+      HttpVersion::Http09 => Self::new_http09(
+        id,
+        now,
+        local_address,
+        peer_address,
+        req,
+        stream,
+        stream_meta,
+        type_system,
+      ),
+      HttpVersion::Http10 => Self::new_http10(
+        id,
+        now,
+        local_address,
+        peer_address,
+        req,
+        stream,
+        stream_meta,
+        type_system,
+      ),
+      HttpVersion::Http11 => Self::new_http11(
+        id,
+        now,
+        local_address,
+        peer_address,
+        req,
+        stream,
+        stream_meta,
+        type_system,
+      ),
     }
   }
 
@@ -612,6 +649,10 @@ impl RequestContext {
       consume_body(body)?
     }
     Ok(())
+  }
+
+  pub(crate) fn get_type_system(&self) -> &TypeSystem {
+    &self.type_system
   }
 }
 

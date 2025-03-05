@@ -1,6 +1,6 @@
 //! Defines traits for handler and filter functions.
 
-use crate::ConnectionStream;
+use crate::{ConnectionStream, ResponseContext};
 use crate::RequestContext;
 use crate::Response;
 use crate::TiiResult;
@@ -199,16 +199,16 @@ pub trait ResponseFilter: Send + Sync {
   /// Called with the request context adn response after the endpoint or error handler is called.
   /// Ok(...) -> proceed.
   /// Err -> Call error handler and proceed. (You cannot create a loop, a Response filter will only be called exactly once per RequestContext)
-  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response>;
+  fn filter(&self, request: &mut ResponseContext) -> TiiResult<()>;
 }
 
 impl<F, R> ResponseFilter for F
 where
-  R: Into<TiiResult<Response>>,
-  F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
+  R: Into<TiiResult<()>>,
+  F: Fn(&mut ResponseContext) -> R + Send + Sync,
 {
-  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response> {
-    self(request, response).into()
+  fn filter(&self, request: &mut ResponseContext) -> TiiResult<()> {
+    self(request).into()
   }
 }
 

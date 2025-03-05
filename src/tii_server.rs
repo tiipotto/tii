@@ -7,10 +7,10 @@ use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::HttpVersion;
 use crate::RequestContext;
 use crate::{error_log, trace_log};
 use crate::{warn_log, HttpHeaderName};
+use crate::{HttpVersion, TypeSystem, TypeSystemBuilder};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -44,6 +44,7 @@ impl ConnectionStreamMetadata for PhantomStreamMetadata {
 /// It does NOT own any OS resources like server sockets / file descriptors.
 #[derive(Debug)]
 pub struct Server {
+  type_system: TypeSystem,
   shutdown: AtomicBool,
   routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
@@ -74,6 +75,7 @@ impl Default for Hooks {
 impl Server {
   #[expect(clippy::too_many_arguments)] //Builder
   pub(crate) fn new(
+    type_system: TypeSystemBuilder,
     routers: Vec<Box<dyn Router>>,
     error_handler: ErrorHandler,
     not_found_handler: NotFoundHandler,
@@ -85,6 +87,7 @@ impl Server {
     write_timeout: Option<Duration>,
   ) -> Self {
     Server {
+      type_system: type_system.build(),
       shutdown: AtomicBool::new(false),
       routers,
       error_handler,
@@ -184,8 +187,12 @@ impl Server {
 
       stream.set_read_timeout(self.read_timeout)?;
 
-      let mut context =
-        RequestContext::read(stream.as_ref(), meta.as_ref().cloned(), self.max_head_buffer_size)?;
+      let mut context = RequestContext::read(
+        stream.as_ref(),
+        meta.as_ref().cloned(),
+        self.max_head_buffer_size,
+        self.type_system.clone(),
+      )?;
       count += 1;
 
       stream.set_read_timeout(self.request_body_io_timeout)?;
@@ -347,7 +354,7 @@ impl Server {
       response.status_code.code()
     );
 
-    if let Some(enc) = response.body().and_then(|a| a.get_content_encoding()) {
+    if let Some(enc) = response.get_body().and_then(|a| a.get_content_encoding()) {
       if enc == "gzip" && !request.request_head().accepts_gzip() {
         warn_log!("tii: Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
       }
