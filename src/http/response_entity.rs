@@ -1,21 +1,25 @@
-use crate::{MimeType, TiiResult, TypeSystem, TypeSystemError};
-use std::any::{Any, TypeId};
-use std::fmt::{Debug, Formatter, Write};
+use crate::util::unwrap_some;
+use crate::{MimeType, TiiResult};
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
 
-pub trait Serializer<T: Any + Debug + 'static>: Any {
+/// Trait for serializing entities to some bytes.
+pub trait EntitySerializer<T: Any + Debug + 'static>: Any + Send {
+  /// Perform the serialization
   fn serialize(&self, mime: &MimeType, data: T) -> TiiResult<Vec<u8>>;
 }
 
-impl<F, T> Serializer<T> for F where
-    T: Any+Debug+'static,
-    F: Fn(&MimeType, T) -> TiiResult<Vec<u8>>+'static,
+impl<F, T> EntitySerializer<T> for F
+where
+  T: Any + Debug + Send + 'static,
+  F: Fn(&MimeType, T) -> TiiResult<Vec<u8>> + Send + 'static,
 {
   fn serialize(&self, mime: &MimeType, data: T) -> TiiResult<Vec<u8>> {
     self(mime, data)
   }
 }
 
-trait DynResponseEntityInner: Debug {
+trait DynResponseEntityInner: Debug + Send {
   fn serialize(&mut self, mime: &MimeType) -> TiiResult<Vec<u8>>;
   fn get_serializer(&self) -> &dyn Any;
   fn get_serializer_mut(&mut self) -> &mut dyn Any;
@@ -24,41 +28,41 @@ trait DynResponseEntityInner: Debug {
   fn take_inner(&mut self) -> (Box<dyn Any>, Box<dyn Any>);
 }
 
-struct ResponseEntityInner<T: Any + Debug + 'static> {
+struct ResponseEntityInner<T: Any + Debug + Send + 'static> {
   entity: Option<T>,
-  serializer: Option<Box<dyn Serializer<T>>>,
+  serializer: Option<Box<dyn EntitySerializer<T>>>,
 }
 
-impl<T: Any + Debug + 'static> Debug for ResponseEntityInner<T> {
+impl<T: Any + Debug + Send + 'static> Debug for ResponseEntityInner<T> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     Debug::fmt(&self.entity, f)
   }
 }
-impl<T: Any + Debug + 'static> DynResponseEntityInner for ResponseEntityInner<T> {
+impl<T: Any + Debug + Send + 'static> DynResponseEntityInner for ResponseEntityInner<T> {
   fn serialize(&mut self, mime: &MimeType) -> TiiResult<Vec<u8>> {
-    self.serializer.as_ref().unwrap().serialize(mime, self.entity.take().unwrap())
+    unwrap_some(self.serializer.as_ref()).serialize(mime, unwrap_some(self.entity.take()))
   }
 
   fn get_serializer(&self) -> &dyn Any {
-    self.serializer.as_ref().unwrap() as &dyn Any
+    unwrap_some(self.serializer.as_ref()) as &dyn Any
   }
 
   fn get_serializer_mut(&mut self) -> &mut dyn Any {
-    self.serializer.as_mut().unwrap() as &mut dyn Any
+    unwrap_some(self.serializer.as_mut()) as &mut dyn Any
   }
 
   fn get_entity(&self) -> &dyn Any {
-    self.entity.as_ref().unwrap() as &dyn Any
+    unwrap_some(self.entity.as_ref()) as &dyn Any
   }
 
   fn get_entity_mut(&mut self) -> &mut dyn Any {
-    self.entity.as_mut().unwrap() as &mut dyn Any
+    unwrap_some(self.entity.as_mut()) as &mut dyn Any
   }
 
   fn take_inner(&mut self) -> (Box<dyn Any>, Box<dyn Any>) {
     (
-      Box::new(self.entity.take().unwrap()) as Box<dyn Any>,
-      self.serializer.take().unwrap() as Box<dyn Any>,
+      Box::new(unwrap_some(self.entity.take())) as Box<dyn Any>,
+      unwrap_some(self.serializer.take()) as Box<dyn Any>,
     )
   }
 }
@@ -68,13 +72,13 @@ impl<T: Any + Debug + 'static> DynResponseEntityInner for ResponseEntityInner<T>
 pub(crate) struct ResponseEntity(Box<dyn DynResponseEntityInner>);
 
 impl ResponseEntity {
-  pub fn new<T: Any + Debug + 'static>(
+  pub fn new<T: Any + Send + Debug + 'static>(
     entity: T,
-    serializer: impl Serializer<T> + 'static,
+    serializer: impl EntitySerializer<T> + 'static,
   ) -> Self {
     Self(Box::new(ResponseEntityInner {
       entity: Some(entity),
-      serializer: Some(Box::new(serializer) as Box<dyn Serializer<T>>),
+      serializer: Some(Box::new(serializer) as Box<dyn EntitySerializer<T>>),
     }) as Box<dyn DynResponseEntityInner>)
   }
   pub fn serialize(mut self, mime: &MimeType) -> TiiResult<Vec<u8>> {

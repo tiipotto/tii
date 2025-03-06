@@ -5,7 +5,9 @@
 use crate::http::response_entity::ResponseEntity;
 use crate::stream::ConnectionStreamWrite;
 use crate::util::unwrap_some;
-use crate::{trace_log, MimeType, Serializer, TiiError, TiiResult, TypeSystem, TypeSystemError};
+use crate::{
+  trace_log, EntitySerializer, MimeType, TiiError, TiiResult, TypeSystem, TypeSystemError,
+};
 use defer_heavy::defer;
 use libflate::gzip;
 use std::any::{Any, TypeId};
@@ -14,7 +16,7 @@ use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 
-pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()>;
+pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send;
 
 #[repr(transparent)]
 #[derive(Debug)]
@@ -89,9 +91,9 @@ impl Debug for ResponseBodyInner {
 }
 
 // we don't really exactly need file. We need read+seek.
-pub(crate) trait ReadAndSeek: Read + Seek {}
+pub(crate) trait ReadAndSeek: Read + Seek + Send {}
 
-impl<T> ReadAndSeek for T where T: Read + Seek {}
+impl<T> ReadAndSeek for T where T: Read + Seek + Send {}
 
 pub trait ResponseBodySink {
   fn write(&self, buffer: &[u8]) -> io::Result<usize>;
@@ -100,7 +102,10 @@ pub trait ResponseBodySink {
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_>;
 }
 impl ResponseBody {
-  pub fn from_entity<T: Any+Debug+'static>(entity: T, serializer: impl Serializer<T>+'static) -> Self {
+  pub fn from_entity<T: Any + Send + Debug + 'static>(
+    entity: T,
+    serializer: impl EntitySerializer<T> + 'static,
+  ) -> Self {
     Self(ResponseBodyInner::Entity(ResponseEntity::new(entity, serializer)))
   }
   pub fn from_data(data: Vec<u8>) -> Self {
@@ -131,17 +136,17 @@ impl ResponseBody {
     Self(ResponseBodyInner::FixedSizeBinaryData(data.as_ref().to_vec()))
   }
 
-  pub fn from_file<T: Read + Seek + 'static>(mut file: T) -> io::Result<Self> {
+  pub fn from_file<T: Read + Seek + Send + 'static>(mut file: T) -> io::Result<Self> {
     file.seek(SeekFrom::End(0))?;
     let size = file.stream_position()?;
     Ok(Self(ResponseBodyInner::FixedSizeFile(Box::new(file), size)))
   }
 
-  pub fn from_file_with_chunked_gzip<T: Read + Seek + 'static>(file: T) -> Self {
+  pub fn from_file_with_chunked_gzip<T: Read + Seek + Send + 'static>(file: T) -> Self {
     Self(ResponseBodyInner::ChunkedGzipFile(Box::new(file)))
   }
 
-  pub fn from_externally_gzipped_file<T: Read + Seek + 'static>(
+  pub fn from_externally_gzipped_file<T: Read + Seek + Send + 'static>(
     mut file_in_gzip_format: T,
   ) -> io::Result<Self> {
     file_in_gzip_format.seek(SeekFrom::End(0))?;
@@ -149,13 +154,13 @@ impl ResponseBody {
     Ok(Self(ResponseBodyInner::ExternallyGzippedFile(Box::new(file_in_gzip_format), size)))
   }
 
-  pub fn chunked<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + 'static>(
+  pub fn chunked<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send + 'static>(
     streamer: T,
   ) -> Self {
     Self(ResponseBodyInner::ChunkedStream(Some(Box::new(streamer))))
   }
 
-  pub fn streamed<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + 'static>(
+  pub fn streamed<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send + 'static>(
     streamer: T,
   ) -> Self {
     Self(ResponseBodyInner::Stream(Some(Box::new(streamer))))
@@ -164,7 +169,7 @@ impl ResponseBody {
   /// Creates a response body that streams data from a sink and will on the fly gzip it.
   /// Due to gzip encoding the implementation does not guarantee that each written chunk
   /// corresponds to exactly one http chunk and also does not guarantee that any such chunk is written immediately.
-  pub fn chunked_gzip<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + 'static>(
+  pub fn chunked_gzip<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send + 'static>(
     streamer: T,
   ) -> Self {
     Self(ResponseBodyInner::ChunkedGzipStream(Some(Box::new(streamer))))
@@ -215,6 +220,7 @@ impl ResponseBody {
 
   /// Will decode the generic entity into a tuple of Entity, Serializer. Both as Box<dyn Any>.
   /// If the body is not an entity then this will yield Err(Self)
+  #[allow(clippy::type_complexity)] //TODO fix this shit later!
   pub fn try_into_entity(self) -> Result<(Box<dyn Any>, Box<dyn Any>), Self> {
     match self.0 {
       ResponseBodyInner::Entity(entity) => Ok(entity.into_inner()),
@@ -245,6 +251,7 @@ impl ResponseBody {
   /// It is useful if a filter wishes to retrieve the raw data and inspect it.
   /// This raw data does not have any http specific content or transfer encoding applies and contains the raw bytes
   /// just like the other side should interpret them after undoing the encodings.
+  ///
   pub fn write_to_raw(self, mime: &MimeType, stream: &mut impl Write) -> TiiResult<()> {
     match self.0 {
       ResponseBodyInner::FixedSizeBinaryData(data) => stream.write_all(data.as_ref())?,
@@ -257,7 +264,7 @@ impl ResponseBody {
           if len == 0 {
             return Ok(());
           }
-          stream.write_all(&unwrap_some(io_buf.get(..len)))?
+          stream.write_all(unwrap_some(io_buf.get(..len)))?
         }
       }
       ResponseBodyInner::Stream(mut handler)
@@ -276,7 +283,7 @@ impl ResponseBody {
           if len == 0 {
             return Ok(());
           }
-          stream.write_all(&unwrap_some(io_buf.get(..len)))?
+          stream.write_all(unwrap_some(io_buf.get(..len)))?
         }
       }
       ResponseBodyInner::ExternallyGzippedFile(data, _) => {
@@ -287,10 +294,10 @@ impl ResponseBody {
           if len == 0 {
             return Ok(());
           }
-          stream.write_all(&unwrap_some(io_buf.get(..len)))?
+          stream.write_all(unwrap_some(io_buf.get(..len)))?
         }
       }
-      ResponseBodyInner::Entity(entity) => stream.write_all(&entity.serialize(&MimeType::ApplicationOctetStream)?)?,
+      ResponseBodyInner::Entity(entity) => stream.write_all(&entity.serialize(mime)?)?,
     };
 
     Ok(())
@@ -301,7 +308,7 @@ impl ResponseBody {
   /// This fn will handle things like transfer/content encoding (not the header part)
   /// for the body transparently. So a chunked stream will be in the http chunked format for example.
   pub fn write_to_http<T: ConnectionStreamWrite + ?Sized>(
-    mut self,
+    self,
     request_id: u128,
     stream: &T,
   ) -> TiiResult<()> {
@@ -319,8 +326,7 @@ impl ResponseBody {
           let read = file.read(io_buf.as_mut_slice())?;
           if read == 0 {
             if written != size {
-              return Err(TiiError::from_io_kind(
-                io::ErrorKind::InvalidData));
+              return Err(TiiError::from_io_kind(io::ErrorKind::InvalidData));
             }
             return Ok(());
           }
@@ -338,10 +344,11 @@ impl ResponseBody {
             .ok_or(io::Error::new(io::ErrorKind::Other, "u64 overflow"))?;
         }
       }
-      ResponseBodyInner::Stream(mut handler) => handler.take().ok_or_else(|| {
-        TiiError::from_io_kind(
-          io::ErrorKind::UnexpectedEof)
-      })?(&StreamSink(stream.as_stream_write()))?,
+      ResponseBodyInner::Stream(mut handler) => {
+        handler.take().ok_or_else(|| TiiError::from_io_kind(io::ErrorKind::UnexpectedEof))?(
+          &StreamSink(stream.as_stream_write()),
+        )?
+      }
 
       ResponseBodyInner::ChunkedStream(mut handler) => {
         let sink = ChunkedSink(request_id, stream.as_stream_write());

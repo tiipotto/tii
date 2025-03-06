@@ -8,12 +8,12 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::{HttpMethod, ResponseContext};
 use crate::HttpVersion;
 use crate::RequestContext;
 use crate::{trace_log, util};
 use crate::{warn_log, HttpHeaderName};
 use crate::{AcceptMimeType, QValue};
+use crate::{HttpMethod, MimeType, ResponseContext};
 use crate::{Response, StatusCode};
 use base64::Engine;
 use regex::{Error, Regex};
@@ -713,7 +713,6 @@ impl DefaultRouter {
     request: &mut RequestContext,
     resp: Response,
   ) -> TiiResult<Response> {
-
     let mut resp = ResponseContext::new(request, resp);
     for filter in self.response_filters.iter() {
       filter.filter(&mut resp).or_else(|e| {
@@ -755,6 +754,16 @@ impl DefaultRouter {
 
     if let Some(handler) = best_handler {
       request.set_routed_path(handler.routeable.path.as_str());
+
+      if request.get_request_entity().is_none() {
+        if let Some(body) = request.request_body() {
+          request.set_request_entity(handler.handler.parse_entity(
+            request.request_head().get_content_type().unwrap_or(&MimeType::ApplicationOctetStream),
+            body,
+          )?);
+        }
+      }
+
       self.handle_path_parameters(request, &best_decision);
 
       for filter in self.routing_filters.iter() {

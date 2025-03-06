@@ -401,7 +401,7 @@ impl Response {
   /// Note: this call fetches the file size which must not change afterward.
   /// This call uses seek to move the file pointer. Any seeking done prior to this call is ignored.
   /// The actual body will always contain the entire "file"
-  pub fn with_body_file<T: Read + Seek + 'static>(mut self, body: T) -> io::Result<Self> {
+  pub fn with_body_file<T: Read + Seek + Send + 'static>(mut self, body: T) -> io::Result<Self> {
     self.body = Some(ResponseBody::from_file(body)?);
     Ok(self)
   }
@@ -535,7 +535,6 @@ impl Response {
       } else {
         MimeType::ApplicationOctetStream
       };
-
 
       self.set_body(Some(body.serialize_entity(&mime)?));
     }

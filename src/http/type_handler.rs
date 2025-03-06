@@ -1,15 +1,20 @@
-use crate::util::unwrap_some;
 use crate::TypeSystemError;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
+/// This macro configures casts of a single entity type.
 #[macro_export]
 macro_rules! configure_type_system {
+    ($ts:expr, $base:ty) => {
+        $ts.put_cast(|src: &$base| { src });
+        $ts.put_cast_mut(|src: &mut $base| { src });
+    };
     ($ts:expr, $base:ty, $t1:tt) => {
-         $ts.put_cast(|src: &$base| { src as &dyn $t1});
-         $ts.put_cast_mut(|src: &mut $base| { src as &mut dyn ($t1) });
+        $ts.put_cast(|src: &$base| { src as &dyn $t1});
+        $ts.put_cast_mut(|src: &mut $base| { src as &mut dyn ($t1) });
+        configure_type_system!($ts, $base);
     };
     ($ts:expr, $base:ty, $t1:tt, $($t2:tt),*) => {
         $ts.put_cast(|src: &$base| { src as &dyn ($t1) });
@@ -18,12 +23,14 @@ macro_rules! configure_type_system {
     };
 }
 
+/// Builder for the type system
 #[derive(Debug, Default)]
 pub struct TypeSystemBuilder {
   types: HashMap<TypeId, HashMap<TypeId, TypeCasterWrapper>>,
   types_mut: HashMap<TypeId, HashMap<TypeId, TypeCasterWrapperMut>>,
 }
 
+/// Holds an immutable type system containing casting information
 #[derive(Debug, Clone)]
 pub struct TypeSystem(Arc<TypeSystemBuilder>);
 impl TypeSystem {
@@ -53,6 +60,8 @@ impl TypeSystem {
 }
 
 impl TypeSystemBuilder {
+  /// Add a cast to the type system. Use the macro configure_type_system! to call this fn.
+  /// Calling this fn directly is just unneeded boilerplate.
   pub fn put_cast<SRC: Any + 'static, DST: Any + ?Sized + 'static>(
     &mut self,
     mapper: impl Fn(&SRC) -> &DST + Send + Sync + 'static,
@@ -70,13 +79,12 @@ impl TypeSystemBuilder {
     let wrapper =
       TypeCasterWrapper { src: TypeId::of::<SRC>(), dst: TypeId::of::<DST>(), handler: caster };
 
-    if !self.types.contains_key(&TypeId::of::<SRC>()) {
-      self.types.insert(TypeId::of::<SRC>(), HashMap::new());
-    }
-    let type_map = unwrap_some(self.types.get_mut(&TypeId::of::<SRC>()));
+    let type_map = self.types.entry(TypeId::of::<SRC>()).or_default();
     type_map.insert(TypeId::of::<DST>(), wrapper);
   }
 
+  /// Add a mutable cast to the type system. Use the macro configure_type_system! to call this fn.
+  /// Calling this fn directly is just unneeded boilerplate.
   pub fn put_cast_mut<SRC: Any + 'static, DST: Any + ?Sized + 'static>(
     &mut self,
     mapper: impl Fn(&mut SRC) -> &mut DST + Send + Sync + 'static,
@@ -94,18 +102,17 @@ impl TypeSystemBuilder {
     let wrapper =
       TypeCasterWrapperMut { src: TypeId::of::<SRC>(), dst: TypeId::of::<DST>(), handler: caster };
 
-    if !self.types_mut.contains_key(&TypeId::of::<SRC>()) {
-      self.types_mut.insert(TypeId::of::<SRC>(), HashMap::new());
-    }
-    let type_map = unwrap_some(self.types_mut.get_mut(&TypeId::of::<SRC>()));
+    let type_map = self.types_mut.entry(TypeId::of::<SRC>()).or_default();
     type_map.insert(TypeId::of::<DST>(), wrapper);
   }
 
-  pub(crate) fn build(self) -> TypeSystem {
+  /// Builds the type system and makes it immutable
+  pub fn build(self) -> TypeSystem {
     TypeSystem(Arc::new(self))
   }
 }
 
+#[allow(clippy::type_complexity)] //Aliasing the handler type would just cause confusion
 #[derive(Clone)]
 pub(crate) struct TypeCasterWrapper {
   src: TypeId,
@@ -142,6 +149,7 @@ impl Debug for TypeCasterWrapper {
   }
 }
 
+#[allow(clippy::type_complexity)] //Aliasing the handler type would just cause confusion
 #[derive(Clone)]
 pub(crate) struct TypeCasterWrapperMut {
   src: TypeId,
@@ -179,6 +187,8 @@ impl Debug for TypeCasterWrapperMut {
   }
 }
 
+#[allow(clippy::type_complexity)] //This is already just an alias. I am not aliasing it again.
 struct DownstreamWrapper<T: ?Sized>(Option<Box<dyn FnOnce(&T) -> Box<dyn Any>>>);
 
+#[allow(clippy::type_complexity)] //This is already just an alias. I am not aliasing it again.
 struct DownstreamWrapperMut<T: ?Sized>(Option<Box<dyn FnOnce(&mut T) -> Box<dyn Any>>>);

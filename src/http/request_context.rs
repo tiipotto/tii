@@ -8,13 +8,13 @@ use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
-use crate::{debug_log, error_log, trace_log, util, warn_log, TypeSystem};
-use std::any::Any;
+use crate::{debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError};
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::io;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::{io, mem};
 
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
@@ -26,6 +26,7 @@ pub struct RequestContext {
   local_address: String,
   request: RequestHead,
   body: Option<RequestBody>,
+  request_entity: Option<Box<dyn Any + Send + Sync>>,
   force_connection_close: bool,
   stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
   routed_path: Option<String>,
@@ -56,6 +57,7 @@ impl RequestContext {
       local_address: local_address.to_string(),
       request: head,
       body,
+      request_entity: None,
       force_connection_close: false,
       stream_meta,
       routed_path: None,
@@ -65,6 +67,7 @@ impl RequestContext {
     }
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn new_http09(
     id: u128,
     timestamp: u128,
@@ -84,6 +87,7 @@ impl RequestContext {
       local_address,
       request: req,
       body: None,
+      request_entity: None,
       force_connection_close: true,
       properties: None,
       routed_path: None,
@@ -93,6 +97,7 @@ impl RequestContext {
     })
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn new_http10(
     id: u128,
     timestamp: u128,
@@ -119,6 +124,7 @@ impl RequestContext {
           local_address,
           request: req,
           body: None,
+          request_entity: None,
           force_connection_close: true,
           properties: None,
           routed_path: None,
@@ -137,6 +143,7 @@ impl RequestContext {
         local_address,
         request: req,
         body: Some(body),
+        request_entity: None,
         force_connection_close: true,
         properties: None,
         routed_path: None,
@@ -156,6 +163,7 @@ impl RequestContext {
       local_address,
       request: req,
       body: None,
+      request_entity: None,
       force_connection_close: true,
       properties: None,
       routed_path: None,
@@ -165,6 +173,7 @@ impl RequestContext {
     })
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn new_http11(
     id: u128,
     timestamp: u128,
@@ -203,6 +212,7 @@ impl RequestContext {
               local_address,
               request: req,
               body: None,
+              request_entity: None,
               force_connection_close: true,
               properties: None,
               routed_path: None,
@@ -224,6 +234,7 @@ impl RequestContext {
               local_address,
               request: req,
               body: None,
+              request_entity: None,
               force_connection_close: true,
               properties: None,
               routed_path: None,
@@ -243,6 +254,7 @@ impl RequestContext {
             local_address,
             request: req,
             body: None,
+            request_entity: None,
             force_connection_close: false,
             properties: None,
             routed_path: None,
@@ -260,6 +272,7 @@ impl RequestContext {
             local_address,
             request: req,
             body: None,
+            request_entity: None,
             force_connection_close: false,
             properties: None,
             routed_path: None,
@@ -277,6 +290,7 @@ impl RequestContext {
             local_address,
             request: req,
             body: Some(RequestBody::new_with_content_length(stream.new_ref_read(), content_length)),
+            request_entity: None,
             force_connection_close: false,
             properties: None,
             routed_path: None,
@@ -296,6 +310,7 @@ impl RequestContext {
           local_address,
           request: req,
           body: Some(body),
+          request_entity: None,
           force_connection_close: false,
           properties: None,
           routed_path: None,
@@ -324,6 +339,7 @@ impl RequestContext {
           //TODO, i have seen gzip produce trailer bytes in the past that are just padding
           //and I am not confident enough that libflate consumes them.
           //Until I have verified that libflate consumes the trailerbytes without fail we should not enable keep alive.
+          request_entity: None,
           force_connection_close: true,
           properties: None,
           routed_path: None,
@@ -355,6 +371,7 @@ impl RequestContext {
           local_address,
           request: req,
           body: Some(body),
+          request_entity: None,
           force_connection_close: false,
           properties: None,
           routed_path: None,
@@ -376,6 +393,7 @@ impl RequestContext {
           local_address,
           request: req,
           body: Some(body),
+          request_entity: None,
           force_connection_close: false,
           properties: None,
           routed_path: None,
@@ -554,6 +572,59 @@ impl RequestContext {
       Some(props) => Box::new(props.iter().map(|(k, _)| k)),
       None => Box::new(std::iter::empty()),
     }
+  }
+
+  /// Returns the parsed request entity if any
+  /// Parsing (if required by Endpoint) happens after the routing decision has been made.
+  /// Before that this fn will always return None
+  pub fn get_request_entity(&self) -> Option<&(dyn Any + Send + Sync)> {
+    self.request_entity.as_ref().map(Box::as_ref)
+  }
+
+  /// Returns the mutable parsed request entity if any
+  /// Parsing (if required by Endpoint) happens after the routing decision has been made.
+  /// Before that this fn will always return None
+  pub fn get_request_entity_mut(&mut self) -> Option<&mut (dyn Any + Send + Sync)> {
+    self.request_entity.as_mut().map(Box::as_mut)
+  }
+
+  /// Replaces the request entity.
+  /// Beware that setting the request entity to an incorrect type the endpoint does not expect will cause
+  /// UserError before the endpoint is invoked!
+  pub fn set_request_entity(
+    &mut self,
+    entity: Option<Box<dyn Any + Send + Sync>>,
+  ) -> Option<Box<dyn Any + Send + Sync>> {
+    mem::replace(&mut self.request_entity, entity)
+  }
+
+  /// Calls a closure with the cast request entity.
+  /// # Errors
+  /// If casting fails because the request entity is not of a compatible type
+  pub fn cast_request_entity<DST: Any + ?Sized + 'static, RET: Any + 'static>(
+    &self,
+    receiver: impl FnOnce(&DST) -> RET + 'static,
+  ) -> Result<RET, TypeSystemError> {
+    let src = self.get_request_entity().ok_or(TypeSystemError::SourceTypeUnknown)?;
+
+    let caster = self.type_system.type_cast_wrapper(src.type_id(), TypeId::of::<DST>())?;
+
+    caster.call(src, receiver)
+  }
+
+  /// Calls a closure with the cast mutable request entity.
+  /// # Errors
+  /// If casting fails because the request entity is not of a compatible type
+  pub fn cast_request_entity_mut<DST: Any + ?Sized + 'static, RET: Any + 'static>(
+    &mut self,
+    receiver: impl FnOnce(&mut DST) -> RET + 'static,
+  ) -> Result<RET, TypeSystemError> {
+    let src =
+      self.request_entity.as_mut().map(Box::as_mut).ok_or(TypeSystemError::SourceTypeUnknown)?;
+
+    let caster = self.type_system.type_cast_wrapper_mut(Any::type_id(src), TypeId::of::<DST>())?;
+
+    caster.call(src, receiver)
   }
 
   /// Ref to request head.

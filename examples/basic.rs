@@ -1,6 +1,9 @@
 use log::{info, LevelFilter};
 use tii::extras::{Connector, TcpConnector};
-use tii::{AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ResponseContext, ServerBuilder, TiiResult};
+use tii::{
+  AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ResponseContext, ServerBuilder,
+  TiiResult,
+};
 
 fn main() -> TiiResult<()> {
   trivial_log::init_std(LevelFilter::Trace).unwrap();

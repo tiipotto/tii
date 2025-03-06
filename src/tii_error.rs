@@ -78,6 +78,7 @@ pub enum UserError {
   ImmutableResponseHeaderModified(HttpHeaderName),
   RequestHeadBufferTooSmall(usize),
   HeaderNotSupportedByHttpVersion(HttpVersion),
+  BadFilterOrBadEndpointCausedEntityTypeMismatch,
 }
 
 impl Display for UserError {
@@ -103,6 +104,7 @@ impl Display for InvalidPathError {
 }
 impl Error for InvalidPathError {}
 
+/// Errors that can occur when dynamic types have to be handled
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum TypeSystemError {
