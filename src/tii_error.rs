@@ -78,6 +78,7 @@ pub enum UserError {
   ImmutableResponseHeaderModified(HttpHeaderName),
   RequestHeadBufferTooSmall(usize),
   HeaderNotSupportedByHttpVersion(HttpVersion),
+  BadFilterOrBadEndpointCausedEntityTypeMismatch,
 }
 
 impl Display for UserError {
@@ -103,6 +104,24 @@ impl Display for InvalidPathError {
 }
 impl Error for InvalidPathError {}
 
+/// Errors that can occur when dynamic types have to be handled
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[non_exhaustive]
+pub enum TypeSystemError {
+  SourceTypeUnknown,
+  NoCastToTargetType,
+  SourceTypeDoesNotMatch,
+  TargetTypeDoesNotMatch,
+}
+
+impl Display for TypeSystemError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //TODO
+    std::fmt::Debug::fmt(&self, f)
+  }
+}
+impl Error for TypeSystemError {}
+
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum TiiError {
@@ -110,6 +129,7 @@ pub enum TiiError {
   UserError(UserError),
   InvalidPathError(InvalidPathError),
   IO(io::Error),
+  TypeSystem(TypeSystemError),
   Other(Box<dyn Error + Send + Sync>),
 }
 
@@ -135,6 +155,7 @@ impl TiiError {
       TiiError::RequestHeadParsing(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       TiiError::UserError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       TiiError::InvalidPathError(err) => (err as &mut dyn Error).downcast_mut::<T>(),
+      TiiError::TypeSystem(err) => (err as &mut dyn Error).downcast_mut::<T>(),
       TiiError::Other(other) => other.downcast_mut::<T>(),
     }
   }
@@ -145,6 +166,7 @@ impl TiiError {
       TiiError::RequestHeadParsing(err) => (err as &dyn Error).downcast_ref::<T>(),
       TiiError::UserError(err) => (err as &dyn Error).downcast_ref::<T>(),
       TiiError::InvalidPathError(err) => (err as &dyn Error).downcast_ref::<T>(),
+      TiiError::TypeSystem(err) => (err as &dyn Error).downcast_ref::<T>(),
       TiiError::Other(other) => other.downcast_ref::<T>(),
     }
   }
@@ -154,6 +176,7 @@ impl TiiError {
       TiiError::RequestHeadParsing(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       TiiError::UserError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       TiiError::InvalidPathError(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
+      TiiError::TypeSystem(err) => Box::new(err) as Box<dyn Error + Send + Sync>,
       TiiError::Other(other) => other,
     }
   }
@@ -166,6 +189,7 @@ impl Display for TiiError {
       TiiError::RequestHeadParsing(err) => Display::fmt(err, f),
       TiiError::UserError(err) => Display::fmt(err, f),
       TiiError::InvalidPathError(err) => Display::fmt(err, f),
+      TiiError::TypeSystem(err) => Display::fmt(err, f),
       TiiError::Other(err) => Display::fmt(err, f),
     }
   }

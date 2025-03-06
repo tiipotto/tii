@@ -10,8 +10,8 @@ use crate::http::request::HttpVersion;
 use crate::http::response_body::ResponseBody;
 use crate::stream::ConnectionStreamWrite;
 use crate::tii_error::{TiiResult, UserError};
-use std::io;
 use std::io::{Read, Seek};
+use std::{io, mem};
 
 /// Represents a response from the server.
 /// Implements `Into<Vec<u8>>` so can be serialised into bytes to transmit.
@@ -401,7 +401,7 @@ impl Response {
   /// Note: this call fetches the file size which must not change afterward.
   /// This call uses seek to move the file pointer. Any seeking done prior to this call is ignored.
   /// The actual body will always contain the entire "file"
-  pub fn with_body_file<T: Read + Seek + 'static>(mut self, body: T) -> io::Result<Self> {
+  pub fn with_body_file<T: Read + Seek + Send + 'static>(mut self, body: T) -> io::Result<Self> {
     self.body = Some(ResponseBody::from_file(body)?);
     Ok(self)
   }
@@ -499,13 +499,25 @@ impl Response {
     self
   }
 
-  /// Returns the body as text, if possible.
-  pub fn body(&self) -> Option<&ResponseBody> {
+  /// Sets the body and returns the previous body.
+  pub fn set_body(&mut self, body: Option<ResponseBody>) -> Option<ResponseBody> {
+    mem::replace(&mut self.body, body)
+  }
+
+  /// Returns a reference that can be used to inspect the body.
+  /// To actually consume the body call `set_body(None)`.
+  pub fn get_body(&self) -> Option<&ResponseBody> {
     self.body.as_ref()
   }
 
+  /// Returns a mutable reference that can be used to inspect the body.
+  /// To actually consume the body call `set_body(None)`.
+  pub fn get_body_mut(&mut self) -> Option<&mut ResponseBody> {
+    self.body.as_mut()
+  }
+
   ///
-  /// Write the request to a streaming output. This consumes the request object.
+  /// Write the response to a streaming output. This consumes the response object.
   /// # Parameters
   /// `request_id` for logging purposes only
   /// `version` http version of the response
@@ -516,10 +528,20 @@ impl Response {
     request_id: u128,
     version: HttpVersion,
     destination: &T,
-  ) -> io::Result<()> {
+  ) -> TiiResult<()> {
+    if let Some(body) = self.set_body(None) {
+      let mime = if let Some(mime) = self.get_header(HttpHeaderName::ContentType) {
+        MimeType::parse(mime).unwrap_or(MimeType::ApplicationOctetStream)
+      } else {
+        MimeType::ApplicationOctetStream
+      };
+
+      self.set_body(Some(body.serialize_entity(&mime)?));
+    }
+
     if version == HttpVersion::Http09 {
-      if let Some(body) = self.body.as_mut() {
-        body.write_to(request_id, destination)?;
+      if let Some(body) = self.body {
+        body.write_to_http(request_id, destination)?;
       }
 
       return Ok(());
@@ -548,7 +570,7 @@ impl Response {
       destination.write_all(header.value.as_bytes())?;
     }
 
-    if let Some(body) = self.body.as_mut() {
+    if let Some(body) = self.body {
       if body.is_chunked() {
         destination.write_all(b"\r\nTransfer-Encoding: chunked\r\n")?;
         if let Some(enc) = body.get_content_encoding() {
@@ -559,7 +581,7 @@ impl Response {
           }
         }
         destination.write_all(b"\r\n")?;
-        body.write_to(request_id, destination)?;
+        body.write_to_http(request_id, destination)?;
         destination.flush()?;
         return Ok(());
       }
@@ -580,7 +602,7 @@ impl Response {
 
       destination.write_all(b"\r\n")?;
 
-      body.write_to(request_id, destination)?;
+      body.write_to_http(request_id, destination)?;
       destination.flush()?;
       return Ok(());
     }
