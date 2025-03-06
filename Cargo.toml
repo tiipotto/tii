@@ -10,6 +10,7 @@ readme = "README.md"
 description = "A Low-Latency Web Server."
 keywords = ["http", "server", "http-server"]
 categories = ["web-programming::http-server", "network-programming"]
+rust-version = "1.86"
 
 [dependencies]
 backtrace = { version = "0.3.74", optional = true }
