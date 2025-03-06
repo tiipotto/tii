@@ -81,7 +81,7 @@ fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   Ok(None)
 }
 
-fn resp(req: &mut ResponseContext) -> TiiResult<()> {
+fn resp(req: &mut ResponseContext<'_>) -> TiiResult<()> {
   info!("resp {:?}", req);
   req.get_response_mut().add_header("X-Magic", "true magic")?;
   Ok(())

@@ -1,7 +1,7 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use tii::HttpMethod;
+use tii::{HttpMethod, TypeSystem};
 use tii::RequestHead;
 use tii::{
   AcceptQualityMimeType, Cookie, MimeType, QValue, RequestContext, RequestHeadParsingError,
@@ -125,7 +125,7 @@ fn test_mock_request_head() {
   }
 
   let mock_context =
-    RequestContext::new(0, "localhost", "localhost", mock_head.clone(), None, None);
+    RequestContext::new(0, "localhost", "localhost", mock_head.clone(), None, None, TypeSystem::empty());
   assert_eq!(mock_head, mock_context.request_head().clone());
 
   let mock_head = RequestHead::new(

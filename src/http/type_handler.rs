@@ -33,6 +33,14 @@ pub struct TypeSystemBuilder {
 /// Holds an immutable type system containing casting information
 #[derive(Debug, Clone)]
 pub struct TypeSystem(Arc<TypeSystemBuilder>);
+
+impl TypeSystem {
+  /// Create an empty type system, useful for unit tests.
+  pub fn empty() -> TypeSystem {
+    TypeSystemBuilder::default().build()
+  }
+}
+
 impl TypeSystem {
   pub(crate) fn type_cast_wrapper(
     &self,
