@@ -26,7 +26,6 @@ defer-heavy = "0.1.0"
 #GZIP/ZLIB in pure rust
 libflate = "2.1.0"
 
-
 ## SSL
 rustls = { version = "0.23.26", optional = true }
 rust-tls-duplex-stream = { version = "0.1.1", optional = true }
@@ -98,6 +97,10 @@ required-features = ["extras", "log"]
 
 [[example]]
 name = "websocket_broadcast"
+required-features = ["extras"]
+
+[[example]]
+name = "echo_server"
 required-features = ["extras"]
 
 [[example]]
