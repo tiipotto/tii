@@ -27,7 +27,6 @@ defer-heavy = "0.1.0"
 libflate = "2.1.0"
 listener_poll = { version = "0.1.1", optional = true }
 
-
 ## SSL
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }
 rust-tls-duplex-stream = { version = "0.2.0", optional = true }
@@ -96,6 +95,10 @@ required-features = ["extras", "log"]
 
 [[example]]
 name = "websocket_broadcast"
+required-features = ["extras"]
+
+[[example]]
+name = "echo_server"
 required-features = ["extras"]
 
 [[example]]

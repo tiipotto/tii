@@ -199,8 +199,7 @@ impl Server {
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
       if context.get_version() == HttpVersion::Http11
-        && context.get_header(&HttpHeaderName::Upgrade).unwrap_or("").to_lowercase()
-          == "websocket"
+        && context.get_header(&HttpHeaderName::Upgrade).unwrap_or("").to_lowercase() == "websocket"
       {
         //Http 1.0 or 0.9 does not have web sockets
 
