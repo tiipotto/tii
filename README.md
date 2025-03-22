@@ -274,5 +274,14 @@ Stability is not guaranteed (functionality may be moved to another crate or func
 
 Nothing in Tii will ever depend on anything in `extras`.
 
+## Fuzzing
+WIP
+podman run -it --rm \
+    -v (pwd)/config:/config:z \
+    -v (pwd)/reports:/reports:z \
+    --network host \
+    --name fuzzingserver \
+    crossbario/autobahn-testsuite bash
+
 ## Special Thanks
 - [Humphrey](https://github.com/w-henderson/Humphrey)
