@@ -218,7 +218,7 @@ impl ResponseBody {
     }
   }
 
-  /// Will decode the generic entity into a tuple of Entity, Serializer. Both as Box<dyn Any>.
+  /// Will decode the generic entity into a tuple of Entity, Serializer. Both as Box dyn Any.
   /// If the body is not an entity then this will yield Err(Self)
   #[allow(clippy::type_complexity)] //TODO fix this shit later!
   pub fn try_into_entity(self) -> Result<(Box<dyn Any>, Box<dyn Any>), Self> {
