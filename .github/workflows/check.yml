@@ -57,10 +57,7 @@ jobs:
           toolchain: 1.86
       - name: 64-bit Valgrind
         run: |
-          cargo build --example shutdown --features extras,log
-          cargo build --example shutdown_multiple --features extras,log
-          cargo build --example shutdown_unix --features extras,log
-          cargo build --example websocket_broadcast --features extras,log
+          cargo build --examples --features extras,log
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_multiple
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_unix
@@ -104,8 +101,7 @@ jobs:
       - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
-          #TODO Grinkers find some smart way to do this, I refuse to list all examples here.
-          cargo build --example basic --all-features --target ${{ matrix.target }}
+          cargo build --examples --all-features --target ${{ matrix.target }}
         if: ${{ !(contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')) }}
       - name: Build with no and default features
         run: |
@@ -145,8 +141,7 @@ jobs:
         run: |
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --no-default-features --target ${{ matrix.target }}
-          #TODO Grinkers fix this with some smart shit, i refuse to list all examples here.
-          cargo build --example basic --target ${{ matrix.target }}
+          cargo build --examples --target ${{ matrix.target }}
 
   test_windows:
     name: Test Windows
