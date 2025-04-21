@@ -66,8 +66,7 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
-
+  _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
   Ok(())
 }
 
