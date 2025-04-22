@@ -118,6 +118,13 @@ impl RequestBody {
     unwrap_poison(self.0.lock())?.deref_mut().read_to_end(buf)
   }
 
+  /// Reads all remaining data into a `Vec<u8>`
+  pub fn read_to_vec(&self) -> io::Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    self.read_to_end(&mut buffer)?;
+    Ok(buffer)
+  }
+
   /// same as `std::io::Read` trait
   pub fn read_exact(&self, buf: &mut [u8]) -> io::Result<()> {
     unwrap_poison(self.0.lock())?.deref_mut().read_exact(buf)

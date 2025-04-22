@@ -1,13 +1,13 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use tii::HttpMethod;
 use tii::RequestHead;
 use tii::{
   AcceptQualityMimeType, Cookie, MimeType, QValue, RequestContext, RequestHeadParsingError,
   TiiError, UserError,
 };
 use tii::{HttpHeader, HttpHeaderName};
+use tii::{HttpMethod, TypeSystem};
 
 use std::collections::VecDeque;
 use std::iter::FromIterator;
@@ -124,8 +124,15 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let mock_context =
-    RequestContext::new(0, "localhost", "localhost", mock_head.clone(), None, None);
+  let mock_context = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
+    mock_head.clone(),
+    None,
+    None,
+    TypeSystem::empty(),
+  );
   assert_eq!(mock_head, mock_context.request_head().clone());
 
   let mock_head = RequestHead::new(

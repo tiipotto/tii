@@ -1,3 +1,4 @@
+use std::thread;
 use tii::TiiResult;
 
 #[cfg(unix)]
@@ -42,13 +43,19 @@ mod unix {
   }
 }
 
-#[cfg(unix)]
 fn main() -> TiiResult<()> {
+  //See https://github.com/rust-lang/rust/issues/135608
+  // Workaround for valgrind.
+  thread::spawn(actual_main).join().unwrap()
+}
+
+#[cfg(unix)]
+fn actual_main() -> TiiResult<()> {
   unix::unix_main()
 }
 
 #[cfg(not(unix))]
-pub fn main() -> TiiResult<()> {
+pub fn actual_main() -> TiiResult<()> {
   println!("This program is only intended to run on Unix systems!");
   Ok(())
 }

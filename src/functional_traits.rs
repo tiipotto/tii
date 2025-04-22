@@ -1,11 +1,14 @@
 //! Defines traits for handler and filter functions.
 
-use crate::ConnectionStream;
 use crate::RequestContext;
 use crate::Response;
 use crate::TiiResult;
+use crate::{ConnectionStream, MimeType, RequestBody, ResponseContext, TiiError, UserError};
 use crate::{WebsocketReceiver, WebsocketSender};
+use std::any::Any;
 use std::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
+use std::sync::Mutex;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -109,6 +112,14 @@ where
 pub trait HttpEndpoint: Send + Sync {
   /// Serve an ordinary http request.
   fn serve(&self, request: &RequestContext) -> TiiResult<Response>;
+
+  /// This fn is called before the post-routing filters have been called to parse the entity.
+  /// If the endpoint does not receive structured data then this fn should return Ok(None)
+  fn parse_entity(
+    &self,
+    mime: &MimeType,
+    request: &RequestBody,
+  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>>;
 }
 
 impl<F, R> HttpEndpoint for F
@@ -117,7 +128,84 @@ where
   F: Fn(&RequestContext) -> R + Send + Sync,
 {
   fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
+    if request.get_request_entity().is_some() {
+      return Err(TiiError::UserError(UserError::BadFilterOrBadEndpointCausedEntityTypeMismatch));
+    }
+
     self(request).into()
+  }
+  fn parse_entity(
+    &self,
+    _: &MimeType,
+    _: &RequestBody,
+  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
+    // This type of endpoint does not receive structured data.
+    Ok(None)
+  }
+}
+
+/// Trait for De-Serializing request entities
+pub trait EntityDeserializer<T: Any + Send + Sync> {
+  /// Deserialize a RequestBody to T (or fail with an error)
+  /// If the deserializer errors then the error handler is invoked next with the returned error.
+  fn deserialize(&self, mime: &MimeType, body: &RequestBody) -> TiiResult<T>;
+}
+
+impl<F, T> EntityDeserializer<T> for F
+where
+  T: Any + Send + Sync,
+  F: Fn(&MimeType, &RequestBody) -> TiiResult<T>,
+{
+  fn deserialize(&self, mime: &MimeType, body: &RequestBody) -> TiiResult<T> {
+    self(mime, body)
+  }
+}
+
+pub(crate) struct EntityHttpEndpoint<T, F, R, D>
+where
+  T: Any + Send + Sync,
+  R: Into<TiiResult<Response>> + Send,
+  F: Fn(&RequestContext, &T) -> R + Send + Sync,
+  D: EntityDeserializer<T> + Send + Sync,
+{
+  pub(crate) endpoint: F,
+  pub(crate) deserializer: D,
+  pub(crate) _p1: PhantomData<T>,
+  //TODO this is completely retarded, but the compiler is satisfied with this, the main problem is that
+  //The HTTP endpoint needs to be Send+sync but the Response is only Send.
+  //Obviously this struct does not contain a response object, but the compiler thinks that PhantomData<Response> is also not sync, thus this entire struct is not sync.
+  //The only sane fix for this would be to either make a custom PhantomData that is Sent+Sync but that requires unsafe or use a external crate that does the same.
+  //Or we could just unsafe impl Sync on this struct directly. (No...)
+  //We could also check if its worth it to make Response itself Sync.
+  pub(crate) _p2: Mutex<PhantomData<R>>,
+}
+
+impl<T, F, R, D> HttpEndpoint for EntityHttpEndpoint<T, F, R, D>
+where
+  T: Any + Send + Sync,
+  R: Into<TiiResult<Response>> + Send,
+  F: Fn(&RequestContext, &T) -> R + Send + Sync,
+  D: EntityDeserializer<T> + Send + Sync,
+{
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
+    let Some(entity) = request.get_request_entity() else {
+      return Err(TiiError::UserError(UserError::BadFilterOrBadEndpointCausedEntityTypeMismatch));
+    };
+
+    let Some(entity) = entity.downcast_ref::<T>() else {
+      return Err(TiiError::UserError(UserError::BadFilterOrBadEndpointCausedEntityTypeMismatch));
+    };
+
+    (self.endpoint)(request, entity).into()
+  }
+
+  fn parse_entity(
+    &self,
+    mime: &MimeType,
+    request: &RequestBody,
+  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
+    let result: T = self.deserializer.deserialize(mime, request)?;
+    Ok(Some(Box::new(result) as Box<dyn Any + Send + Sync>))
   }
 }
 
@@ -199,16 +287,16 @@ pub trait ResponseFilter: Send + Sync {
   /// Called with the request context adn response after the endpoint or error handler is called.
   /// Ok(...) -> proceed.
   /// Err -> Call error handler and proceed. (You cannot create a loop, a Response filter will only be called exactly once per RequestContext)
-  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response>;
+  fn filter(&self, request: &mut ResponseContext<'_>) -> TiiResult<()>;
 }
 
 impl<F, R> ResponseFilter for F
 where
-  R: Into<TiiResult<Response>>,
-  F: Fn(&mut RequestContext, Response) -> R + Send + Sync,
+  R: Into<TiiResult<()>>,
+  F: Fn(&mut ResponseContext<'_>) -> R + Send + Sync,
 {
-  fn filter(&self, request: &mut RequestContext, response: Response) -> TiiResult<Response> {
-    self(request, response).into()
+  fn filter(&self, request: &mut ResponseContext<'_>) -> TiiResult<()> {
+    self(request).into()
   }
 }
 

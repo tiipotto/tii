@@ -7,14 +7,16 @@ use crate::default_functions::{
 use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
 };
-use crate::AcceptMimeType;
-use crate::HttpMethod;
+use crate::tii_builder::EntityHttpEndpoint;
 use crate::RequestContext;
 use crate::TiiResult;
+use crate::{AcceptMimeType, MimeType, RequestBody};
 use crate::{DefaultRouter, Response, Router};
+use crate::{EntityDeserializer, HttpMethod};
 use crate::{ErrorHandler, NotRouteableHandler};
 use crate::{HttpRoute, WebSocketRoute};
 use crate::{WebsocketReceiver, WebsocketSender};
+use std::any::Any;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -56,6 +58,14 @@ struct RouteWrapper<T: HttpEndpoint + 'static>(Arc<T>);
 impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
   fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
     self.0.serve(request)
+  }
+
+  fn parse_entity(
+    &self,
+    mime: &MimeType,
+    request: &RequestBody,
+  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
+    self.0.parse_entity(mime, request)
   }
 }
 
@@ -121,7 +131,7 @@ impl RouteBuilder {
     self
   }
 
-  /// Finish building the route by proving the route.
+  /// Finish building the route by proving the endpoint to call.
   pub fn endpoint<T: HttpEndpoint + 'static>(mut self, handler: T) -> TiiResult<RouterBuilder> {
     self.inner.routes.push(HttpRoute::new(
       self.route,
@@ -131,6 +141,24 @@ impl RouteBuilder {
       handler,
     )?);
     Ok(self.inner)
+  }
+
+  /// Finish building the route by proving an endpoint which requires a structured request body to call.
+  pub fn entity_endpoint<T, R, F, D>(self, handler: F, deserializer: D) -> TiiResult<RouterBuilder>
+  where
+    T: Any + Send + Sync + 'static,
+    R: Into<TiiResult<Response>> + Send + 'static,
+    F: Fn(&RequestContext, &T) -> R + Send + Sync + 'static,
+    D: EntityDeserializer<T> + Send + Sync + 'static,
+  {
+    let ehp = EntityHttpEndpoint {
+      endpoint: handler,
+      deserializer,
+      _p1: Default::default(),
+      _p2: Default::default(),
+    };
+
+    self.endpoint(ehp)
   }
 }
 

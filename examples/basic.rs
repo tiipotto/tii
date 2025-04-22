@@ -1,7 +1,8 @@
 use log::{info, LevelFilter};
 use tii::extras::{Connector, TcpConnector};
 use tii::{
-  AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ServerBuilder, TiiResult,
+  AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ResponseContext, ServerBuilder,
+  TiiResult,
 };
 
 fn main() -> TiiResult<()> {
@@ -65,8 +66,7 @@ fn main() -> TiiResult<()> {
     })
   })?;
 
-  let _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
-
+  _ = TcpConnector::start_unpooled("0.0.0.0:8080", tii_server)?.join(None);
   Ok(())
 }
 
@@ -80,10 +80,10 @@ fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
   Ok(None)
 }
 
-fn resp(req: &mut RequestContext, mut resp: Response) -> TiiResult<Response> {
+fn resp(req: &mut ResponseContext<'_>) -> TiiResult<()> {
   info!("resp {:?}", req);
-  resp.add_header("X-Magic", "true magic")?;
-  Ok(resp)
+  req.get_response_mut().add_header("X-Magic", "true magic")?;
+  Ok(())
 }
 
 fn home(_: &RequestContext) -> TiiResult<Response> {

@@ -6,7 +6,13 @@ use tii::extras::{Connector, TcpConnector, WSBAppBuilder, WsbHandle};
 use tii::ServerBuilder;
 use tii::WebsocketMessage;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error + Send>> {
+  //See https://github.com/rust-lang/rust/issues/135608
+  // Workaround for valgrind.
+  spawn(actual_main).join().unwrap()
+}
+
+fn actual_main() -> Result<(), Box<dyn Error + Send>> {
   trivial_log::init_std(log::LevelFilter::Debug).unwrap();
 
   let websocket_linker = WSBAppBuilder::default()

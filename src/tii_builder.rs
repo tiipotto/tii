@@ -1,12 +1,13 @@
 //! Provides the core Tii app functionality.
 
-use crate::Response;
+use crate::{Response, TypeSystemBuilder};
 
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Represents the Tii app.
 pub struct ServerBuilder {
+  type_system: TypeSystemBuilder,
   routers: Vec<Box<dyn Router>>,
   error_handler: ErrorHandler,
   not_found_handler: NotFoundHandler,
@@ -45,6 +46,7 @@ impl Default for ServerBuilder {
   /// Initialises a new Tii app.
   fn default() -> Self {
     Self {
+      type_system: TypeSystemBuilder::default(),
       routers: Vec::new(),
       error_handler: default_error_handler,
       not_found_handler: default_fallback_not_found_handler,
@@ -76,6 +78,7 @@ impl ServerBuilder {
   /// This method creates the HttpServer from the builder.
   pub fn build(self) -> Server {
     Server::new(
+      self.type_system,
       self.routers,
       self.error_handler,
       self.not_found_handler,
@@ -91,6 +94,14 @@ impl ServerBuilder {
   /// This method is equivalent to calling `Arc::new(builder.build())`
   pub fn build_arc(self) -> Arc<Server> {
     Arc::new(self.build())
+  }
+
+  /// Configures the type system that will be used to cast entity types to dynamic implementations.
+  /// This is primarily needed for complex filters. For applications that do not require dynamic casting
+  /// during the filter stage configuring the TypeSystem is not needed.
+  pub fn type_system(mut self, configurator: impl FnOnce(&mut TypeSystemBuilder)) -> Self {
+    configurator(&mut self.type_system);
+    self
   }
 
   /// Adds a new host sub-app to the server.

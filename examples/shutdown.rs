@@ -1,6 +1,7 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::str::FromStr;
+use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -13,6 +14,11 @@ fn hello(_: &RequestContext) -> TiiResult<Response> {
 }
 
 fn main() -> TiiResult<()> {
+  //See https://github.com/rust-lang/rust/issues/135608
+  // Workaround for valgrind.
+  thread::spawn(actual_main).join().unwrap()
+}
+fn actual_main() -> TiiResult<()> {
   trivial_log::init_std(log::LevelFilter::Trace).unwrap();
 
   let tii_server = ServerBuilder::builder_arc(|builder| {
