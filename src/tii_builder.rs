@@ -19,13 +19,13 @@ pub struct ServerBuilder {
   write_timeout: Option<Duration>,
 }
 
+use crate::RequestContext;
 use crate::default_functions::{default_error_handler, default_fallback_not_found_handler};
 pub use crate::functional_traits::*;
 use crate::tii_error::{TiiError, TiiResult, UserError};
 use crate::tii_router::Routeable;
 use crate::tii_router_builder::RouterBuilder;
 use crate::tii_server::Server;
-use crate::RequestContext;
 
 /// Represents a function able to handle an error.
 /// The first parameter of type `Option<Request>` will be `Some` if the request could be parsed.

@@ -2,15 +2,15 @@
 //! It also handles http keep alive and rudimentary (fallback) error handling.
 //! If no router wants to handle the request it also has a 404 handler.
 
+use crate::RequestContext;
 use crate::functional_traits::Router;
 use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::RequestContext;
-use crate::{error_log, trace_log};
-use crate::{warn_log, HttpHeaderName};
+use crate::{HttpHeaderName, warn_log};
 use crate::{HttpVersion, TypeSystem, TypeSystemBuilder};
+use crate::{error_log, trace_log};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -356,7 +356,10 @@ impl Server {
 
     if let Some(enc) = response.get_body().and_then(|a| a.get_content_encoding()) {
       if enc == "gzip" && !request.request_head().accepts_gzip() {
-        warn_log!("tii: Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
+        warn_log!(
+          "tii: Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.",
+          request.id()
+        );
       }
     }
 

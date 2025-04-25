@@ -33,7 +33,7 @@
 //! curl -v -X PUT -d '{"date_of_birth": "04.05.2024", "species":"Manul", "name": "Rob"}' -H "Content-Type: application/json" http://localhost:8080/cat
 //! ```
 //!
-use log::{info, LevelFilter};
+use log::{LevelFilter, info};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -41,8 +41,8 @@ use std::io;
 use std::io::ErrorKind;
 use tii::extras::{Connector, TcpConnector};
 use tii::{
-  configure_type_system, MimeType, RequestBody, RequestContext, Response, ResponseBody,
-  ResponseContext, ServerBuilder, TiiResult,
+  MimeType, RequestBody, RequestContext, Response, ResponseBody, ResponseContext, ServerBuilder,
+  TiiResult, configure_type_system,
 };
 
 /// Serializer, it may do whatever you want it to do, in this case we use serde to create json.

@@ -6,7 +6,7 @@ use crate::{Response, StatusCode};
 use crate::MimeType;
 use crate::RequestContext;
 use crate::TiiResult;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io::ErrorKind;
 use std::path::PathBuf;
 
@@ -26,11 +26,7 @@ fn try_file_open(path: &PathBuf) -> TiiResult<Response> {
   );
   Ok(File::open(path).and_then(ResponseBody::from_file).map(|a| Response::ok(a, mime)).or_else(
     |e| {
-      if e.kind() == ErrorKind::NotFound {
-        Ok(Response::not_found_no_body())
-      } else {
-        Err(e)
-      }
+      if e.kind() == ErrorKind::NotFound { Ok(Response::not_found_no_body()) } else { Err(e) }
     },
   )?)
 }

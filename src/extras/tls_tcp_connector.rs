@@ -1,9 +1,9 @@
 use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
-use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{CONNECTOR_SHUTDOWN_TIMEOUT, Connector};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
-use crate::{error_log, info_log, trace_log, TlsStream};
+use crate::{TlsStream, error_log, info_log, trace_log};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::io;
@@ -36,7 +36,7 @@ impl TlsTcpConnectorInner {
   fn next(&self) -> io::Result<TcpStream> {
     use std::os::windows::io::AsRawSocket;
     use windows_sys::Win32::Networking::WinSock::{
-      WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
+      POLLRDNORM, SOCKET_ERROR, WSAGetLastError, WSAPOLLFD, WSAPoll,
     };
 
     let windows_sock_handle = self.listener.as_raw_socket() as usize;

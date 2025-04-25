@@ -1,12 +1,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, channel, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::{io, thread, time::Duration};
 
-use crate::{error_log, info_log, util, warn_log};
 use crate::{
   RequestContext, WebsocketEndpoint, WebsocketMessage, WebsocketReceiver, WebsocketSender,
 };
+use crate::{error_log, info_log, util, warn_log};
 
 type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
 
@@ -213,13 +213,7 @@ impl WSBApp {
     let message_handler = self.state.message_handler.map(Arc::new);
     let streams = self.state.send_streams.clone();
 
-    let timeout = {
-      if let Some(hb) = self.state.heartbeat {
-        hb
-      } else {
-        Duration::MAX
-      }
-    };
+    let timeout = { if let Some(hb) = self.state.heartbeat { hb } else { Duration::MAX } };
 
     // broadcast/heartbeat thread
     let sd_flag = self.state.shutdown_flag.clone();
@@ -399,70 +393,74 @@ fn exec(es: ExecState) {
 
   // write thread
   let write_shutdown = es.shutdown_signal.clone();
-  let write_thread = thread::spawn(move || loop {
-    if write_shutdown.load(Ordering::SeqCst) {
-      break;
-    }
-    match es.outgoing_messages.recv_timeout(es.timeout) {
-      Ok(m) => match m {
-        WsbOutgoingMessage::Message(message) => {
-          if ws_sender.send(message).is_err() {
+  let write_thread = thread::spawn(move || {
+    loop {
+      if write_shutdown.load(Ordering::SeqCst) {
+        break;
+      }
+      match es.outgoing_messages.recv_timeout(es.timeout) {
+        Ok(m) => match m {
+          WsbOutgoingMessage::Message(message) => {
+            if ws_sender.send(message).is_err() {
+              break;
+            }
+          }
+          WsbOutgoingMessage::Broadcast(message) => {
+            if es.broadcast.send(message).is_err() {
+              break;
+            }
+          }
+        },
+        Err(RecvTimeoutError::Disconnected) => break,
+        Err(RecvTimeoutError::Timeout) => {
+          if ws_sender.ping().is_err() {
             break;
           }
-        }
-        WsbOutgoingMessage::Broadcast(message) => {
-          if es.broadcast.send(message).is_err() {
-            break;
-          }
-        }
-      },
-      Err(RecvTimeoutError::Disconnected) => break,
-      Err(RecvTimeoutError::Timeout) => {
-        if ws_sender.ping().is_err() {
-          break;
         }
       }
     }
   });
 
   // read thread
-  let read_thread = thread::spawn(move || loop {
-    if es.shutdown_signal.load(Ordering::SeqCst) {
-      break;
-    }
-    let Some(ref mh) = es.message_handler else { break };
-    match ws_receiver.read_message() {
-      Ok(message) => match message {
-        Some(m) => {
-          match m {
-            WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
-              (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
-            }
-            WebsocketMessage::Ping => {
-              if es
-                .message_sender
-                .send(WsbOutgoingMessage::Message(WebsocketMessage::Pong))
-                .is_err()
-              {
-                break;
+  let read_thread = thread::spawn(move || {
+    loop {
+      if es.shutdown_signal.load(Ordering::SeqCst) {
+        break;
+      }
+      let Some(ref mh) = es.message_handler else { break };
+      match ws_receiver.read_message() {
+        Ok(message) => match message {
+          Some(m) => {
+            match m {
+              WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
+                (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
               }
+              WebsocketMessage::Ping => {
+                if es
+                  .message_sender
+                  .send(WsbOutgoingMessage::Message(WebsocketMessage::Pong))
+                  .is_err()
+                {
+                  break;
+                }
+              }
+              WebsocketMessage::Pong => (), // do nothing
             }
-            WebsocketMessage::Pong => (), // do nothing
           }
-        }
-        None => {
-          if let Some(ref dh) = es.disconnect_handler {
+          None => {
+            if let Some(ref dh) = es.disconnect_handler {
+              (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
+            }
+            break;
+          }
+        },
+        Err(e) => {
+          error_log!("tii: ws_app read: {:?} occurred", &e);
+          if let Some(dh) = es.disconnect_handler {
             (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
           }
           break;
         }
-      },
-      Err(e) => {
-        error_log!("tii: ws_app read: {:?} occurred", &e);
-        if let Some(dh) = es.disconnect_handler {
-          (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
-        }
-        break;
       }
     }
   });

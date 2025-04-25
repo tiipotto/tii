@@ -39,10 +39,10 @@ pub fn handle(ctx: &RequestContext) -> Response {
 #[cfg(unix)]
 mod unix {
   use crate::handle;
-  use tii::extras;
-  use tii::extras::Connector;
   use tii::ServerBuilder;
   use tii::TiiResult;
+  use tii::extras;
+  use tii::extras::Connector;
 
   pub fn work() -> TiiResult<()> {
     trivial_log::init_std(log::LevelFilter::Trace).unwrap();
