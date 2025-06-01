@@ -59,25 +59,22 @@ impl Response {
   ///
   /// # Errors
   /// Propagated from try_into call of bytes argument.
-  pub fn try_ok<E>(bytes: impl TryInto<ResponseBody, Error=E>, mime: impl Into<MimeType>) -> Result<Response, E> {
+  pub fn try_ok<E>(
+    bytes: impl TryInto<ResponseBody, Error = E>,
+    mime: impl Into<MimeType>,
+  ) -> Result<Response, E> {
     Ok(Self::ok(bytes.try_into()?, mime))
   }
 
   /// HTTP 201 Created with body.
-  pub fn created(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn created(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 202 Accepted with body.
-  pub fn accepted(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn accepted(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
@@ -375,7 +372,6 @@ impl Response {
     Self::new(StatusCode::UnsupportedMediaType)
   }
 
-
   /// HTTP 500 Internal Server Error with a body
   ///
   /// INFO: IT IS USUALLY A BAD IDEA TO HAND OUT A RESPONSE BODY TO A 500 RESPONSE
@@ -384,10 +380,13 @@ impl Response {
   /// EVEN WHEN IT MAKES NO SENSE TO DO SO.
   /// USE THIS METHOD WITH CARE.
   ///
-  pub fn internal_server_error(body: impl Into<ResponseBody>, mime: impl Into<MimeType>,) -> Response {
+  pub fn internal_server_error(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
     Self::new(StatusCode::InternalServerError)
-        .with_body(body.into())
-        .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_body(body.into())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
   }
 
   /// HTTP 500 Internal Server Error without body
