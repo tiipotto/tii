@@ -13,8 +13,10 @@ use libflate::gzip;
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
+use std::fs::File;
 use std::io;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 
 pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send;
 
@@ -594,5 +596,33 @@ impl From<&str> for ResponseBody {
 impl From<&[u8]> for ResponseBody {
   fn from(value: &[u8]) -> Self {
     ResponseBody::from_slice(value)
+  }
+}
+
+impl TryFrom<File> for ResponseBody {
+  type Error = io::Error;
+  fn try_from(value: File) -> Result<Self, Self::Error> {
+    ResponseBody::from_file(value)
+  }
+}
+
+impl TryFrom<&Path> for ResponseBody {
+  type Error = io::Error;
+  fn try_from(value: &Path) -> Result<Self, Self::Error> {
+    File::open(Path::new(value))?.try_into()
+  }
+}
+
+impl TryFrom<&PathBuf> for ResponseBody {
+  type Error = io::Error;
+  fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
+    File::open(Path::new(value))?.try_into()
+  }
+}
+
+impl TryFrom<PathBuf> for ResponseBody {
+  type Error = io::Error;
+  fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
+    File::open(Path::new(value.as_path()))?.try_into()
   }
 }

@@ -55,21 +55,26 @@ impl Response {
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
-  /// HTTP 201 Created with body.
-  pub fn created<T: Into<ResponseBody>>(
-    bytes: impl Into<ResponseBody>,
+  /// HTTP 200 OK with body.
+  ///
+  /// # Errors
+  /// Propagated from try_into call of bytes argument.
+  pub fn try_ok<E>(
+    bytes: impl TryInto<ResponseBody, Error = E>,
     mime: impl Into<MimeType>,
-  ) -> Response {
+  ) -> Result<Response, E> {
+    Ok(Self::ok(bytes.try_into()?, mime))
+  }
+
+  /// HTTP 201 Created with body.
+  pub fn created(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
   /// HTTP 202 Accepted with body.
-  pub fn accepted<T: Into<ResponseBody>>(
-    bytes: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
-  ) -> Response {
+  pub fn accepted(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
@@ -365,6 +370,28 @@ impl Response {
   /// HTTP 415 Unsupported Media Type without body
   pub fn unsupported_media_type_no_body() -> Response {
     Self::new(StatusCode::UnsupportedMediaType)
+  }
+
+  /// HTTP 500 Internal Server Error with a body
+  ///
+  /// INFO: IT IS USUALLY A BAD IDEA TO HAND OUT A RESPONSE BODY TO A 500 RESPONSE
+  /// ESPECIALLY IF YOUR APPLICATION UNDERGOES ANY SORT OF PEN TESTING.
+  /// PEN TESTERS WILL ALWAYS MARK IT IN THEIR "FINDINGS",
+  /// EVEN WHEN IT MAKES NO SENSE TO DO SO.
+  /// USE THIS METHOD WITH CARE.
+  ///
+  pub fn internal_server_error(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::new(StatusCode::InternalServerError)
+      .with_body(body.into())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+  }
+
+  /// HTTP 500 Internal Server Error without body
+  pub fn internal_server_error_no_body() -> Response {
+    Self::new(StatusCode::InternalServerError)
   }
 
   ///Removes the body from the response

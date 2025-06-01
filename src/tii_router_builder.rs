@@ -535,6 +535,12 @@ impl RouterBuilder {
     self.ws_route_method(HttpMethod::Delete, route, handler)
   }
 
+  /// Sets the error handler for this router.
+  pub fn with_error_handler(mut self, handler: ErrorHandler) -> TiiResult<Self> {
+    self.error_handler = handler;
+    Ok(self)
+  }
+
   /// Build the router
   pub fn build(self) -> impl Router + 'static {
     DefaultRouter::new(
