@@ -223,8 +223,8 @@ impl TcpConnectorInner {
         return;
       }
 
-      //This is very unlikely, I have NEVER seen this happen.
-      let errno = *libc::__errno_location();
+      //This is very unlikely; I have NEVER seen this happen.
+      let errno = io::Error::last_os_error();
       if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
         error_log!("tii: tcp_connector[{}]: shutdown failed: errno={}", &self.addr_string, errno);
       }
