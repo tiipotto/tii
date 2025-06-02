@@ -4,3 +4,5 @@ Cargo.lock
 /.clj-kondo/
 
 .idea
+# zig linker for linking macos under linux makes this file
+/.intentionally-empty-file.o
