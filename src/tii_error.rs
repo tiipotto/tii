@@ -6,6 +6,7 @@ use crate::HttpHeaderName;
 use crate::HttpMethod;
 use crate::HttpVersion;
 use crate::Response;
+use std::any::TypeId;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -66,7 +67,7 @@ impl Display for RequestHeadParsingError {
 }
 impl Error for RequestHeadParsingError {}
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Debug)]
 #[non_exhaustive]
 pub enum UserError {
   IllegalContentTypeHeaderValueSet(String),
@@ -79,6 +80,10 @@ pub enum UserError {
   RequestHeadBufferTooSmall(usize),
   HeaderNotSupportedByHttpVersion(HttpVersion),
   BadFilterOrBadEndpointCausedEntityTypeMismatch,
+  /// name of the path parameter
+  MissingPathParameter(String),
+  /// name of the path parameter, TypeId for which parsing was attempted, error returned by FromStr trait.
+  InvalidPathParameter(String, TypeId, Box<dyn Error + Send + Sync>),
 }
 
 impl Display for UserError {

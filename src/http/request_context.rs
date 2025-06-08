@@ -8,10 +8,15 @@ use crate::stream::ConnectionStream;
 use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
-use crate::{debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError};
+use crate::{
+  debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError, UserError,
+};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Debug;
 use std::io::ErrorKind;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{io, mem};
@@ -431,7 +436,7 @@ impl RequestContext {
     }
   }
 
-  /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potencial request body.
+  /// Create a new RequestContext from a stream. This will parse RequestHead but not any part of the potential request body.
   /// Errors on IO-Error or malformed RequestHead.
   pub fn read(
     stream: &dyn ConnectionStream,
@@ -670,6 +675,69 @@ impl RequestContext {
     }
 
     None
+  }
+
+  ///
+  /// This fn will parse a path param using its FromStr trait.
+  ///
+  /// # Errors
+  /// - TiiError::UserError(UserError::InvalidPathParameter)
+  ///   If the FromStr function fails. For example, you try to parse a number, and it's not a number.
+  ///   This is reasonably common and your error handler should generally map this into a http 400 bad request response of some sorts.
+  ///
+  /// - TiiError::UserError(UserError::MissingPathParameter)
+  ///   If the path parameter does not exist for the endpoint.
+  ///   This is usually indicative of an error in the program, because an endpoint should not request path parameter by name that don't exist for its path.
+  ///   Most likely scenario for this to happen, is if the path parameter was renamed in the path constant of the endpoint,
+  ///   but not inside the actual endpoint handler.
+  ///   The error handle should either abort the program or return http 500.
+  ///
+  /// # Example
+  /// ```rust
+  ///use std::num::ParseIntError;
+  ///use tii::{MimeType, RequestContext, Response, TiiError, TiiResult, UserError};
+  ///
+  /// //Your endpoint at for example path '/some/path/{id}/whatever'
+  /// pub fn endpoint(ctx: &RequestContext) -> TiiResult<Response> {
+  ///  let id : u128 = ctx.parse_path_param("id")?;
+  ///  Ok(Response::ok(format!("The id is {id}"), MimeType::TextPlain))
+  /// }
+  ///
+  /// //Global error handler
+  ///pub fn error_handler(ctx: &mut RequestContext, error: TiiError) -> TiiResult<Response> {
+  ///  if let TiiError::UserError(UserError::InvalidPathParameter(name, _type, error)) = &error {
+  ///     return Ok(Response::bad_request(format!("The path parameter {name} is invalid. error={error}"), MimeType::TextPlain));
+  ///  }
+  ///
+  ///  if let TiiError::UserError(UserError::MissingPathParameter(name)) = &error {
+  ///    eprintln!("The endpoint {} is buggy or mis-routed, its requesting path param {name}, but no such path param exist.", ctx.routed_path());
+  ///    return Ok(Response::internal_server_error_no_body());
+  ///  }
+  ///
+  ///  //Handle other errors here
+  ///  todo!()
+  ///}
+  ///
+  /// ```
+  ///
+  pub fn parse_path_param<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+  ) -> TiiResult<T> {
+    let name = name.as_ref();
+    self
+      .path_params
+      .as_ref()
+      .and_then(|params| params.get(name))
+      .ok_or(TiiError::UserError(UserError::MissingPathParameter(name.to_string())))?
+      .parse::<T>()
+      .map_err(|e| {
+        TiiError::UserError(UserError::InvalidPathParameter(
+          name.to_string(),
+          TypeId::of::<T>(),
+          Box::new(e),
+        ))
+      })
   }
 
   /// Sets a path param.
