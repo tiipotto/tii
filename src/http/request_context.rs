@@ -9,8 +9,7 @@ use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
 use crate::{
-  debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError,
-  UserError,
+  debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError, UserError,
 };
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
