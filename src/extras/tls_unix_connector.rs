@@ -1,10 +1,10 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{CONNECTOR_SHUTDOWN_TIMEOUT, Connector, ConnectorMeta};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
-use crate::{error_log, info_log, trace_log, TlsStream};
+use crate::{TlsStream, error_log, info_log, trace_log};
 use defer_heavy::defer;
 use rustls::{ServerConfig, ServerConnection};
 use std::os::fd::AsRawFd;
@@ -17,150 +17,150 @@ use std::time::Duration;
 /// Represents a handle to the simple Tls Unix Socket Server that accepts connections and pumps them into Tii for handling.
 #[derive(Debug)]
 pub struct TlsUnixConnector {
-  inner: Arc<TlsUnixConnectorInner>,
-  main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
+	inner: Arc<TlsUnixConnectorInner>,
+	main_thread: Mutex<Option<ThreadAdapterJoinHandle>>,
 }
 
 #[derive(Debug)]
 struct TlsUnixConnectorInner {
-  thread_adapter: Arc<dyn ThreadAdapter>,
-  config: Arc<ServerConfig>,
-  path: PathBuf,
-  listener: UnixListener,
-  waiter: ConnWait,
-  shutdown_flag: AtomicBool,
-  tii_server: Arc<Server>,
+	thread_adapter: Arc<dyn ThreadAdapter>,
+	config: Arc<ServerConfig>,
+	path: PathBuf,
+	listener: UnixListener,
+	waiter: ConnWait,
+	shutdown_flag: AtomicBool,
+	tii_server: Arc<Server>,
 }
 
 impl TlsUnixConnectorInner {
-  #[expect(unsafe_code)]
-  fn shutdown(&self) {
-    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
-      return;
-    }
+	#[expect(unsafe_code)]
+	fn shutdown(&self) {
+		if self.shutdown_flag.swap(true, Ordering::SeqCst) {
+			return;
+		}
 
-    if self.waiter.is_done(1) {
-      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
-      return;
-    }
+		if self.waiter.is_done(1) {
+			//No need to libc::shutdown() if somehow by magic the main_thread is already dead.
+			return;
+		}
 
-    unsafe {
-      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          error_log!(
-            "tii: tls_unix_connector[{}]: shutdown failed to wake up the listener thread",
-            self.path.display()
-          );
-          return;
-        }
+		unsafe {
+			if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
+				if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+					error_log!(
+						"tii: tls_unix_connector[{}]: shutdown failed to wake up the listener thread",
+						self.path.display()
+					);
+					return;
+				}
 
-        return;
-      }
+				return;
+			}
 
-      //This is very unlikely, I have NEVER seen this happen.
-      let errno = *libc::__errno_location();
-      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!(
-          "tii: tls_unix_connector[{}]: shutdown failed: errno={}",
-          self.path.display(),
-          errno
-        );
-      }
-    }
-  }
+			//This is very unlikely, I have NEVER seen this happen.
+			let errno = *libc::__errno_location();
+			if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+				error_log!(
+					"tii: tls_unix_connector[{}]: shutdown failed: errno={}",
+					self.path.display(),
+					errno
+				);
+			}
+		}
+	}
 }
 
 impl Connector for TlsUnixConnector {
-  fn shutdown(&self) {
-    self.inner.shutdown();
-  }
+	fn shutdown(&self) {
+		self.inner.shutdown();
+	}
 
-  fn is_marked_for_shutdown(&self) -> bool {
-    self.inner.shutdown_flag.load(Ordering::SeqCst)
-  }
+	fn is_marked_for_shutdown(&self) -> bool {
+		self.inner.shutdown_flag.load(Ordering::SeqCst)
+	}
 
-  fn is_shutting_down(&self) -> bool {
-    self.inner.waiter.is_done(2)
-  }
+	fn is_shutting_down(&self) -> bool {
+		self.inner.waiter.is_done(2)
+	}
 
-  fn is_shutdown(&self) -> bool {
-    self.inner.waiter.is_done(2)
-  }
+	fn is_shutdown(&self) -> bool {
+		self.inner.waiter.is_done(2)
+	}
 
-  fn shutdown_and_join(&self, timeout: Option<Duration>) -> bool {
-    self.shutdown();
-    self.join(timeout)
-  }
+	fn shutdown_and_join(&self, timeout: Option<Duration>) -> bool {
+		self.shutdown();
+		self.join(timeout)
+	}
 
-  fn join(&self, timeout: Option<Duration>) -> bool {
-    if !self.inner.waiter.wait(2, timeout) {
-      return false;
-    }
+	fn join(&self, timeout: Option<Duration>) -> bool {
+		if !self.inner.waiter.wait(2, timeout) {
+			return false;
+		}
 
-    let Ok(mut guard) = self.main_thread.lock() else {
-      return false;
-    };
+		let Ok(mut guard) = self.main_thread.lock() else {
+			return false;
+		};
 
-    let Some(join_handle) = guard.take() else {
-      return true;
-    };
+		let Some(join_handle) = guard.take() else {
+			return true;
+		};
 
-    match join_handle.join() {
-      Ok(_) => (),
-      Err(err) => {
-        if let Some(msg) = err.downcast_ref::<&'static str>() {
-          error_log!(
-            "tii: tls_unix_connector[{}]: listener thread panicked: {}",
-            self.inner.path.display(),
-            msg
-          );
-        } else if let Some(msg) = err.downcast_ref::<String>() {
-          error_log!(
-            "tii: tls_unix_connector[{}]: listener thread panicked: {}",
-            self.inner.path.display(),
-            msg
-          );
-        } else {
-          error_log!(
-            "tii: tls_unix_connector[{}]: listener thread panicked: {:?}",
-            self.inner.path.display(),
-            err
-          );
-        };
-      }
-    }
+		match join_handle.join() {
+			Ok(_) => (),
+			Err(err) => {
+				if let Some(msg) = err.downcast_ref::<&'static str>() {
+					error_log!(
+						"tii: tls_unix_connector[{}]: listener thread panicked: {}",
+						self.inner.path.display(),
+						msg
+					);
+				} else if let Some(msg) = err.downcast_ref::<String>() {
+					error_log!(
+						"tii: tls_unix_connector[{}]: listener thread panicked: {}",
+						self.inner.path.display(),
+						msg
+					);
+				} else {
+					error_log!(
+						"tii: tls_unix_connector[{}]: listener thread panicked: {:?}",
+						self.inner.path.display(),
+						err
+					);
+				};
+			}
+		}
 
-    true
-  }
+		true
+	}
 }
 
 impl TlsUnixConnectorInner {
-  fn run(&self) {
-    defer! {
-      self.waiter.signal(2);
-    }
+	fn run(&self) {
+		defer! {
+			self.waiter.signal(2);
+		}
 
-    let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
+		let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
-    info_log!("tii: tls_unix_connector[{}]: listening...", self.path.display());
-    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
-      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
-        info_log!("tii: tls_unix_connector[{}]: shutdown", self.path.display());
-        break;
-      }
+		info_log!("tii: tls_unix_connector[{}]: listening...", self.path.display());
+		for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
+			if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+				info_log!("tii: tls_unix_connector[{}]: shutdown", self.path.display());
+				break;
+			}
 
-      info_log!(
-        "tii: tls_unix_connector[{}]: connection {this_connection} accepted",
-        self.path.display()
-      );
-      let path_clone = self.path.clone();
-      let server_clone = self.tii_server.clone();
-      let done_flag = Arc::new(AtomicBool::new(false));
-      let tls_config = self.config.clone();
-      let thread_adapter_clone = self.thread_adapter.clone();
+			info_log!(
+				"tii: tls_unix_connector[{}]: connection {this_connection} accepted",
+				self.path.display()
+			);
+			let path_clone = self.path.clone();
+			let server_clone = self.tii_server.clone();
+			let done_flag = Arc::new(AtomicBool::new(false));
+			let tls_config = self.config.clone();
+			let thread_adapter_clone = self.thread_adapter.clone();
 
-      let done_clone = Arc::clone(&done_flag);
-      match self.thread_adapter.spawn(Box::new(move || {
+			let done_clone = Arc::clone(&done_flag);
+			match self.thread_adapter.spawn(Box::new(move || {
         defer! {
           done_clone.store(true, Ordering::SeqCst);
         }
@@ -236,120 +236,123 @@ impl TlsUnixConnectorInner {
         }
       }
 
-      active_connection.retain_mut(|con| {
-        if !con.done_flag.load(Ordering::SeqCst) {
-          return true;
-        }
-        if con.hdl.is_none() {
-          return false;
-        }
+			active_connection.retain_mut(|con| {
+				if !con.done_flag.load(Ordering::SeqCst) {
+					return true;
+				}
+				if con.hdl.is_none() {
+					return false;
+				}
 
-        //Code for panic enjoyers
-        if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
-          let this_connection = con.id;
-          crate::util::panic_msg(err, |msg| {
-            error_log!(
-              "tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
-              self.path.display(),
-              this_connection,
-              msg
-            );
-          });
-        }
+				//Code for panic enjoyers
+				if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
+					let this_connection = con.id;
+					crate::util::panic_msg(err, |msg| {
+						error_log!(
+							"tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
+							self.path.display(),
+							this_connection,
+							msg
+						);
+					});
+				}
 
-        false
-      });
-    }
+				false
+			});
+		}
 
-    trace_log!("tii: tls_unix_connector[{}]: waiting for shutdown to finish", self.path.display());
-    //Wait for all threads to finish
-    for mut con in active_connection {
-      let this_connection = con.id;
-      if !con.done_flag.load(Ordering::SeqCst) {
-        trace_log!(
-          "tii: tls_unix_connector[{}]: connection {} is not yet done. blocking...",
-          self.path.display(),
-          this_connection
-        );
-      }
+		trace_log!(
+			"tii: tls_unix_connector[{}]: waiting for shutdown to finish",
+			self.path.display()
+		);
+		//Wait for all threads to finish
+		for mut con in active_connection {
+			let this_connection = con.id;
+			if !con.done_flag.load(Ordering::SeqCst) {
+				trace_log!(
+					"tii: tls_unix_connector[{}]: connection {} is not yet done. blocking...",
+					self.path.display(),
+					this_connection
+				);
+			}
 
-      //Code for panic enjoyers
-      if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
-        crate::util::panic_msg(err, |msg| {
-          error_log!(
-            "tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
-            self.path.display(),
-            this_connection,
-            msg
-          );
-        });
-      }
-    }
+			//Code for panic enjoyers
+			if let Some(Err(err)) = con.hdl.take().map(ThreadAdapterJoinHandle::join) {
+				crate::util::panic_msg(err, |msg| {
+					error_log!(
+						"tii: tls_unix_connector[{}]: connection {} thread panicked: {}",
+						self.path.display(),
+						this_connection,
+						msg
+					);
+				});
+			}
+		}
 
-    info_log!("tii: tls_unix_connector[{}]: shutdown done", self.path.display());
-  }
+		info_log!("tii: tls_unix_connector[{}]: shutdown done", self.path.display());
+	}
 }
 
 impl TlsUnixConnector {
-  /// Create a new UnixConnector.
-  /// When this fn returns Ok() the socket is already listening in a background thread.
-  /// Returns an io::Error if it was unable to bind to the socket.
-  pub fn start(
-    addr: impl AsRef<Path>,
-    tii_server: Arc<Server>,
-    config: Arc<ServerConfig>,
-    thread_adapter: impl ThreadAdapter + 'static,
-  ) -> TiiResult<Self> {
-    //Check if the rust-tls server config is "valid".
-    let _ = ServerConnection::new(config.clone())?;
+	/// Create a new UnixConnector.
+	/// When this fn returns Ok() the socket is already listening in a background thread.
+	/// Returns an io::Error if it was unable to bind to the socket.
+	pub fn start(
+		addr: impl AsRef<Path>,
+		tii_server: Arc<Server>,
+		config: Arc<ServerConfig>,
+		thread_adapter: impl ThreadAdapter + 'static,
+	) -> TiiResult<Self> {
+		//Check if the rust-tls server config is "valid".
+		let _ = ServerConnection::new(config.clone())?;
 
-    let path = addr.as_ref();
-    if std::fs::exists(path)? {
-      std::fs::remove_file(path)?;
-    }
+		let path = addr.as_ref();
+		if std::fs::exists(path)? {
+			std::fs::remove_file(path)?;
+		}
 
-    let thread_adapter = Arc::new(thread_adapter);
+		let thread_adapter = Arc::new(thread_adapter);
 
-    let inner = Arc::new(TlsUnixConnectorInner {
-      thread_adapter: thread_adapter.clone(),
-      listener: UnixListener::bind(path)?,
-      waiter: ConnWait::default(),
-      shutdown_flag: AtomicBool::new(false),
-      path: path.to_path_buf(),
-      tii_server: tii_server.clone(),
-      config,
-    });
+		let inner = Arc::new(TlsUnixConnectorInner {
+			thread_adapter: thread_adapter.clone(),
+			listener: UnixListener::bind(path)?,
+			waiter: ConnWait::default(),
+			shutdown_flag: AtomicBool::new(false),
+			path: path.to_path_buf(),
+			tii_server: tii_server.clone(),
+			config,
+		});
 
-    let main_thread = {
-      let inner = inner.clone();
-      thread_adapter.spawn(Box::new(move || {
-        inner.run();
-      }))?
-    };
+		let main_thread = {
+			let inner = inner.clone();
+			thread_adapter.spawn(Box::new(move || {
+				inner.run();
+			}))?
+		};
 
-    let connector = Self { inner: inner.clone(), main_thread: Mutex::new(Some(main_thread)) };
+		let connector = Self { inner: inner.clone(), main_thread: Mutex::new(Some(main_thread)) };
 
-    let weak_inner = Arc::downgrade(&inner);
+		let weak_inner = Arc::downgrade(&inner);
 
-    tii_server.add_shutdown_hook(move || {
-      if let Some(inner) = weak_inner.upgrade() {
-        inner.shutdown()
-      }
-    });
+		tii_server.add_shutdown_hook(move || {
+			if let Some(inner) = weak_inner.upgrade() {
+				inner.shutdown()
+			}
+		});
 
-    Ok(connector)
-  }
+		Ok(connector)
+	}
 
-  /// Create a new UnixConnector.
-  /// When this fn returns Ok() the socket is already listening in a background thread.
-  /// Returns an io::Error if it was unable to bind to the socket.
-  ///
-  /// Threads are created using "thread::Builder::new().spawn"
-  pub fn start_unpooled(
-    addr: impl AsRef<Path>,
-    config: Arc<ServerConfig>,
-    tii_server: Arc<Server>,
-  ) -> TiiResult<Self> {
-    Self::start(addr, tii_server, config, DefaultThreadAdapter)
-  }
+	/// Create a new UnixConnector.
+	/// When this fn returns Ok() the socket is already listening in a background thread.
+	/// Returns an io::Error if it was unable to bind to the socket.
+	///
+	/// Threads are created using "thread::Builder::new().spawn"
+	pub fn start_unpooled(
+		addr: impl AsRef<Path>,
+		config: Arc<ServerConfig>,
+		tii_server: Arc<Server>,
+	) -> TiiResult<Self> {
+		Self::start(addr, tii_server, config, DefaultThreadAdapter)
+	}
 }
