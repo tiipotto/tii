@@ -25,7 +25,7 @@ fn main() {
   let tcp_listen = TcpListener::bind("0.0.0.0:8080").unwrap();
   for tcp_stream in tcp_listen.incoming() {
     if let Err(err) = tii_server.handle_connection(tcp_stream.unwrap()) {
-      eprintln!("Error handling request: {}", err);
+      eprintln!("Error handling request: {err}");
     }
   }
 }

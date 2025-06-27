@@ -41,7 +41,7 @@ fn echo_handler(
   // Get the address of the client.
   let addr = request.peer_address();
 
-  info!("New connection from {}", addr);
+  info!("New connection from {addr}");
 
   {
     let sender = sender.clone();
@@ -66,9 +66,9 @@ fn echo_handler(
         WebsocketMessage::Text(text) => {
           let message = text;
           let count = COUNTER.fetch_add(1, Ordering::SeqCst);
-          let response = format!("{} {}", message, count);
+          let response = format!("{message} {count}");
           sender.text(response)?;
-          info!("Received message `{}` from {}, echoing with the number {}", message, addr, count)
+          info!("Received message `{message}` from {addr}, echoing with the number {count}")
         }
         WebsocketMessage::Binary(binary) => {
           info!("Received binary data, echoing data back as is");
@@ -88,11 +88,11 @@ fn echo_handler(
       }
       // If the connection was closed, break out of the loop.
       Ok(ReadMessageTimeoutResult::Closed) => {
-        info!("Connection closed by {}", addr);
+        info!("Connection closed by {addr}");
         return Ok(());
       }
       Err(e) => {
-        info!("Websocket Error: {}", e);
+        info!("Websocket Error: {e}");
         return Ok(());
       }
     }

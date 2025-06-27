@@ -65,13 +65,13 @@ impl Debug for ResponseBodyInner {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       ResponseBodyInner::FixedSizeBinaryData(data) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({:?})", data))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({data:?})"))
       }
       ResponseBodyInner::FixedSizeTextData(data) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeTextData({:?})", data))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeTextData({data:?})"))
       }
       ResponseBodyInner::FixedSizeFile(_, size) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {})", size))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {size})"))
       }
       ResponseBodyInner::Stream(_) => f.write_str("ResponseBody::Stream(...)"),
       ResponseBodyInner::ChunkedStream(_) => f.write_str("ResponseBody::ChunkedStream(...)"),
@@ -86,7 +86,7 @@ impl Debug for ResponseBodyInner {
       }
       ResponseBodyInner::ChunkedGzipFile(_) => f.write_str("ResponseBody::ChunkedGzipFile(...)"),
       ResponseBodyInner::Entity(entity) => {
-        f.write_fmt(format_args!("ResponseBody::Entity({:?})", entity))
+        f.write_fmt(format_args!("ResponseBody::Entity({entity:?})"))
       }
     }
   }
@@ -333,17 +333,10 @@ impl ResponseBody {
             return Ok(());
           }
 
-          stream.write_all(
-            io_buf
-              .get_mut(..read)
-              .ok_or(io::Error::new(io::ErrorKind::Other, "buffer overflow"))?,
-          )?;
+          stream.write_all(io_buf.get_mut(..read).ok_or(io::Error::other("buffer overflow"))?)?;
           written = written
-            .checked_add(
-              u64::try_from(read)
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "usize->u64 failed"))?,
-            )
-            .ok_or(io::Error::new(io::ErrorKind::Other, "u64 overflow"))?;
+            .checked_add(u64::try_from(read).map_err(|_| io::Error::other("usize->u64 failed"))?)
+            .ok_or(io::Error::other("u64 overflow"))?;
         }
       }
       ResponseBodyInner::Stream(mut handler) => {

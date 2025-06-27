@@ -23,7 +23,7 @@ fn test_well_known() {
     assert_eq!(n.well_known_str().unwrap(), n.as_str());
     assert_eq!(n2.well_known_str().unwrap(), n.as_str());
     assert_eq!(n.as_str(), n.to_string().as_str());
-    assert_eq!(n.as_str(), format!("{}", n2).as_str());
+    assert_eq!(n.as_str(), format!("{n2}").as_str());
   }
 }
 
@@ -39,5 +39,5 @@ fn test_well_custom() {
   assert!(n.well_known_str().is_none());
   assert!(n2.well_known_str().is_none());
   assert_eq!("SADNESS", n.to_string().as_str());
-  assert_eq!("SADNESS", format!("{}", n).as_str());
+  assert_eq!("SADNESS", format!("{n}").as_str());
 }

@@ -21,7 +21,7 @@ pub fn tc40() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidPath(n)) => {
       assert_eq!(n, "/dummy&query=4");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
 
   let data = stream.copy_written_data_to_string();

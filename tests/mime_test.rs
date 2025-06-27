@@ -30,7 +30,7 @@ fn test_well_known() {
     assert_eq!(n.well_known_str().unwrap(), n.as_str());
     assert_eq!(n2.well_known_str().unwrap(), n.as_str());
     assert_eq!(n.as_str(), n.to_string().as_str());
-    assert_eq!(n.as_str(), format!("{}", n2).as_str());
+    assert_eq!(n.as_str(), format!("{n2}").as_str());
     assert!(!n.extension().is_empty());
     assert!(n.extension().is_ascii());
 
@@ -54,7 +54,7 @@ fn test_custom() {
   assert!(n.well_known_str().is_none());
   assert!(n2.well_known_str().is_none());
   assert_eq!("application/sadness", n.to_string().as_str());
-  assert_eq!("application/sadness", format!("{}", n).as_str());
+  assert_eq!("application/sadness", format!("{n}").as_str());
   assert!(!n.has_unique_known_extension());
   assert!(!n.extension().is_empty());
   assert!(n.extension().is_ascii());
@@ -78,7 +78,7 @@ fn test_well_known_groups() {
     assert_eq!(n.well_known_str().unwrap(), n.as_str());
     assert_eq!(n2.well_known_str().unwrap(), n.as_str());
     assert_eq!(n.as_str(), n.to_string().as_str());
-    assert_eq!(n.as_str(), format!("{}", n2).as_str());
+    assert_eq!(n.as_str(), format!("{n2}").as_str());
   }
 }
 
@@ -94,7 +94,7 @@ fn test_custom_group() {
   assert!(n.well_known_str().is_none());
   assert!(n2.well_known_str().is_none());
   assert_eq!("special", n.to_string().as_str());
-  assert_eq!("special", format!("{}", n).as_str());
+  assert_eq!("special", format!("{n}").as_str());
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn test_accept_q_parse_all() {
 fn test_mime_type2group() {
   for n in MimeType::well_known() {
     let x = MimeGroup::from(n);
-    assert_eq!(x, MimeGroup::parse(n.as_str()).unwrap(), "{}", n);
+    assert_eq!(x, MimeGroup::parse(n.as_str()).unwrap(), "{n}");
   }
 
   assert_eq!(

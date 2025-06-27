@@ -18,7 +18,7 @@ pub fn tc52() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "quer%80=2");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");
@@ -36,7 +36,7 @@ pub fn tc52_b() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "abac=blar&quer%80=2");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");
@@ -54,7 +54,7 @@ pub fn tc52_c() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "abac=blar&quer%80=2&bum=ba");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");
@@ -72,7 +72,7 @@ pub fn tc52_d() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "abac=blar&quer=2%80&bum=ba");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "");

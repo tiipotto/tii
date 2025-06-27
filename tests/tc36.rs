@@ -15,14 +15,14 @@ fn filter(ctx: &mut RequestContext) -> TiiResult<()> {
 
   let r = ctx.request_head_mut().set_query_param("mog", "cog");
   assert_eq!(r.len(), 2);
-  assert_eq!("bog", r.get(0).unwrap().to_string());
+  assert_eq!("bog", r.first().unwrap().to_string());
   assert_eq!("log", r.get(1).unwrap().to_string());
 
   ctx.request_head_mut().set_query_param("zog", "hog");
 
   let r = ctx.request_head_mut().remove_query_params("rm");
   assert_eq!(r.len(), 2);
-  assert_eq!("1", r.get(0).unwrap().to_string());
+  assert_eq!("1", r.first().unwrap().to_string());
   assert_eq!("2", r.get(1).unwrap().to_string());
 
   let x = ctx.request_head().get_query();
@@ -42,22 +42,22 @@ fn route(ctx: &RequestContext) -> Response {
 
   let p = ctx.request_head().get_headers("test");
   assert_eq!(p.len(), 2);
-  assert_eq!("testo", p.get(0).unwrap().to_string());
+  assert_eq!("testo", p.first().unwrap().to_string());
   assert_eq!("testo2", p.get(1).unwrap().to_string());
 
   let p = ctx.request_head().get_query_params("bla");
   assert_eq!(p.len(), 2);
-  assert_eq!("xxxx", p.get(0).unwrap().to_string());
+  assert_eq!("xxxx", p.first().unwrap().to_string());
   assert_eq!("yyyyy", p.get(1).unwrap().to_string());
 
   let p = ctx.request_head().get_query_params("beep");
   assert_eq!(p.len(), 2);
-  assert_eq!("beep1", p.get(0).unwrap().to_string());
+  assert_eq!("beep1", p.first().unwrap().to_string());
   assert_eq!("beep2", p.get(1).unwrap().to_string());
 
   let p = ctx.request_head().get_query_params("mog");
   assert_eq!(p.len(), 1);
-  assert_eq!("cog", p.get(0).unwrap().to_string());
+  assert_eq!("cog", p.first().unwrap().to_string());
 
   assert_eq!(ctx.request_head().get_query_param("nope"), None);
   assert_eq!(ctx.request_head().get_query_param("rm"), None);

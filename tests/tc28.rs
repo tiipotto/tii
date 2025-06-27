@@ -18,7 +18,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   }
   assert_eq!(ctx.get_path_param("regex2"), Some("hello/world"));
 
-  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from(format!("Okay! {}", regex1))))
+  Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from(format!("Okay! {regex1}"))))
 }
 
 #[test]

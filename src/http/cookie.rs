@@ -146,7 +146,7 @@ impl From<SetCookie> for HttpHeader {
     let mut value = format!("{}={}", cookie.name, cookie.value);
 
     if let Some(expires) = cookie.expires {
-      value = format!("{}; Expires={}", value, expires);
+      value = format!("{value}; Expires={expires}");
     }
 
     if let Some(max_age) = cookie.max_age {
@@ -154,11 +154,11 @@ impl From<SetCookie> for HttpHeader {
     }
 
     if let Some(domain) = cookie.domain {
-      value = format!("{}; Domain={}", value, domain);
+      value = format!("{value}; Domain={domain}");
     }
 
     if let Some(path) = cookie.path {
-      value = format!("{}; Path={}", value, path);
+      value = format!("{value}; Path={path}");
     }
 
     if let Some(same_site) = cookie.same_site {
@@ -174,11 +174,11 @@ impl From<SetCookie> for HttpHeader {
     }
 
     if cookie.secure {
-      value = format!("{}; Secure", value);
+      value = format!("{value}; Secure");
     }
 
     if cookie.http_only {
-      value = format!("{}; HttpOnly", value);
+      value = format!("{value}; HttpOnly");
     }
 
     HttpHeader::new("Set-Cookie", value)

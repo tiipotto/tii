@@ -18,7 +18,7 @@ pub fn tc46() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "query=bla=blub");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
 
   let data = stream.copy_written_data_to_string();

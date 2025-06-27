@@ -139,7 +139,7 @@ fn get_cat(_: &RequestContext) -> Response {
 }
 
 fn put_cat(_: &RequestContext, cat: &Cat) -> Response {
-  info!("Putting cat {:?}", cat);
+  info!("Putting cat {cat:?}");
   Response::no_content()
 }
 
@@ -159,10 +159,10 @@ fn block_manul_cats(req: &mut RequestContext) -> TiiResult<Option<Response>> {
 
 fn debug_responses_filter(resp: &mut ResponseContext<'_>) -> TiiResult<()> {
   _ = resp.cast_response_entity::<dyn Debug, _>(|entity| {
-    info!("Response Entity={:?}", entity);
+    info!("Response Entity={entity:?}");
   });
   _ = resp.get_request().cast_request_entity::<dyn Debug, _>(|entity| {
-    info!("Request Entity={:?}", entity);
+    info!("Request Entity={entity:?}");
   });
   Ok(())
 }

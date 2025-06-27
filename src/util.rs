@@ -8,7 +8,7 @@ fn do_abort() -> ! {
   {
     let bt = backtrace::Backtrace::new();
     crate::error_log!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}", bt);
-    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}", bt);
+    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={bt:?}");
     std::process::abort();
   }
   #[cfg(not(feature = "backtrace"))]
@@ -26,7 +26,7 @@ pub fn panic_msg<X>(
   } else if let Some(msg) = panic_message.downcast_ref::<String>() {
     handler(msg)
   } else {
-    let dbg = format!("{:?}", panic_message);
+    let dbg = format!("{panic_message:?}");
     handler(&dbg)
   }
 }
@@ -52,7 +52,7 @@ pub fn unwrap_ok<T, E>(some: Result<T, E>) -> T {
 }
 
 pub fn unwrap_poison<T>(result: LockResult<T>) -> io::Result<T> {
-  result.map_err(|_| io::Error::new(io::ErrorKind::Other, "Poisoned Mutex"))
+  result.map_err(|_| io::Error::other("Poisoned Mutex"))
 }
 
 pub const fn three_digit_to_utf(num: u16) -> [u8; 3] {

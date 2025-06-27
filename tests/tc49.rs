@@ -18,7 +18,7 @@ pub fn tc49() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "quer%1y=bla&q=2");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
 
   let data = stream.copy_written_data_to_string();
@@ -37,7 +37,7 @@ pub fn tc49_2() {
     TiiError::RequestHeadParsing(RequestHeadParsingError::InvalidQueryString(n)) => {
       assert_eq!(n, "quer%1y=bla");
     }
-    _ => panic!("unexpected error: {:?}", err),
+    _ => panic!("unexpected error: {err:?}"),
   }
 
   let data = stream.copy_written_data_to_string();
