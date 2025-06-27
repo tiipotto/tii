@@ -65,13 +65,13 @@ impl Debug for ResponseBodyInner {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       ResponseBodyInner::FixedSizeBinaryData(data) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({:?})", data))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({data:?})"))
       }
       ResponseBodyInner::FixedSizeTextData(data) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeTextData({:?})", data))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeTextData({data:?})"))
       }
       ResponseBodyInner::FixedSizeFile(_, size) => {
-        f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {})", size))
+        f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {size})"))
       }
       ResponseBodyInner::Stream(_) => f.write_str("ResponseBody::Stream(...)"),
       ResponseBodyInner::ChunkedStream(_) => f.write_str("ResponseBody::ChunkedStream(...)"),
@@ -86,7 +86,7 @@ impl Debug for ResponseBodyInner {
       }
       ResponseBodyInner::ChunkedGzipFile(_) => f.write_str("ResponseBody::ChunkedGzipFile(...)"),
       ResponseBodyInner::Entity(entity) => {
-        f.write_fmt(format_args!("ResponseBody::Entity({:?})", entity))
+        f.write_fmt(format_args!("ResponseBody::Entity({entity:?})"))
       }
     }
   }

@@ -574,7 +574,7 @@ impl RequestContext {
   /// Returns an iterator over property keys.
   pub fn get_property_keys(&self) -> Box<dyn Iterator<Item = &String> + '_> {
     match self.properties.as_ref() {
-      Some(props) => Box::new(props.iter().map(|(k, _)| k)),
+      Some(props) => Box::new(props.keys()),
       None => Box::new(std::iter::empty()),
     }
   }
@@ -655,7 +655,7 @@ impl RequestContext {
   /// get the path param keys.
   pub fn get_path_param_keys(&self) -> Box<dyn Iterator<Item = &str> + '_> {
     match self.path_params.as_ref() {
-      Some(props) => Box::new(props.iter().map(|(k, _)| k.as_str())),
+      Some(props) => Box::new(props.keys().map(|k| k.as_str())),
       None => Box::new(std::iter::empty()),
     }
   }

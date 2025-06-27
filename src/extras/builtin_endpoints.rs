@@ -60,7 +60,7 @@ pub fn serve_as_file_path(
       .get_path()
       .strip_prefix('/')
       .unwrap_or(request.request_head().get_path());
-    let path = format!("{}/{}", directory_path, file_path);
+    let path = format!("{directory_path}/{file_path}");
 
     let path_buf = PathBuf::from(path);
 
@@ -121,7 +121,7 @@ fn try_find_path(directory: &str, request_path: &str, index_files: &[&str]) -> O
       }
     }
   } else {
-    let path = format!("{}/{}", directory, request_path);
+    let path = format!("{directory}/{request_path}");
 
     if let Ok(meta) = metadata(&path) {
       if meta.is_file() {

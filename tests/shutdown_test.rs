@@ -41,7 +41,7 @@ mod inner {
 
     sleep(Duration::from_secs(5));
     println!("Calling shutdown...");
-    assert_eq!(true, connector.shutdown_and_join(None));
+    assert!(connector.shutdown_and_join(None));
     println!("Shutdown complete");
     drop(connector);
 

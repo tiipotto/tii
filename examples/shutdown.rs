@@ -41,7 +41,7 @@ fn actual_main() -> TiiResult<()> {
   assert_eq!(std::str::from_utf8(response.as_slice())?, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: Close\r\nContent-Length: 40\r\n\r\n<html><body><h1>Hello</h1></body></html>");
 
   sleep(Duration::from_secs(5));
-  assert_eq!(true, connector.shutdown_and_join(None));
+  assert!(connector.shutdown_and_join(None));
 
   info!("Shutdown complete");
   drop(connector);

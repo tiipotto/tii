@@ -62,9 +62,9 @@ fn message_handler(handle: WsbHandle, message: WebsocketMessage) {
   let ret = fizzbuzz(message.text().unwrap());
   if ret == "fizzbuzz" {
     println!("doing fizzbuzz broadcast");
-    handle.broadcast(WebsocketMessage::new_text(&ret));
+    handle.broadcast(WebsocketMessage::new_text(ret));
   } else {
-    handle.send(WebsocketMessage::new_text(&ret));
+    handle.send(WebsocketMessage::new_text(ret));
   }
 }
 

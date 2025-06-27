@@ -15,7 +15,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   *REQ_ID.lock().unwrap() = ctx.id();
   *REQ_TSP.lock().unwrap() = ctx.get_timestamp();
 
-  Response::ok(format!("{:?}", ctx), MimeType::TextPlain).into()
+  Response::ok(format!("{ctx:?}"), MimeType::TextPlain).into()
 }
 
 #[test]

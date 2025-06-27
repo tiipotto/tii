@@ -52,7 +52,7 @@ fn wildcard(request: &RequestContext) -> TiiResult<Response> {
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option
 
-  let html = format!("<html><body><h1>Wildcard Path: {}</h1></body></html>", wildcard_path);
+  let html = format!("<html><body><h1>Wildcard Path: {wildcard_path}</h1></body></html>");
 
   Ok(Response::ok(html, MimeType::TextHtml))
 }

@@ -616,7 +616,7 @@ impl Response {
       destination.write_all(b"\r\n")?;
 
       if let Some(len) = body.content_length() {
-        destination.write(format!("Content-Length: {}\r\n", len).as_bytes())?;
+        destination.write(format!("Content-Length: {len}\r\n").as_bytes())?;
       }
 
       if let Some(enc) = body.get_content_encoding() {

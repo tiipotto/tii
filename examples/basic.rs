@@ -71,17 +71,17 @@ fn main() -> TiiResult<()> {
 }
 
 fn pre_routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
-  info!("pre_routing {:?}", req);
+  info!("pre_routing {req:?}");
   Ok(None)
 }
 
 fn routing(req: &mut RequestContext) -> TiiResult<Option<Response>> {
-  info!("routing {:?}", req);
+  info!("routing {req:?}");
   Ok(None)
 }
 
 fn resp(req: &mut ResponseContext<'_>) -> TiiResult<()> {
-  info!("resp {:?}", req);
+  info!("resp {req:?}");
   req.get_response_mut().add_header("X-Magic", "true magic")?;
   Ok(())
 }
@@ -121,7 +121,7 @@ fn echo_method(request: &RequestContext) -> Response {
 
 fn path_param(request: &RequestContext) -> Response {
   for (key, value) in request.get_path_params() {
-    info!("path_param {} {}", key, value);
+    info!("path_param {key} {value}");
   }
 
   Response::no_content()
