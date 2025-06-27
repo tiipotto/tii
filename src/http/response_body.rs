@@ -333,17 +333,10 @@ impl ResponseBody {
             return Ok(());
           }
 
-          stream.write_all(
-            io_buf
-              .get_mut(..read)
-              .ok_or(io::Error::new(io::ErrorKind::Other, "buffer overflow"))?,
-          )?;
+          stream.write_all(io_buf.get_mut(..read).ok_or(io::Error::other("buffer overflow"))?)?;
           written = written
-            .checked_add(
-              u64::try_from(read)
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "usize->u64 failed"))?,
-            )
-            .ok_or(io::Error::new(io::ErrorKind::Other, "u64 overflow"))?;
+            .checked_add(u64::try_from(read).map_err(|_| io::Error::other("usize->u64 failed"))?)
+            .ok_or(io::Error::other("u64 overflow"))?;
         }
       }
       ResponseBodyInner::Stream(mut handler) => {

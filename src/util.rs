@@ -52,7 +52,7 @@ pub fn unwrap_ok<T, E>(some: Result<T, E>) -> T {
 }
 
 pub fn unwrap_poison<T>(result: LockResult<T>) -> io::Result<T> {
-  result.map_err(|_| io::Error::new(io::ErrorKind::Other, "Poisoned Mutex"))
+  result.map_err(|_| io::Error::other("Poisoned Mutex"))
 }
 
 pub const fn three_digit_to_utf(num: u16) -> [u8; 3] {
