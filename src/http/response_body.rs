@@ -136,14 +136,19 @@ impl ResponseBody {
     Self(ResponseBodyInner::ExternallyGzippedData(buffer))
   }
 
-  pub fn from_string(data: String) -> Self {
-    Self(ResponseBodyInner::FixedSizeTextData(data))
+  pub fn from_string(data: impl ToString) -> Self {
+    Self(ResponseBodyInner::FixedSizeTextData(data.to_string()))
   }
 
   pub fn from_slice<T: AsRef<[u8]> + ?Sized>(data: &T) -> Self {
     Self(ResponseBodyInner::FixedSizeBinaryData(data.as_ref().to_vec()))
   }
 
+  /// Creates a response body from a static slice.
+  /// Unlike the other fn's that accepts borrowed data,
+  /// this fn does not copy the slice.
+  ///
+  /// This is useful for usage with include_bytes!.
   pub fn from_static_slice(data: &'static [u8]) -> Self {
     Self(ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data))
   }
