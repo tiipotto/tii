@@ -142,7 +142,7 @@ impl TcpConnectorInner {
 
     self.waiter.signal(1);
 
-    trace_log!("tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
+    trace_log!("tii: tcp_connector[{}]: waiting for shutdown to finish", &self.addr_string);
     //Wait for all threads to finish
     for mut con in active_connection {
       let this_connection = con.id;
