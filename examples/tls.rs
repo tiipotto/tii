@@ -40,6 +40,11 @@ fn create_rust_tls_server_config() -> Arc<ServerConfig> {
 fn main() -> TiiResult<()> {
   trivial_log::init_std(log::LevelFilter::Debug).unwrap();
 
+  //Use a different tls provider if you so desire at your convenience.
+  rustls_graviola::default_provider()
+      .install_default()
+      .unwrap();
+
   let app =
     ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
   let config = create_rust_tls_server_config();
