@@ -32,6 +32,9 @@ enum ResponseBodyInner {
   FixedSizeBinaryData(Vec<u8>),
 
   //Fixed length data, content length header will be set automatically
+  FixedSizeBinaryDataStaticSlice(&'static [u8]),
+
+  //Fixed length data, content length header will be set automatically
   FixedSizeTextData(String),
 
   //Streams a file.
@@ -64,6 +67,9 @@ enum ResponseBodyInner {
 impl Debug for ResponseBodyInner {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
+      ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data) => {
+        f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryDataStaticSlice({data:?})"))
+      }
       ResponseBodyInner::FixedSizeBinaryData(data) => {
         f.write_fmt(format_args!("ResponseBody::FixedSizeBinaryData({data:?})"))
       }
@@ -136,6 +142,10 @@ impl ResponseBody {
 
   pub fn from_slice<T: AsRef<[u8]> + ?Sized>(data: &T) -> Self {
     Self(ResponseBodyInner::FixedSizeBinaryData(data.as_ref().to_vec()))
+  }
+
+  pub fn from_static_slice(data: &'static [u8]) -> Self {
+    Self(ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data))
   }
 
   pub fn from_file<T: Read + Seek + Send + 'static>(mut file: T) -> io::Result<Self> {
@@ -256,6 +266,7 @@ impl ResponseBody {
   ///
   pub fn write_to_raw(self, mime: &MimeType, stream: &mut impl Write) -> TiiResult<()> {
     match self.0 {
+      ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data) => stream.write_all(data)?,
       ResponseBodyInner::FixedSizeBinaryData(data) => stream.write_all(data.as_ref())?,
       ResponseBodyInner::FixedSizeTextData(text) => stream.write_all(text.as_ref())?,
       ResponseBodyInner::FixedSizeFile(mut data, _)
@@ -315,6 +326,7 @@ impl ResponseBody {
     stream: &T,
   ) -> TiiResult<()> {
     match self.0 {
+      ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data) => stream.write_all(data)?,
       ResponseBodyInner::FixedSizeBinaryData(data)
       | ResponseBodyInner::ExternallyGzippedData(data) => stream.write_all(data.as_slice())?,
       ResponseBodyInner::FixedSizeTextData(text) => stream.write_all(text.as_bytes())?,
@@ -410,6 +422,7 @@ impl ResponseBody {
 
   pub fn content_length(&self) -> Option<u64> {
     match &self.0 {
+      ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data) => u64::try_from(data.len()).ok(),
       ResponseBodyInner::FixedSizeBinaryData(data) => u64::try_from(data.len()).ok(),
       ResponseBodyInner::FixedSizeTextData(data) => u64::try_from(data.len()).ok(),
       ResponseBodyInner::FixedSizeFile(_, sz) => Some(*sz),
