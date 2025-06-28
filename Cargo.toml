@@ -25,17 +25,12 @@ base64 = "0.22.1"
 defer-heavy = "0.1.0"
 #GZIP/ZLIB in pure rust
 libflate = "2.1.0"
+listener_poll = { version = "0.1.0", optional = true }
 
 
 ## SSL
 rustls = { version = "0.23.26", optional = true }
 rust-tls-duplex-stream = { version = "0.1.1", optional = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2", optional = true }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.60.1", optional = true, features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 rustls = "0.23.26"
@@ -49,7 +44,7 @@ serde_json = "1.0.140"
 default = []
 random_id = ["getrandom"]
 tls = ["rust-tls-duplex-stream", "rustls"]
-extras = ["libc", "windows-sys"]
+extras = ["listener_poll"]
 
 [lints.rust]
 future-incompatible = "warn"
