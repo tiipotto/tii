@@ -12,12 +12,15 @@ use std::time::Duration;
 /// the listener thread and the time it takes for the listener thread to process a few of lines of code.
 ///
 /// If this value is too small:
-/// On Windows worst case is that we fail to wake up the listener thread.
+/// Worst case is that we fail to wake up the listener thread.
 /// Otherwise, is that we log an error and later succeed.
 ///
 /// If this value is too big:
 /// We may block for this amount of time without the user of tii expecting it.
 pub(crate) const CONNECTOR_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// See above
+pub(crate) const CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Trait that defines all fn's that each connector implemented by tii::extras has.
 pub trait Connector {

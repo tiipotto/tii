@@ -2,6 +2,7 @@ pub mod builtin_endpoints;
 
 mod connector;
 
+pub(crate) use connector::CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL;
 pub(crate) use connector::CONNECTOR_SHUTDOWN_TIMEOUT;
 pub use {connector::Connector, connector::ConnectorMeta};
 
