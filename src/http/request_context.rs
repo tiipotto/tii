@@ -511,7 +511,7 @@ impl RequestContext {
   }
 
   /// True if the request contains the specified property.
-  pub fn contains_property<K: AsRef<str>>(&self, key: K) -> bool {
+  pub fn contains_property(&self, key: impl AsRef<str>) -> bool {
     if let Some(prop) = self.properties.as_ref() {
       return prop.contains_key(key.as_ref());
     }
@@ -519,7 +519,7 @@ impl RequestContext {
   }
 
   /// Get the specified property, uses downcast ref. returns none if the downcast didn't succeed.
-  pub fn get_property<T: Any + Send, K: AsRef<str>>(&self, key: K) -> Option<&T> {
+  pub fn get_property<T: Any + Send>(&self, key: impl AsRef<str>) -> Option<&T> {
     if let Some(prop) = self.properties.as_ref() {
       if let Some(value) = prop.get(key.as_ref()) {
         return value.downcast_ref::<T>();
@@ -539,7 +539,7 @@ impl RequestContext {
   }
 
   /// Removes a property from the request.
-  pub fn remove_property<K: AsRef<str>>(&mut self, key: K) -> Option<Box<dyn Any + Send>> {
+  pub fn remove_property(&mut self, key: impl AsRef<str>) -> Option<Box<dyn Any + Send>> {
     if let Some(prop) = self.properties.as_mut() {
       if let Some(value) = prop.remove(key.as_ref()) {
         return Some(value);
@@ -549,9 +549,9 @@ impl RequestContext {
   }
 
   /// Sets a property into the request.
-  pub fn set_property<T: Any + Send, K: ToString>(
+  pub fn set_property<T: Any + Send>(
     &mut self,
-    key: K,
+    key: impl ToString,
     value: T,
   ) -> Option<Box<dyn Any + Send>> {
     let boxed = Box::new(value) as Box<dyn Any + Send>;

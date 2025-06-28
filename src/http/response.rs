@@ -10,6 +10,8 @@ use crate::http::request::HttpVersion;
 use crate::http::response_body::ResponseBody;
 use crate::stream::ConnectionStreamWrite;
 use crate::tii_error::{TiiResult, UserError};
+use crate::EntitySerializer;
+use std::fmt::Debug;
 use std::io::{Read, Seek};
 use std::{io, mem};
 
@@ -55,6 +57,15 @@ impl Response {
       .with_header_unchecked("Content-Type", mime.into().as_str())
   }
 
+  /// HTTP 200 OK with entity body.
+  pub fn ok_entity<T: Debug + Send + 'static>(
+    entity: T,
+    serializer: impl EntitySerializer<T>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::ok(ResponseBody::from_entity(entity, serializer), mime)
+  }
+
   /// HTTP 200 OK with body.
   ///
   /// # Errors
@@ -71,6 +82,15 @@ impl Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
       .with_header_unchecked("Content-Type", mime.into().as_str())
+  }
+
+  /// HTTP 201 Created with entity body.
+  pub fn created_entity<T: Debug + Send + 'static>(
+    entity: T,
+    serializer: impl EntitySerializer<T>,
+    mime: impl Into<MimeType>,
+  ) -> Response {
+    Self::created(ResponseBody::from_entity(entity, serializer), mime)
   }
 
   /// HTTP 202 Accepted with body.
@@ -581,7 +601,7 @@ impl Response {
     destination.write_all(self.status_code.status_line().as_bytes())?;
 
     for header in self.headers.iter() {
-      // TODO should we even have these checks here? they should not be possible.
+      // These headers shouldn't be addable to the response.
       if header.name == HttpHeaderName::ContentLength {
         crate::util::unreachable();
       }
@@ -591,8 +611,7 @@ impl Response {
       }
 
       destination.write_all(b"\r\n")?;
-      //TODO remove this clone
-      destination.write_all(header.name.to_string().as_bytes())?;
+      destination.write_all(header.name.to_str().as_bytes())?;
       destination.write_all(b": ")?;
       destination.write_all(header.value.as_bytes())?;
     }
