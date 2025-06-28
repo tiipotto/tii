@@ -40,10 +40,16 @@ fn create_rust_tls_server_config() -> Arc<ServerConfig> {
 fn main() -> TiiResult<()> {
   trivial_log::init_std(log::LevelFilter::Debug).unwrap();
 
-  //Use a different tls provider if you so desire at your convenience.
-  rustls_graviola::default_provider()
-      .install_default()
-      .unwrap();
+  // Use a different tls provider if you so desire at your convenience.
+  // Different providers require you to install native dependencies/c-compilers etc. 
+  // This one only needs pure rust and therefore works on any os/env out of the box.
+  // It does, however, only work on x86_64/aarch64 so this example will not work on other cpu targets.
+  #[cfg(any(target_arch="x86_64", target_arch="aarch64"))]
+  {
+    rustls_graviola::default_provider()
+        .install_default()
+        .unwrap();
+  }
 
   let app =
     ServerBuilder::builder_arc(|builder| builder.router(|r| r.route_any("/tls", tls_route)))?;
