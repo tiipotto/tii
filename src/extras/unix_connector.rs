@@ -6,9 +6,9 @@ use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log};
 use defer_heavy::defer;
+use listener_poll::PollEx;
 use std::io;
-use std::os::fd::AsRawFd;
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -32,39 +32,16 @@ struct UnixConnectorInner {
 }
 
 impl UnixConnectorInner {
-  #[expect(unsafe_code)]
   fn shutdown(&self) {
     if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
     }
 
-    if self.waiter.is_done(1) {
-      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
-      return;
-    }
-
-    unsafe {
-      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          error_log!(
-            "tii: unix_connector[{}]: shutdown failed to wake up the listener thread",
-            self.path.display()
-          );
-          return;
-        }
-
-        return;
-      }
-
-      //This is very unlikely; I have NEVER seen this happen.
-      let errno = io::Error::last_os_error();
-      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!(
-          "tii: unix_connector[{}]: shutdown failed: errno={}",
-          self.path.display(),
-          errno
-        );
-      }
+    if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+      error_log!(
+        "unix_connector[{}]: shutdown failed to wake up the listener thread",
+        self.path.display()
+      );
     }
   }
 }
@@ -134,6 +111,23 @@ impl Connector for UnixConnector {
 }
 
 impl UnixConnectorInner {
+  fn next(&self) -> io::Result<UnixStream> {
+    loop {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+        return Err(io::ErrorKind::ConnectionAborted.into());
+      }
+
+      if !self
+        .listener
+        .poll(Some(crate::extras::connector::CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL))?
+      {
+        continue;
+      }
+
+      return self.listener.accept().map(|(stream, _)| stream);
+    }
+  }
+
   fn run(&self) {
     defer! {
       self.waiter.signal(2);
@@ -142,7 +136,8 @@ impl UnixConnectorInner {
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
     info_log!("tii: unix_connector[{}]: listening...", self.path.display());
-    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
+    for this_connection in 1u128.. {
+      let stream = self.next();
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("tii: unix_connector[{}]: shutdown", self.path.display());
         break;
@@ -282,6 +277,8 @@ impl UnixConnector {
       path: path.to_path_buf(),
       tii_server: tii_server.clone(),
     });
+
+    inner.listener.set_nonblocking(true)?;
 
     let main_thread = {
       let inner = inner.clone();

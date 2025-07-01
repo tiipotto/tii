@@ -1,14 +1,17 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
-use crate::extras::{Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{
+  Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL, CONNECTOR_SHUTDOWN_TIMEOUT,
+};
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log, TlsStream};
 use defer_heavy::defer;
+use listener_poll::PollEx;
 use rustls::{ServerConfig, ServerConnection};
-use std::os::fd::AsRawFd;
-use std::os::unix::net::UnixListener;
+use std::io;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,39 +36,16 @@ struct TlsUnixConnectorInner {
 }
 
 impl TlsUnixConnectorInner {
-  #[expect(unsafe_code)]
   fn shutdown(&self) {
     if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
     }
 
-    if self.waiter.is_done(1) {
-      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
-      return;
-    }
-
-    unsafe {
-      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          error_log!(
-            "tii: tls_unix_connector[{}]: shutdown failed to wake up the listener thread",
-            self.path.display()
-          );
-          return;
-        }
-
-        return;
-      }
-
-      //This is very unlikely, I have NEVER seen this happen.
-      let errno = *libc::__errno_location();
-      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!(
-          "tii: tls_unix_connector[{}]: shutdown failed: errno={}",
-          self.path.display(),
-          errno
-        );
-      }
+    if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
+      error_log!(
+        "unix_connector[{}]: shutdown failed to wake up the listener thread",
+        self.path.display()
+      );
     }
   }
 }
@@ -135,6 +115,20 @@ impl Connector for TlsUnixConnector {
 }
 
 impl TlsUnixConnectorInner {
+  fn next(&self) -> io::Result<UnixStream> {
+    loop {
+      if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
+        return Err(io::ErrorKind::ConnectionAborted.into());
+      }
+
+      if !self.listener.poll(Some(CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL))? {
+        continue;
+      }
+
+      return self.listener.accept().map(|(stream, _)| stream);
+    }
+  }
+
   fn run(&self) {
     defer! {
       self.waiter.signal(2);
@@ -143,7 +137,8 @@ impl TlsUnixConnectorInner {
     let mut active_connection = Vec::<ActiveConnection>::with_capacity(1024);
 
     info_log!("tii: tls_unix_connector[{}]: listening...", self.path.display());
-    for (stream, this_connection) in self.listener.incoming().zip(1u128..) {
+    for this_connection in 1u128.. {
+      let stream = self.next();
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         info_log!("tii: tls_unix_connector[{}]: shutdown", self.path.display());
         break;
@@ -319,6 +314,8 @@ impl TlsUnixConnector {
       tii_server: tii_server.clone(),
       config,
     });
+
+    inner.listener.set_nonblocking(true)?;
 
     let main_thread = {
       let inner = inner.clone();

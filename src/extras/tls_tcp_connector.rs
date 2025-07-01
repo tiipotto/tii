@@ -1,10 +1,13 @@
 use crate::extras::connector::{ActiveConnection, ConnWait, ConnectorMeta};
-use crate::extras::{Connector, CONNECTOR_SHUTDOWN_TIMEOUT};
+use crate::extras::{
+  Connector, CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL, CONNECTOR_SHUTDOWN_TIMEOUT,
+};
 use crate::functional_traits::{DefaultThreadAdapter, ThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
 use crate::{error_log, info_log, trace_log, TlsStream};
 use defer_heavy::defer;
+use listener_poll::PollEx;
 use rustls::{ServerConfig, ServerConnection};
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
@@ -31,45 +34,18 @@ struct TlsTcpConnectorInner {
 }
 
 impl TlsTcpConnectorInner {
-  #[cfg(target_os = "windows")]
-  #[expect(unsafe_code)]
   fn next(&self) -> io::Result<TcpStream> {
-    use std::os::windows::io::AsRawSocket;
-    use windows_sys::Win32::Networking::WinSock::{
-      WSAGetLastError, WSAPoll, POLLRDNORM, SOCKET_ERROR, WSAPOLLFD,
-    };
-
-    let windows_sock_handle = self.listener.as_raw_socket() as usize;
-
     loop {
-      let mut pollfd =
-        Box::pin(WSAPOLLFD { fd: windows_sock_handle, events: POLLRDNORM, revents: 0 });
-
-      let result = unsafe {
-        //https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsapoll
-        WSAPoll(pollfd.as_mut().get_mut(), 1, 1000)
-      };
-      drop(pollfd);
       if self.tii_server.is_shutdown() || self.shutdown_flag.load(Ordering::SeqCst) {
         return Err(io::ErrorKind::ConnectionAborted.into());
       }
 
-      if result == SOCKET_ERROR {
-        unsafe {
-          return Err(io::Error::from_raw_os_error(WSAGetLastError()));
-        }
-      }
-
-      if result == 0 {
+      if !self.listener.poll(Some(CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL))? {
         continue;
       }
 
       return self.listener.accept().map(|(stream, _)| stream);
     }
-  }
-  #[cfg(not(target_os = "windows"))]
-  fn next(&self) -> io::Result<TcpStream> {
-    self.listener.accept().map(|(stream, _)| stream)
   }
 
   fn run(&self) {
@@ -231,46 +207,6 @@ impl TlsTcpConnectorInner {
 }
 
 impl TlsTcpConnectorInner {
-  #[expect(unsafe_code)]
-  #[cfg(unix)]
-  fn shutdown(&self) {
-    use std::os::fd::AsRawFd;
-
-    if self.shutdown_flag.swap(true, Ordering::SeqCst) {
-      return;
-    }
-
-    if self.waiter.is_done(1) {
-      //No need to libc::shutdown() if somehow by magic the main_thread is already dead.
-      return;
-    }
-
-    unsafe {
-      if libc::shutdown(self.listener.as_raw_fd(), libc::SHUT_RDWR) != -1 {
-        if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-          error_log!(
-            "tii: tls_tcp_connector[{}]: shutdown failed to wake up the listener thread",
-            &self.addr_string
-          );
-          return;
-        }
-
-        return;
-      }
-
-      //This is very unlikely, I have NEVER seen this happen.
-      let errno = *libc::__errno_location();
-      if !self.waiter.wait(1, Some(CONNECTOR_SHUTDOWN_TIMEOUT)) {
-        error_log!(
-          "tii: tls_tcp_connector[{}]: shutdown failed: errno={}",
-          &self.addr_string,
-          errno
-        );
-      }
-    }
-  }
-
-  #[cfg(target_os = "windows")]
   pub fn shutdown(&self) {
     if self.shutdown_flag.swap(true, Ordering::SeqCst) {
       return;
@@ -285,11 +221,6 @@ impl TlsTcpConnectorInner {
   }
 }
 impl Connector for TlsTcpConnector {
-  #[cfg(unix)]
-  fn shutdown(&self) {
-    self.inner.shutdown();
-  }
-  #[cfg(not(unix))]
   fn shutdown(&self) {
     self.inner.shutdown();
   }
@@ -386,6 +317,8 @@ impl TlsTcpConnector {
       tii_server: tii_server.clone(),
       waiter: ConnWait::default(),
     });
+
+    inner.listener.set_nonblocking(true)?;
 
     let main_thread = {
       let inner = inner.clone();
