@@ -18,7 +18,9 @@ pub fn tc19() {
   let server =
     ServerBuilder::default().router(|rt| rt.route_any("/dummy", dummy_route)).expect("ERR").build();
 
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let data = stream.copy_written_data_to_string();

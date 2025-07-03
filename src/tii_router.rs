@@ -1,5 +1,7 @@
 //! Contains the impl of the router.
 
+use crate::HttpVersion;
+use crate::RequestContext;
 use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, Router, RouterFilter,
   RouterWebSocketServingResponse, WebsocketEndpoint,
@@ -8,13 +10,11 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::HttpVersion;
-use crate::RequestContext;
-use crate::{trace_log, util};
-use crate::{warn_log, HttpHeaderName};
 use crate::{AcceptMimeType, QValue};
+use crate::{HttpHeaderName, warn_log};
 use crate::{HttpMethod, MimeType, ResponseContext};
 use crate::{Response, StatusCode};
+use crate::{trace_log, util};
 use base64::Engine;
 use regex::{Error, Regex};
 use sha1::{Digest, Sha1};
@@ -642,7 +642,10 @@ impl DefaultRouter {
 
           if let Some(enc) = resp.get_body().and_then(|a| a.get_content_encoding()) {
             if enc == "gzip" && !request.request_head().accepts_gzip() {
-              warn_log!("Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
+              warn_log!(
+                "Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.",
+                request.id()
+              );
             }
           }
 

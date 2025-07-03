@@ -1,12 +1,12 @@
 use crate::extras::connector::{ActiveConnection, ConnWait};
 use crate::extras::{
-  Connector, ConnectorMeta, CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL, CONNECTOR_SHUTDOWN_TIMEOUT,
+  CONNECTOR_SHUTDOWN_FLAG_POLLING_INTERVAL, CONNECTOR_SHUTDOWN_TIMEOUT, Connector, ConnectorMeta,
 };
 use crate::functional_traits::ThreadAdapter;
 use crate::tii_builder::{DefaultThreadAdapter, ThreadAdapterJoinHandle};
 use crate::tii_error::TiiResult;
 use crate::tii_server::Server;
-use crate::{error_log, info_log, trace_log, TlsStream};
+use crate::{TlsStream, error_log, info_log, trace_log};
 use defer_heavy::defer;
 use listener_poll::PollEx;
 use rustls::{ServerConfig, ServerConnection};

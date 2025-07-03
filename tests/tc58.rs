@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::io;
 use std::io::ErrorKind;
-use tii::{configure_type_system, MimeType, RequestBody, TiiResult};
+use tii::{MimeType, RequestBody, TiiResult, configure_type_system};
 use tii::{RequestContext, Response, ServerBuilder};
 
 mod mock_stream;
@@ -80,10 +80,15 @@ pub fn tc58() {
     })
     .build();
 
-  let stream = MockStream::with_str("PUT /dummy HTTP/1.1\r\nConnection: keep-alive\r\nContent-Type: application/json\r\nContent-Length: 45\r\n\r\n{\"d1\":1,\"d2\":2}");
+  let stream = MockStream::with_str(
+    "PUT /dummy HTTP/1.1\r\nConnection: keep-alive\r\nContent-Type: application/json\r\nContent-Length: 45\r\n\r\n{\"d1\":1,\"d2\":2}",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let got = String::from_utf8(stream.copy_written_data()).unwrap();
 
-  assert_eq!(got.as_str(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: Keep-Alive\r\nContent-Length: 15\r\n\r\n{\"d1\":3,\"d2\":4}");
+  assert_eq!(
+    got.as_str(),
+    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: Keep-Alive\r\nContent-Length: 15\r\n\r\n{\"d1\":3,\"d2\":4}"
+  );
 }

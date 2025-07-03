@@ -1,7 +1,7 @@
 //! Provides functionality for http request bodies
 
 use crate::util::{unwrap_poison, unwrap_some};
-use crate::{error_log, TiiResult};
+use crate::{TiiResult, error_log};
 use libflate::gzip;
 use std::fmt::{Debug, Formatter};
 use std::io;

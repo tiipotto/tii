@@ -14,7 +14,9 @@ pub fn tc55() {
   let server =
     ServerBuilder::default().router(|rt| rt.route_any("/*", dummy_route)).expect("ERR").build();
 
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: keep-alive\r\n\r\nGET /dummy HTTP/1.1\r\nConnection: close\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: keep-alive\r\n\r\nGET /dummy HTTP/1.1\r\nConnection: close\r\n\r\n",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let got = stream.copy_written_data();

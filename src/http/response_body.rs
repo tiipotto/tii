@@ -6,7 +6,7 @@ use crate::http::response_entity::ResponseEntity;
 use crate::stream::ConnectionStreamWrite;
 use crate::util::unwrap_some;
 use crate::{
-  trace_log, EntitySerializer, MimeType, TiiError, TiiResult, TypeSystem, TypeSystemError,
+  EntitySerializer, MimeType, TiiError, TiiResult, TypeSystem, TypeSystemError, trace_log,
 };
 use defer_heavy::defer;
 use libflate::gzip;

@@ -36,7 +36,9 @@ pub fn tc21a() {
     .expect("ERR")
     .build();
   // INVALID Chunked trailer
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\n\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\n\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -50,7 +52,9 @@ pub fn tc21b() {
     .expect("ERR")
     .build();
   // INVALID Chunked trailer
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\r\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\r\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -64,7 +68,9 @@ pub fn tc21c() {
     .expect("ERR")
     .build();
   // INVALID Chunked trailer
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\n\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\n\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -78,7 +84,9 @@ pub fn tc21d() {
     .expect("ERR")
     .build();
   // INVALID Chunked trailer
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\r");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\r",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -92,7 +100,9 @@ pub fn tc21e() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\n\n10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\n\n10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -106,7 +116,9 @@ pub fn tc21f() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\r10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\r10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -120,7 +132,9 @@ pub fn tc21g() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame length
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -134,7 +148,9 @@ pub fn tc21h() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame EOF
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n12345\r\n10\r\n1234567890123456\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -148,7 +164,9 @@ pub fn tc21i() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame length
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n0000000000000000005\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\n0000000000000000005\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();
@@ -162,7 +180,9 @@ pub fn tc21j() {
     .expect("ERROR")
     .build();
   // INVALID Chunked frame length
-  let stream = MockStream::with_str("GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\nzxi1\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n");
+  let stream = MockStream::with_str(
+    "GET /dummy HTTP/1.1\r\nConnection: Keep-Alive\r\nTransfer-Encoding: chunked\r\n\r\nzxi1\r\n12345\r\n10\r\n1234567890123456\r\n0\r\n\r\n",
+  );
   let con = stream.to_stream();
   let err = server.handle_connection(con).unwrap_err();
   let err = err.downcast_ref::<io::Error>().unwrap();

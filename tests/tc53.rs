@@ -34,7 +34,10 @@ pub fn tc53() {
   server.handle_connection(con).unwrap();
 
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 204 No Content\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\nHTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n");
+  assert_eq!(
+    data,
+    "HTTP/1.1 204 No Content\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\nHTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n"
+  );
   trivial_log::free();
 }
 
@@ -98,6 +101,9 @@ pub fn tc53_c() {
   server.handle_connection(con).unwrap();
 
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 204 No Content\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\nHTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n");
+  assert_eq!(
+    data,
+    "HTTP/1.1 204 No Content\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\nHTTP/1.1 404 Not Found\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n"
+  );
   trivial_log::free();
 }

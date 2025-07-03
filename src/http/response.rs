@@ -4,13 +4,13 @@ use crate::http::cookie::SetCookie;
 use crate::http::headers::{Headers, HttpHeader, HttpHeaderName};
 use crate::http::status::StatusCode;
 
+use crate::EntitySerializer;
 use crate::http::method::HttpMethod;
 use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::ResponseBody;
 use crate::stream::ConnectionStreamWrite;
 use crate::tii_error::{TiiResult, UserError};
-use crate::EntitySerializer;
 use std::fmt::Debug;
 use std::io::{Read, Seek};
 use std::{io, mem};

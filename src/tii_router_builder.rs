@@ -1,5 +1,7 @@
 //! Contains the builder for a router
 
+use crate::RequestContext;
+use crate::TiiResult;
 use crate::default_functions::{
   default_error_handler, default_method_not_allowed_handler, default_not_acceptable_handler,
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
@@ -8,8 +10,6 @@ use crate::functional_traits::{
   HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
 };
 use crate::tii_builder::EntityHttpEndpoint;
-use crate::RequestContext;
-use crate::TiiResult;
 use crate::{AcceptMimeType, MimeType, RequestBody};
 use crate::{DefaultRouter, Response, Router};
 use crate::{EntityDeserializer, HttpMethod};

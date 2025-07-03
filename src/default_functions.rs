@@ -1,8 +1,8 @@
 use crate::RequestContext;
-use crate::{error_log, info_log};
 use crate::{Response, StatusCode};
 use crate::{Routeable, RoutingDecision};
 use crate::{TiiError, TiiResult};
+use crate::{error_log, info_log};
 use std::collections::HashSet;
 
 pub(crate) fn default_pre_routing_filter(_request: &RequestContext) -> TiiResult<bool> {

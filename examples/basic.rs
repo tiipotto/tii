@@ -1,4 +1,4 @@
-use log::{info, LevelFilter};
+use log::{LevelFilter, info};
 use tii::extras::{Connector, TcpConnector};
 use tii::{
   AcceptMimeType, HttpMethod, MimeType, RequestContext, Response, ResponseContext, ServerBuilder,

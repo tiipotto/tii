@@ -21,7 +21,10 @@ pub fn tc38() {
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 32\r\n\r\nOkay! /dummy*$\\'() ,:;@-_~=!.bam");
+  assert_eq!(
+    data,
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 32\r\n\r\nOkay! /dummy*$\\'() ,:;@-_~=!.bam"
+  );
   trivial_log::free();
 }
 

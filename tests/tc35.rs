@@ -97,5 +97,8 @@ pub fn tc35_6() {
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 27\r\n\r\n[(\"a!\", \"!\"), (\"b!\", \"a!\")]");
+  assert_eq!(
+    data,
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 27\r\n\r\n[(\"a!\", \"!\"), (\"b!\", \"a!\")]"
+  );
 }

@@ -34,13 +34,20 @@ pub fn tc24() {
   })
   .expect("ERROR");
 
-  let stream = MockStream::with_str("POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF");
+  let stream = MockStream::with_str(
+    "POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).expect("ERROR");
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nOkay!");
+  assert_eq!(
+    data,
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nOkay!"
+  );
 
-  let stream = MockStream::with_str("POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/rtf\r\nContent-Length: 6\r\n\r\nABCDEF");
+  let stream = MockStream::with_str(
+    "POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/rtf\r\nContent-Length: 6\r\n\r\nABCDEF",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).expect("ERROR");
   let data = stream.copy_written_data_to_string();
@@ -49,17 +56,24 @@ pub fn tc24() {
     "HTTP/1.1 415 Unsupported Media Type\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n"
   );
 
-  let stream = MockStream::with_str("POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/rtf\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF");
+  let stream = MockStream::with_str(
+    "POST /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/rtf\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).expect("ERROR");
   let data = stream.copy_written_data_to_string();
   assert_eq!(data, "HTTP/1.1 406 Not Acceptable\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n");
 
-  let stream = MockStream::with_str("PUT /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF");
+  let stream = MockStream::with_str(
+    "PUT /dummy HTTP/1.1\r\nHdr: test\r\nAccept: text/plain\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nABCDEF",
+  );
   let con = stream.to_stream();
   server.handle_connection(con).expect("ERROR");
   let data = stream.copy_written_data_to_string();
-  assert_eq!(data, "HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n");
+  assert_eq!(
+    data,
+    "HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n"
+  );
 
   assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
 }

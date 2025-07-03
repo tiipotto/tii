@@ -7,12 +7,19 @@ fn do_abort() -> ! {
   #[cfg(feature = "backtrace")]
   {
     let bt = backtrace::Backtrace::new();
-    crate::error_log!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}", bt);
-    eprintln!("A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={bt:?}");
+    crate::error_log!(
+      "A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={:?}",
+      bt
+    );
+    eprintln!(
+      "A impossible state was reached by the program. Please file a bug report on https://github.com/tiipotto/tii. The program will terminate now. bt={bt:?}"
+    );
     std::process::abort();
   }
   #[cfg(not(feature = "backtrace"))]
-  unreachable!("A condition that should be unreachable was reached. Please enable the 'backtrace' feature on tii for more information and then file a bug report!");
+  unreachable!(
+    "A condition that should be unreachable was reached. Please enable the 'backtrace' feature on tii for more information and then file a bug report!"
+  );
 }
 
 /// Convert a panic message from a catch_unwind or ThreadHandle::join into a str and call the close with it.
