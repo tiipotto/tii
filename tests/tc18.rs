@@ -14,8 +14,8 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_method().as_str(), "QUERY");
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_method().as_str(), "QUERY");
 
   let mut buf = Vec::new();
   let rt = ctx.request_body().unwrap().read_to_end(&mut buf).unwrap();

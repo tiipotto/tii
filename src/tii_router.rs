@@ -317,7 +317,7 @@ impl Routeable {
     route: &RequestContext,
     path_params: &mut Option<HashMap<String, String>>,
   ) -> bool {
-    let mut request_path = route.request_head().get_path();
+    let mut request_path = route.get_path();
     if !request_path.starts_with("/") {
       return false;
     }
@@ -370,18 +370,17 @@ impl Routeable {
   /// Checks whether this route matches the given one, respecting its own wildcards only.
   /// For example, `/blog/*` will match `/blog/my-first-post` but not the other way around.
   pub fn matches(&self, route: &RequestContext) -> RoutingDecision {
-    let head = route.request_head();
     let mut path_params = None;
 
     if !self.matches_path(route, &mut path_params) {
       return RoutingDecision::PathMismatch;
     }
 
-    if &self.method != head.get_method() {
+    if &self.method != route.get_method() {
       return RoutingDecision::MethodMismatch;
     }
 
-    if let Some(content_type) = head.get_content_type() {
+    if let Some(content_type) = route.get_content_type() {
       let mut found = false;
       for mime in &self.consumes {
         if mime.permits_specific(content_type) {
@@ -400,7 +399,7 @@ impl Routeable {
       return RoutingDecision::Match(QValue::MAX, path_params);
     }
 
-    let acc = head.get_accept();
+    let acc = route.get_accept();
     if acc.is_empty() {
       //The client doesn't accept a body.
       return RoutingDecision::MimeMismatch;
@@ -509,7 +508,6 @@ fn websocket_handshake(request: &RequestContext) -> TiiResult<Response> {
 
   // Get the handshake key header
   let handshake_key = request
-    .request_head()
     .get_header("Sec-WebSocket-Key")
     .ok_or(RequestHeadParsingError::MissingSecWebSocketKeyHeader)?;
 
@@ -641,7 +639,7 @@ impl DefaultRouter {
           }
 
           if let Some(enc) = resp.get_body().and_then(|a| a.get_content_encoding()) {
-            if enc == "gzip" && !request.request_head().accepts_gzip() {
+            if enc == "gzip" && !request.accepts_gzip() {
               warn_log!("Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
             }
           }
@@ -758,7 +756,7 @@ impl DefaultRouter {
       if request.get_request_entity().is_none() {
         if let Some(body) = request.request_body() {
           request.set_request_entity(handler.handler.parse_entity(
-            request.request_head().get_content_type().unwrap_or(&MimeType::ApplicationOctetStream),
+            request.get_content_type().unwrap_or(&MimeType::ApplicationOctetStream),
             body,
           )?);
         }

@@ -4,7 +4,7 @@ use tii::extras::{Connector, TcpConnector};
 use tii::{MimeType, RequestContext, Response, ResponseBody, ServerBuilder};
 
 fn in_memory(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  let response_body = format!("Path: {} Hello, World!", request.get_path());
   Response::ok(
     ResponseBody::from_data_with_gzip_in_memory(response_body.as_bytes()),
     MimeType::TextPlain,
@@ -12,7 +12,7 @@ fn in_memory(request: &RequestContext) -> Response {
 }
 
 fn chunked(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  let response_body = format!("Path: {} Hello, World!", request.get_path());
   let a = vec![b'A'; 4096];
   let b = vec![b'B'; 4096];
   let c = vec![b'C'; 4096];

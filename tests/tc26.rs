@@ -10,15 +10,15 @@ use tii::TiiResult;
 mod mock_stream;
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_header("Hdr"), Some("test"));
 
   Ok(Response::ok(ResponseBody::from_slice("Okay!"), MimeType::TextPlain))
 }
 
 fn dummy_route2(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_header("Hdr"), Some("test"));
 
   Ok(Response::ok(ResponseBody::from_slice("\"Nice!\""), MimeType::ApplicationJson))
 }

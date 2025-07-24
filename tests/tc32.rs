@@ -11,14 +11,14 @@ mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
-  if request.request_head().get_path() == "/" {
-    request.request_head_mut().set_header(HttpHeaderName::Accept, "*/*")?;
+  if request.get_path() == "/" {
+    request.set_header(HttpHeaderName::Accept, "*/*")?;
   }
   Ok(())
 }
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(ctx.request_head().get_accept()[0], AcceptQualityMimeType::default());
+  assert_eq!(ctx.get_accept()[0], AcceptQualityMimeType::default());
   Ok(Response::no_content())
 }
 

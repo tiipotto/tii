@@ -5,11 +5,11 @@ use tii::{RequestContext, Response, ServerBuilder};
 mod mock_stream;
 
 fn rewrite_filter(request: &mut RequestContext) {
-  assert_eq!(request.request_head().get_query_param("query"), Some("bla"));
-  request.request_head_mut().set_query(vec![("query".to_string(), "blub".to_string())])
+  assert_eq!(request.get_query_param("query"), Some("bla"));
+  request.set_query(vec![("query".to_string(), "blub".to_string())])
 }
 fn dummy_route(request: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(request.request_head().get_query_param("query"), Some("blub"));
+  assert_eq!(request.get_query_param("query"), Some("blub"));
   Ok(Response::no_content())
 }
 #[test]

@@ -7,7 +7,7 @@ use tii::Response;
 use tii::ServerBuilder;
 
 fn hello_world(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  let response_body = format!("Path: {} Hello, World!", request.get_path());
   Response::ok(response_body, MimeType::TextPlain)
 }
 fn main() {

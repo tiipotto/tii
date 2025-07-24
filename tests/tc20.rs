@@ -12,7 +12,7 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
   Response::new(StatusCode::OK).with_body("Okay!").with_header("Fubar", "Dubar")
 }
 

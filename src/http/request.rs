@@ -294,7 +294,7 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
 impl RequestHead {
   /// Create a new RequestHead programmatically.
   /// This is useful for unit testing endpoints.
-  pub fn new(
+  pub(crate) fn new(
     method: HttpMethod,
     version: HttpVersion,
     path: impl ToString,

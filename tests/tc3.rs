@@ -14,8 +14,8 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_header("Hdr"), Some("test"));
 
   Response::new(StatusCode::OK)
     .with_body(ResponseBody::from_slice("Okay!"))

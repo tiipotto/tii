@@ -9,13 +9,13 @@ use tii::{Response, StatusCode};
 mod mock_stream;
 
 fn add_header_filter(request: &mut RequestContext) -> TiiResult<()> {
-  request.request_head_mut().set_header("custom-header-name", "custom-header-value")
+  request.set_header("custom-header-name", "custom-header-value")
 }
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
-  assert_eq!(ctx.request_head().get_header("custom-header-name"), Some("custom-header-value"));
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_header("Hdr"), Some("test"));
+  assert_eq!(ctx.get_header("custom-header-name"), Some("custom-header-value"));
 
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }

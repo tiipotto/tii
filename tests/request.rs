@@ -79,42 +79,66 @@ fn test_proxied_request_from_stream() {
 
 #[test]
 fn test_mock_request_head() {
-  let mock_head = RequestHead::new(
+  let mock_head = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beep",
     vec![("bep", "bop")],
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap();
   assert_eq!(mock_head.get_raw_status_line(), "GET /beep?bep=bop HTTP/1.1");
-  let mock_head = RequestHead::new(
+  let mock_head = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beepä/bo#ö!/",
     vec![("bepä", "büop")],
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap();
   assert_eq!(
     mock_head.get_raw_status_line(),
     "GET /beep%C3%A4/bo%23%C3%B6%21/?bep%C3%A4=b%C3%BCop HTTP/1.1"
   );
-  let mock_head = RequestHead::new(
+  let mock_head = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beep/bop/",
     vec![("", "büop"), ("", "nop"), ("cop", "")],
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap();
   assert_eq!(mock_head.get_raw_status_line(), "GET /beep/bop/?=b%C3%BCop&=nop&cop HTTP/1.1");
-  let err = RequestHead::new(
+  let err = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "beep/bop/",
     vec![("", "büop"), ("", "nop"), ("cop", "")],
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap_err();
   match err {
@@ -124,33 +148,34 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let mock_context = RequestContext::new(
+  let mock_head = RequestContext::new(
     0,
     "localhost",
     "localhost",
-    mock_head.clone(),
-    None,
-    None,
-    TypeSystem::empty(),
-  );
-  assert_eq!(mock_head, mock_context.request_head().clone());
-
-  let mock_head = RequestHead::new(
     HttpMethod::Get,
     HttpVersion::Http09,
     "/beep/bop/",
     vec![("mep", "mop")],
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap();
   assert_eq!(mock_head.get_raw_status_line(), "GET /beep/bop/?mep=mop");
 
-  let err = RequestHead::new(
+  let err = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Post,
     HttpVersion::Http09,
     "/beep/bop",
     Vec::<(&str, &str)>::new(),
     Vec::new(),
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap_err();
   match err {
@@ -161,12 +186,18 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let err = RequestHead::new(
+  let err = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http09,
     "/beep/bop",
     Vec::<(&str, &str)>::new(),
     vec![HttpHeader::new("abc", "def")],
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap_err();
   match err {
@@ -176,12 +207,18 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let err = RequestHead::new(
+  let err = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beep/bop",
     Vec::<(&str, &str)>::new(),
     vec![HttpHeader::new("Accept", "*//")],
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap_err();
   match err {
@@ -189,12 +226,18 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let err = RequestHead::new(
+  let err = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beep/bop",
     Vec::<(&str, &str)>::new(),
     vec![HttpHeader::new("Content-Type", "*//")],
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap_err();
   match err {
@@ -202,7 +245,10 @@ fn test_mock_request_head() {
     _ => panic!("Unexpected error {err}"),
   }
 
-  let mut mock_head = RequestHead::new(
+  let mut mock_head = RequestContext::new(
+    0,
+    "localhost",
+    "localhost",
     HttpMethod::Get,
     HttpVersion::Http11,
     "/beep/bop",
@@ -211,6 +257,9 @@ fn test_mock_request_head() {
       HttpHeader::new("Content-Type", "text/plain"),
       HttpHeader::new("Accept", "application/json"),
     ],
+    None,
+    None,
+    TypeSystem::empty(),
   )
   .unwrap();
   assert_eq!(
