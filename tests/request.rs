@@ -1,7 +1,6 @@
 mod mock_stream;
 
 use crate::mock_stream::MockStream;
-use tii::RequestHead;
 use tii::{
   AcceptQualityMimeType, Cookie, MimeType, QValue, RequestContext, RequestHeadParsingError,
   TiiError, UserError,
@@ -22,7 +21,7 @@ fn test_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = RequestHead::read(0, raw_stream.as_ref(), 8096);
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();
@@ -43,7 +42,7 @@ fn test_cookie_request() {
   let test_data = b"GET / HTTP/1.1\r\nHost: localhost\r\nCookie: foo=bar; baz=qux\r\n\r\n";
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
-  let request = RequestHead::read(0, raw_stream.as_ref(), 8096).unwrap();
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty()).unwrap();
 
   let mut expected_cookies = vec![Cookie::new("foo", "bar"), Cookie::new("baz", "qux")];
 
@@ -61,7 +60,7 @@ fn test_proxied_request_from_stream() {
   let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
   let raw_stream = stream.clone().into_connection_stream();
 
-  let request = RequestHead::read(0, raw_stream.as_ref(), 8096);
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
 
   let request = request.unwrap();
   let expected_uri: String = "/testpath".into();

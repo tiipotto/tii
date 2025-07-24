@@ -82,7 +82,7 @@ impl HttpVersion {
 /// Represents a request to the server.
 /// Contains parsed information about the request's data.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RequestHead {
+pub(crate) struct RequestHead {
   /// The method used in making the request, e.g. "GET".
   method: HttpMethod,
 

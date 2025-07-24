@@ -105,7 +105,7 @@ where
 /// ```
 /// use tii::MimeType;
 ///
-/// fn handler(_: tii::RequestHead) -> tii::Response {
+/// fn handler(_: tii::RequestContext) -> tii::Response {
 ///     tii::Response::ok("Success", MimeType::TextPlain)
 /// }
 /// ```

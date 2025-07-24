@@ -640,18 +640,6 @@ impl RequestContext {
     caster.call(src, receiver)
   }
 
-  /// Ref to request head.
-  #[deprecated]
-  pub fn request_head(&self) -> &RequestHead {
-    &self.request
-  }
-
-  /// Ref to mutable request head.
-  #[deprecated]
-  pub fn request_head_mut(&mut self) -> &mut RequestHead {
-    &mut self.request
-  }
-
   /// get the http version this request was made in by the client.
   pub fn get_version(&self) -> HttpVersion {
     self.request.get_version()
