@@ -8,10 +8,8 @@ use tii::{AcceptQualityMimeType, MimeType, QValue};
 mod mock_stream;
 
 fn filter(ctx: &mut RequestContext) -> TiiResult<()> {
-  if ctx.request_head().get_path() == "/dummy" {
-    ctx
-      .request_head_mut()
-      .set_accept(vec![AcceptQualityMimeType::from_mime(MimeType::TextPlain, QValue::default())]);
+  if ctx.get_path() == "/dummy" {
+    ctx.set_accept(vec![AcceptQualityMimeType::from_mime(MimeType::TextPlain, QValue::default())]);
   }
 
   Ok(())

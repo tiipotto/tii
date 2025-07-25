@@ -15,11 +15,7 @@ pub fn handle(ctx: &RequestContext) -> Response {
   if ctx.peer_address() == "unix" {
     //Hello unix->/tmp/tii.sock with GET /path HTTP/1.1
     Response::ok(
-      format!(
-        "Hello unix->{} with {}\n",
-        ctx.local_address(),
-        ctx.request_head().get_raw_status_line()
-      ),
+      format!("Hello unix->{} with {}\n", ctx.local_address(), ctx.get_raw_status_line()),
       MimeType::TextPlain,
     )
   } else {
@@ -29,7 +25,7 @@ pub fn handle(ctx: &RequestContext) -> Response {
         "Hello tcp {}->{} with {}\n",
         ctx.peer_address(),
         ctx.local_address(),
-        ctx.request_head().get_raw_status_line()
+        ctx.get_raw_status_line()
       ),
       MimeType::TextPlain,
     )

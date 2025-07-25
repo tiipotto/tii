@@ -5,11 +5,11 @@ use tii::{HttpMethod, RequestContext, Response, ServerBuilder};
 mod mock_stream;
 
 fn rewrite_meth_filter(request: &mut RequestContext) {
-  assert_eq!(request.request_head().get_method().clone(), HttpMethod::Get);
-  request.request_head_mut().set_method(HttpMethod::Put);
+  assert_eq!(request.get_method().clone(), HttpMethod::Get);
+  request.set_method(HttpMethod::Put);
 }
 fn dummy_route_put(request: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(request.request_head().get_method().clone(), HttpMethod::Put);
+  assert_eq!(request.get_method().clone(), HttpMethod::Put);
   Ok(Response::no_content())
 }
 

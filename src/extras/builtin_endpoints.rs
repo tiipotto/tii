@@ -55,11 +55,7 @@ pub fn serve_as_file_path(
 ) -> impl Fn(&RequestContext) -> TiiResult<Response> {
   move |request: &RequestContext| {
     let directory_path = directory_path.strip_suffix('/').unwrap_or(directory_path);
-    let file_path = request
-      .request_head()
-      .get_path()
-      .strip_prefix('/')
-      .unwrap_or(request.request_head().get_path());
+    let file_path = request.get_path().strip_prefix('/').unwrap_or(request.get_path());
     let path = format!("{directory_path}/{file_path}");
 
     let path_buf = PathBuf::from(path);
@@ -77,20 +73,17 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> Ti
   move |request: &RequestContext| {
     let route = request.routed_path();
     let route_without_wildcard = route.strip_suffix('*').unwrap_or(route);
-    let uri_without_route = request
-      .request_head()
-      .get_path()
-      .strip_prefix(route_without_wildcard)
-      .unwrap_or(request.routed_path());
+    let uri_without_route =
+      request.get_path().strip_prefix(route_without_wildcard).unwrap_or(request.routed_path());
 
     let located = try_find_path(directory_path, uri_without_route, &INDEX_FILES);
 
     if let Some(located) = located {
       match located {
-        LocatedPath::Directory => Ok(Response::new(StatusCode::MovedPermanently).with_header(
-          HttpHeaderName::Location,
-          format!("{}/", &request.request_head().get_path()),
-        )?),
+        LocatedPath::Directory => Ok(
+          Response::new(StatusCode::MovedPermanently)
+            .with_header(HttpHeaderName::Location, format!("{}/", &request.get_path()))?,
+        ),
         LocatedPath::File(path) => try_file_open(&path),
       }
     } else {

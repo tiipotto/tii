@@ -12,8 +12,8 @@ mod mock_stream;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn filter_set_accept(request: &mut RequestContext) -> TiiResult<()> {
-  if request.request_head().get_path() == "/" {
-    request.request_head_mut().set_header(HttpHeaderName::ContentType, "text/plain")?;
+  if request.get_path() == "/" {
+    request.set_header(HttpHeaderName::ContentType, "text/plain")?;
   }
   Ok(())
 }
@@ -25,7 +25,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   assert_eq!(String::from_utf8(v).unwrap(), "{}");
 
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(ctx.request_head().get_content_type().unwrap(), &MimeType::TextPlain);
+  assert_eq!(ctx.get_content_type().unwrap(), &MimeType::TextPlain);
   Ok(Response::no_content())
 }
 

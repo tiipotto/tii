@@ -4,7 +4,7 @@ use tii::{RequestContext, Response, ServerBuilder};
 
 mod mock_stream;
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  let q = ctx.request_head().get_query();
+  let q = ctx.get_query();
   assert_eq!(q[0], ("quer•y".to_string(), "bla ".to_string()));
   assert_eq!(q[1], ("q".to_string(), "2 ".to_string()));
   Ok(Response::no_content())

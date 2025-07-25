@@ -47,7 +47,6 @@ fn home(_: &RequestContext) -> TiiResult<Response> {
 
 fn wildcard(request: &RequestContext) -> TiiResult<Response> {
   let wildcard_path = request
-    .request_head()
     .get_path() // get the URI of the request
     .strip_prefix("/wildcard/") // remove the initial slash
     .unwrap(); // unwrap from the option

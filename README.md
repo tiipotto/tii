@@ -13,7 +13,7 @@ use std::time::Duration;
 use tii::{MimeType, RequestContext, Response, ServerBuilder};
 
 fn hello_world(request: &RequestContext) -> Response {
-  let response_body = format!("Path: {} Hello, World!", request.request_head().get_path());
+  let response_body = format!("Path: {} Hello, World!", request.get_path());
   Response::ok(response_body, MimeType::TextPlain)
 }
 

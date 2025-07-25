@@ -82,7 +82,7 @@ impl HttpVersion {
 /// Represents a request to the server.
 /// Contains parsed information about the request's data.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RequestHead {
+pub(crate) struct RequestHead {
   /// The method used in making the request, e.g. "GET".
   method: HttpMethod,
 
@@ -294,7 +294,7 @@ fn parse_raw_query(raw_query: &str) -> TiiResult<Vec<(String, String)>> {
 impl RequestHead {
   /// Create a new RequestHead programmatically.
   /// This is useful for unit testing endpoints.
-  pub fn new(
+  pub(crate) fn new(
     method: HttpMethod,
     version: HttpVersion,
     path: impl ToString,

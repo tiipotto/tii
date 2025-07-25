@@ -5,11 +5,11 @@ use tii::{RequestContext, Response, ServerBuilder};
 mod mock_stream;
 
 fn rewrite_filter(request: &mut RequestContext) {
-  assert_eq!(request.request_head().get_path(), "/two");
-  request.request_head_mut().set_path("/one");
+  assert_eq!(request.get_path(), "/two");
+  request.set_path("/one");
 }
 fn dummy_route_one(request: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(request.request_head().get_path(), "/one");
+  assert_eq!(request.get_path(), "/one");
   Ok(Response::no_content())
 }
 

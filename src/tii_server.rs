@@ -198,8 +198,8 @@ impl Server {
       stream.set_read_timeout(self.request_body_io_timeout)?;
 
       // If the request is valid an is a WebSocket request, call the corresponding handler
-      if context.request_head().get_version() == HttpVersion::Http11
-        && context.request_head().get_header(&HttpHeaderName::Upgrade) == Some("websocket")
+      if context.get_version() == HttpVersion::Http11
+        && context.get_header(&HttpHeaderName::Upgrade) == Some("websocket")
       {
         //Http 1.0 or 0.9 does not have web sockets
 
@@ -233,12 +233,11 @@ impl Server {
       // Will we do keep alive?
       let mut keep_alive = !self.is_shutdown()
           // is this http 1.1 because earlier does not support it.
-          && context.request_head().get_version() == HttpVersion::Http11
+          && context.get_version() == HttpVersion::Http11
           // Do we have a keep alive timeout that is not zero?
           && self.keep_alive_timeout.as_ref().map(|a| !a.is_zero()).unwrap_or(true)
           // did the client tell us not to do keep alive?
           && context
-            .request_head()
             .get_header(&HttpHeaderName::Connection)
             .map(|e| e.eq_ignore_ascii_case("keep-alive"))
             .unwrap_or_default();
@@ -328,7 +327,7 @@ impl Server {
     keep_alive: bool,
     mut response: Response,
   ) -> TiiResult<()> {
-    if request.request_head().get_version() == HttpVersion::Http11 {
+    if request.get_version() == HttpVersion::Http11 {
       let previous_headers = if keep_alive {
         response.headers.replace_all(HttpHeaderName::Connection, "Keep-Alive")
       } else {
@@ -355,7 +354,7 @@ impl Server {
     );
 
     if let Some(enc) = response.get_body().and_then(|a| a.get_content_encoding()) {
-      if enc == "gzip" && !request.request_head().accepts_gzip() {
+      if enc == "gzip" && !request.accepts_gzip() {
         warn_log!("tii: Request {} responding with gzip even tho client doesnt indicate that it can understand gzip.", request.id());
       }
     }
@@ -363,11 +362,11 @@ impl Server {
     #[cfg(feature = "log")]
     let status = response.get_status_code_number();
 
-    response
-      .write_to(request.id(), request.request_head().get_version(), stream.as_stream_write())
-      .inspect_err(|e| {
+    response.write_to(request.id(), request.get_version(), stream.as_stream_write()).inspect_err(
+      |e| {
         error_log!("tii: Request {} response.write_to error={}", request.id(), e);
-      })?;
+      },
+    )?;
 
     #[cfg(feature = "log")]
     {
@@ -380,8 +379,8 @@ impl Server {
         "tii: Request {} from {} to {} {} ({}) served in {}ms",
         request.id(),
         request.peer_address(),
-        request.request_head().get_method(),
-        request.request_head().get_path(),
+        request.get_method(),
+        request.get_path(),
         status,
         diff
       );
@@ -397,8 +396,8 @@ impl Server {
     error_log!(
       "tii: Request {} Error handler failed. Will respond with empty Internal Server Error {} {} {:?}",
       request.id(),
-      &request.request_head().get_method(),
-      request.request_head().get_path(),
+      &request.get_method(),
+      request.get_path(),
       error
     );
 

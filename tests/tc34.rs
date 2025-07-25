@@ -14,15 +14,14 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http09, ctx.request_head().get_version());
-  assert!(ctx.request_head().iter_headers().next().is_none());
-  let hdr_clone = ctx.request_head().clone();
-  assert!(hdr_clone.iter_headers().next().is_none());
-  assert_eq!(hdr_clone.get_raw_status_line(), "GET /dummy");
-  assert_eq!(hdr_clone.get_version(), HttpVersion::Http09);
-  assert_eq!(hdr_clone.get_path(), "/dummy");
-  assert_eq!(hdr_clone.get_method(), &HttpMethod::Get);
-  assert_eq!(hdr_clone.get_query().len(), 0);
+  assert_eq!(HttpVersion::Http09, ctx.get_version());
+  assert!(ctx.iter_headers().next().is_none());
+  assert!(ctx.iter_headers().next().is_none());
+  assert_eq!(ctx.get_raw_status_line(), "GET /dummy");
+  assert_eq!(ctx.get_version(), HttpVersion::Http09);
+  assert_eq!(ctx.get_path(), "/dummy");
+  assert_eq!(ctx.get_method(), &HttpMethod::Get);
+  assert_eq!(ctx.get_query().len(), 0);
   Ok(Response::new(StatusCode::OK).with_body(ResponseBody::from_slice("Okay!")))
 }
 

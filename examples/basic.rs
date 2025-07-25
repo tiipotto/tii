@@ -49,10 +49,7 @@ fn main() -> TiiResult<()> {
             //You don't have to pass a function pointer, if your endpoint is tiny you can also do it in a closure
             //You do have to explicitly write out "&RequestContext" tho otherwise rust gets confused.
             .endpoint(|ctx: &RequestContext| {
-              Response::ok(
-                format!("This is a closure to {}!", ctx.request_head().get_path()),
-                MimeType::TextPlain,
-              )
+              Response::ok(format!("This is a closure to {}!", ctx.get_path()), MimeType::TextPlain)
             })?
             .get("/*")
             .produces(MimeType::TextHtml)
@@ -95,10 +92,8 @@ fn contact(_: &RequestContext) -> TiiResult<Response> {
 }
 
 fn generic(request: &RequestContext) -> TiiResult<Response> {
-  let html = format!(
-    "<html><body><h1>You just requested {}.</h1></body></html>",
-    request.request_head().get_path()
-  );
+  let html =
+    format!("<html><body><h1>You just requested {}.</h1></body></html>", request.get_path());
 
   Ok(Response::ok(html, MimeType::TextHtml))
 }
@@ -116,7 +111,7 @@ fn pong(request: &RequestContext) -> TiiResult<Response> {
 }
 
 fn echo_method(request: &RequestContext) -> Response {
-  Response::ok(request.request_head().get_method().as_str(), MimeType::TextPlain)
+  Response::ok(request.get_method().as_str(), MimeType::TextPlain)
 }
 
 fn path_param(request: &RequestContext) -> Response {

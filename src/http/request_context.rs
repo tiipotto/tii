@@ -9,7 +9,8 @@ use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
 use crate::{
-  debug_log, error_log, trace_log, util, warn_log, TypeSystem, TypeSystemError, UserError,
+  debug_log, error_log, trace_log, util, warn_log, AcceptQualityMimeType, Cookie, HttpHeader,
+  HttpMethod, MimeType, TypeSystem, TypeSystemError, UserError,
 };
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -43,16 +44,23 @@ pub struct RequestContext {
 impl RequestContext {
   /// Create a new RequestContext programmatically.
   /// This is useful for unit testing endpoints.
+  /// # Errors
+  /// return Err if the path/query/hears etc. are not valid is not a valid
+  #[allow(clippy::too_many_arguments)] //For unit test and mocking only.
   pub fn new(
     id: u128,
     peer_address: impl ToString,
     local_address: impl ToString,
-    head: RequestHead,
+    method: HttpMethod,
+    version: HttpVersion,
+    path: impl ToString,
+    query: Vec<(impl ToString, impl ToString)>,
+    headers: Vec<HttpHeader>,
     body: Option<RequestBody>,
     stream_meta: Option<Arc<dyn ConnectionStreamMetadata>>,
     type_system: TypeSystem,
-  ) -> Self {
-    Self {
+  ) -> TiiResult<Self> {
+    Ok(Self {
       id,
       timestamp: SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -60,7 +68,7 @@ impl RequestContext {
         .unwrap_or(0),
       peer_address: peer_address.to_string(),
       local_address: local_address.to_string(),
-      request: head,
+      request: RequestHead::new(method, version, path, query, headers)?,
       body,
       request_entity: None,
       force_connection_close: false,
@@ -69,7 +77,7 @@ impl RequestContext {
       path_params: None,
       properties: None,
       type_system,
-    }
+    })
   }
 
   #[allow(clippy::too_many_arguments)]
@@ -632,14 +640,151 @@ impl RequestContext {
     caster.call(src, receiver)
   }
 
-  /// Ref to request head.
-  pub fn request_head(&self) -> &RequestHead {
-    &self.request
+  /// get the http version this request was made in by the client.
+  pub fn get_version(&self) -> HttpVersion {
+    self.request.get_version()
   }
 
-  /// Ref to mutable request head.
-  pub fn request_head_mut(&mut self) -> &mut RequestHead {
-    &mut self.request
+  /// Returns the raw status line.
+  pub fn get_raw_status_line(&self) -> &str {
+    self.request.get_raw_status_line()
+  }
+
+  /// Returns the path the request will be routed to This should not contain any url encoding.
+  pub fn get_path(&self) -> &str {
+    self.request.get_path()
+  }
+
+  /// Sets the path the request will be routed to. This should not contain any url encoding.
+  pub fn set_path(&mut self, path: impl ToString) {
+    self.request.set_path(path)
+  }
+
+  /// Gets the query parameters.
+  pub fn get_query(&self) -> &[(String, String)] {
+    self.request.get_query()
+  }
+
+  /// Gets the mutable Vec that contains the query parameters.
+  pub fn query_mut(&mut self) -> &mut Vec<(String, String)> {
+    self.request.query_mut()
+  }
+
+  /// Set the query parameters
+  pub fn set_query(&mut self, query: Vec<(String, String)>) {
+    self.request.set_query(query)
+  }
+
+  /// Add a query parameter. Existing query parameters with the same key are not touched.
+  pub fn add_query_param(&mut self, key: impl ToString, value: impl ToString) {
+    self.request.add_query_param(key, value)
+  }
+
+  /// Removes all query parameters that match the given key. Returns the removed values.
+  pub fn remove_query_params(&mut self, key: impl AsRef<str>) -> Vec<String> {
+    self.request.remove_query_params(key)
+  }
+
+  /// Removes all instances of the query parameter with the given key if there are any and adds a new query parameter with the given key and value to the end of the query parameters.
+  ///
+  /// If the key already has the value then its position is retained. All other values for the key are still removed.
+  ///
+  /// Returns the removed values.
+  pub fn set_query_param(&mut self, key: impl ToString, value: impl ToString) -> Vec<String> {
+    self.request.set_query_param(key, value)
+  }
+
+  /// Gets the first query parameter with the given key.
+  pub fn get_query_param(&self, key: impl AsRef<str>) -> Option<&str> {
+    self.request.get_query_param(key)
+  }
+
+  /// Gets all query params in order of appearance that contain the given key. Returns empty vec if the key doesn’t exist.
+  pub fn get_query_params(&self, key: impl AsRef<str>) -> Vec<&str> {
+    self.request.get_query_params(key)
+  }
+
+  /// gets the method of the request.
+  pub fn get_method(&self) -> &HttpMethod {
+    self.request.get_method()
+  }
+
+  /// Changes the method of the request
+  pub fn set_method(&mut self, method: HttpMethod) {
+    self.request.set_method(method)
+  }
+
+  /// Get the cookies from the request.
+  pub fn get_cookies(&self) -> Vec<Cookie> {
+    self.request.get_cookies()
+  }
+
+  /// Attempts to get a specific cookie from the request.
+  pub fn get_cookie(&self, name: impl AsRef<str>) -> Option<Cookie> {
+    self.request.get_cookie(name)
+  }
+
+  /// Manipulates the accept header values. This also overwrites the actual accept header!
+  pub fn set_accept(&mut self, types: Vec<AcceptQualityMimeType>) {
+    self.request.set_accept(types)
+  }
+
+  /// Returns the content type of the body if any.
+  /// This is usually equivalent to parsing the raw get_header() value of Content-Type.
+  /// The only case where this is different is if the request as received from the network had an invalid Content-Type value then this value is ApplicationOctetStream even tho the raw header value is different.
+  /// This returns none if the Content-Type header was not present at all. (For example ordinary GET requests do not have this header)
+  pub fn get_content_type(&self) -> Option<&MimeType> {
+    self.request.get_content_type()
+  }
+
+  /// sets the content type header to given MimeType. This will affect both the header and the return value of get_content_type.
+  pub fn set_content_type(&mut self, content_type: MimeType) {
+    self.request.set_content_type(content_type)
+  }
+
+  /// Removes the content type header. get_content_type will return None after this call.
+  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+    self.request.remove_content_type()
+  }
+
+  /// Returns the acceptable mime types
+  pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
+    self.request.get_accept()
+  }
+
+  /// Returns an iterator over all headers.
+  pub fn iter_headers(&self) -> impl Iterator<Item = &HttpHeader> {
+    self.request.iter_headers()
+  }
+
+  /// Returns the first header or None
+  pub fn get_header(&self, name: impl AsRef<str>) -> Option<&str> {
+    self.request.get_header(name)
+  }
+
+  /// Returns true if the client indicates that it accepts gzip.
+  pub fn accepts_gzip(&self) -> bool {
+    self.request.accepts_gzip()
+  }
+
+  /// Returns the all header values or empty Vec.
+  pub fn get_headers(&self, name: impl AsRef<str>) -> Vec<&str> {
+    self.request.get_headers(name)
+  }
+
+  /// Sets the header value. Some header values cannot be modified through this fn and attempting to change them will result in Err.
+  pub fn remove_headers(&mut self, hdr: impl AsRef<str>) -> TiiResult<()> {
+    self.request.remove_headers(hdr)
+  }
+
+  /// Sets the header value. Some header values cannot be modified through this fn and attempting to change them will result in Err.
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+    self.request.set_header(hdr, value)
+  }
+
+  /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+    self.request.add_header(hdr, value)
   }
 
   /// Ref to body.

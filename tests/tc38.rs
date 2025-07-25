@@ -8,7 +8,7 @@ use tii::{MimeType, RequestContext, RequestHeadParsingError, TiiError};
 mod mock_stream;
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  Ok(Response::ok(format!("Okay! {}", ctx.request_head().get_path()), MimeType::TextPlain))
+  Ok(Response::ok(format!("Okay! {}", ctx.get_path()), MimeType::TextPlain))
 }
 
 #[test]

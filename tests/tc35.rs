@@ -13,7 +13,7 @@ fn dummy_route(_ctx: &RequestContext) -> TiiResult<Response> {
 }
 
 fn dummy_route2(ctx: &RequestContext) -> Response {
-  Response::ok(format!("{:?}", ctx.request_head().get_query()), MimeType::TextPlain)
+  Response::ok(format!("{:?}", ctx.get_query()), MimeType::TextPlain)
 }
 
 #[test]

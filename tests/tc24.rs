@@ -13,8 +13,8 @@ mod mock_stream;
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
-  assert_eq!(ctx.request_head().get_header("Hdr"), Some("test"));
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
+  assert_eq!(ctx.get_header("Hdr"), Some("test"));
   let mut body = Vec::new();
   ctx.request_body().unwrap().read_to_end(&mut body)?;
   assert_eq!(body.as_slice(), b"ABCDEF");

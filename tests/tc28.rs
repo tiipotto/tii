@@ -9,7 +9,7 @@ use tii::{Response, StatusCode};
 mod mock_stream;
 
 fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
-  assert_eq!(HttpVersion::Http11, ctx.request_head().get_version());
+  assert_eq!(HttpVersion::Http11, ctx.get_version());
   assert_eq!(ctx.get_path_param("param1"), Some("p1"));
   assert_eq!(ctx.get_path_param("param2"), Some("p2"));
   let regex1 = ctx.get_path_param("regex1").unwrap();
