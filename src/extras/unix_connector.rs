@@ -157,22 +157,35 @@ impl UnixConnectorInner {
           done_clone.store(true, Ordering::SeqCst);
         }
         match stream {
-          Ok(stream) => match server_clone.handle_connection_with_meta(stream, ConnectorMeta::Unix)
-          {
-            Ok(_) => {
-              info_log!(
+          Ok(stream) => {
+            // This is probably not needed, but at this point I don't trust the std lib enough anymore.
+            // See https://github.com/rust-lang/rust/issues/67027
+            if let Err(err) = stream.set_nonblocking(false) {
+              error_log!(
+                  "tii: unix_connector[{}]: connection {} failed to call UnixStream::set_nonblocking(false) err={}",
+                  path_clone.display(),
+                  this_connection,
+                  err);
+              return;
+            }
+
+            match server_clone.handle_connection_with_meta(stream, ConnectorMeta::Unix)
+            {
+              Ok(_) => {
+                info_log!(
                 "tii: unix_connector[{}]: connection {this_connection} processed successfully",
                 path_clone.display()
               );
-            }
-            Err(err) => {
-              // User code errored, like return Err in an Error handler.
-              error_log!(
+              }
+              Err(err) => {
+                // User code errored, like return Err in an Error handler.
+                error_log!(
                 "tii: unix_connector[{}]: connection {} tii server returned err={}",
                 path_clone.display(),
                 this_connection,
                 err
               );
+              }
             }
           },
           Err(err) => {

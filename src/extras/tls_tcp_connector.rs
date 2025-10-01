@@ -79,6 +79,19 @@ impl TlsTcpConnectorInner {
         }
         match stream {
           Ok(stream) => {
+            // Why are we even using the standard library at this point whe it's non-portable.
+            // This call is not needed on linux but is needed on windows.
+            // See https://github.com/rust-lang/rust/issues/67027
+            if let Err(err) = stream.set_nonblocking(false) {
+              error_log!(
+                  "tii: tls_tcp_connector[{}]: connection {} failed to call TcpStream::set_nonblocking(false) err={}",
+                  path_clone,
+                  this_connection,
+                  err
+                );
+              return;
+            }
+
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
                 match TlsStream::create(
