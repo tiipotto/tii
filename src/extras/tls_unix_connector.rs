@@ -161,6 +161,17 @@ impl TlsUnixConnectorInner {
         }
         match stream {
           Ok(stream) => {
+            // This is probably not needed, but at this point I don't trust the std lib enough anymore.
+            // See https://github.com/rust-lang/rust/issues/67027
+            if let Err(err) = stream.set_nonblocking(false) {
+              error_log!(
+                  "tii: tls_unix_connector[{}]: connection {} failed to call UnixStream::set_nonblocking(false) err={}",
+                  path_clone.display(),
+                  this_connection,
+                  err);
+              return;
+            }
+
             let tls_stream = match ServerConnection::new(tls_config) {
               Ok(tls_con) => {
                 match TlsStream::create(
