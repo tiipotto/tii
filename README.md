@@ -274,14 +274,19 @@ Stability is not guaranteed (functionality may be moved to another crate or func
 
 Nothing in Tii will ever depend on anything in `extras`.
 
-## Fuzzing
-WIP
+## WIP Fuzzing
+https://github.com/crossbario/autobahn-testsuite
+```bash
+mkdir reports
+cargo run --example echo_server --features extras
 podman run -it --rm \
     -v (pwd)/config:/config:z \
     -v (pwd)/reports:/reports:z \
     --network host \
     --name fuzzingserver \
-    crossbario/autobahn-testsuite bash
+    crossbario/autobahn-testsuite \
+    wstest -m fuzzingclient -s config/fuzzingclient.json
+```
 
 ## Special Thanks
 - [Humphrey](https://github.com/w-henderson/Humphrey)
