@@ -35,6 +35,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
+          cd tii_examples
           cargo run --example shutdown --features extras,log --target ${{ matrix.target }}
 
   valgrind_linux:
@@ -57,12 +58,14 @@ jobs:
           toolchain: 1.86
       - name: 64-bit Valgrind
         run: |
-          cargo build --examples --features extras,log
+          cargo valgrind test --all-features
+          cd tii_examples
+          cargo build --examples
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_multiple
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_unix
           valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/websocket_broadcast 5
-          cargo valgrind test --all-features
+  
 
   build_linux:
     name: Build Linux
@@ -101,6 +104,7 @@ jobs:
       - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
+          cd tii_examples
           cargo build --examples --all-features --target ${{ matrix.target }}
         if: ${{ !(contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')) }}
       - name: Build with no and default features
@@ -141,6 +145,7 @@ jobs:
         run: |
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --no-default-features --target ${{ matrix.target }}
+          cd tii_examples
           cargo build --examples --target ${{ matrix.target }}
 
   test_windows:
@@ -176,6 +181,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
+          cd tii_examples
           cargo run --example shutdown --features extras,log --target ${{ matrix.target }}
 
   fmt:
@@ -186,7 +192,10 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: rustfmt
-        - run: cargo fmt --check
+        - run: |
+            cargo fmt --check
+            cd tii_examples
+            cargo fmt --check
 
   clippy_check:
       name: clippy
@@ -199,6 +208,7 @@ jobs:
             toolchain: 1.86
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
+        - run: cd tii_examples && cargo clippy -- --deny warnings
 
   docs_check:
       name: docs

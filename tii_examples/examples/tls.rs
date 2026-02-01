@@ -13,14 +13,14 @@ use tii::ServerBuilder;
 use tii::TiiResult;
 
 fn load_certs() -> Vec<CertificateDer<'static>> {
-  let keyfile = include_bytes!("./ssl/cert.pem").to_vec(); //Use a real cert!
+  let keyfile = include_bytes!("ssl/cert.pem").to_vec(); //Use a real cert!
   let mut reader = BufReader::new(Cursor::new(keyfile));
   let n: Vec<_> = certs(&mut reader).map(|e| e.unwrap()).collect();
   n
 }
 
 fn load_private_key() -> PrivateKeyDer<'static> {
-  let keyfile = include_bytes!("./ssl/key.pem").to_vec(); //Use a real key!
+  let keyfile = include_bytes!("ssl/key.pem").to_vec(); //Use a real key!
 
   let mut reader = BufReader::new(Cursor::new(keyfile));
   private_key(&mut reader)
