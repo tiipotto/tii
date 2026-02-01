@@ -2,6 +2,7 @@
 name = "tii_examples"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.86"
 
 [dependencies]
 tii = {path = "..", features = ["extras", "log", "tls"]}
@@ -14,6 +15,15 @@ log = "*"
 
 [target.'cfg(any(target_arch="x86_64", target_arch="aarch64"))'.dependencies]
 rustls-graviola = "=0.2.1" # Newer version requires newer rust compiler which leaks memory
+
+[lints.rust]
+future-incompatible = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "deny"
+
+[lints.clippy]
+indexing_slicing = "warn"
+unwrap_used = "warn"
 
 [[example]]
 name = "basic"
