@@ -16,6 +16,7 @@ fn to_json<T: Serialize>(mime: &MimeType, data: T) -> TiiResult<Vec<u8>> {
       format!("Only application/json mime type is supported got {mime}"),
     ))?
   }
+
   Ok(serde_json::to_vec(&data)?)
 }
 

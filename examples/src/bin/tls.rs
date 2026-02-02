@@ -1,26 +1,26 @@
 use log::info;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile::{certs, private_key};
 use std::io::{BufReader, Cursor};
 use std::sync::Arc;
-use tii::extras;
-use tii::extras::{Connector, ConnectorMeta};
 use tii::MimeType;
 use tii::RequestContext;
 use tii::Response;
 use tii::ServerBuilder;
 use tii::TiiResult;
+use tii::extras;
+use tii::extras::{Connector, ConnectorMeta};
 
 fn load_certs() -> Vec<CertificateDer<'static>> {
-  let keyfile = include_bytes!("./ssl/cert.pem").to_vec(); //Use a real cert!
+  let keyfile = include_bytes!("ssl/cert.pem").to_vec(); //Use a real cert!
   let mut reader = BufReader::new(Cursor::new(keyfile));
   let n: Vec<_> = certs(&mut reader).map(|e| e.unwrap()).collect();
   n
 }
 
 fn load_private_key() -> PrivateKeyDer<'static> {
-  let keyfile = include_bytes!("./ssl/key.pem").to_vec(); //Use a real key!
+  let keyfile = include_bytes!("ssl/key.pem").to_vec(); //Use a real key!
 
   let mut reader = BufReader::new(Cursor::new(keyfile));
   private_key(&mut reader)

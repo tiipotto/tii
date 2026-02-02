@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use log::{info, LevelFilter};
-use tii::extras::{builtin_endpoints, Connector, TcpConnector};
+use log::{LevelFilter, info};
+use tii::extras::{Connector, TcpConnector, builtin_endpoints};
 use tii::{
   ReadMessageTimeoutResult, RequestContext, ServerBuilder, TiiResult, WebsocketMessage,
   WebsocketReceiver, WebsocketSender,
@@ -46,14 +46,16 @@ fn echo_handler(
   {
     let sender = sender.clone();
     info!("Starting ping handler thread to ping client every 30s");
-    std::thread::spawn(move || loop {
-      std::thread::sleep(Duration::from_millis(30_000));
-      if sender.is_closed() {
-        info!("WebsocketSender is closed, ping handler bailing out...");
-        return;
+    std::thread::spawn(move || {
+      loop {
+        std::thread::sleep(Duration::from_millis(30_000));
+        if sender.is_closed() {
+          info!("WebsocketSender is closed, ping handler bailing out...");
+          return;
+        }
+        info!("30 seconds have elapsed, sending ping to client...");
+        sender.ping().expect("async ping handler failed");
       }
-      info!("30 seconds have elapsed, sending ping to client...");
-      sender.ping().expect("async ping handler failed");
     });
   }
 

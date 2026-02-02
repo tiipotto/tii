@@ -4,7 +4,7 @@ tii is currently under active development.
 While it does work, large amounts of breaking changes are expected.
 
 ## Quick Start
-For a larger example that uses most features of tii see [basic](./examples/basic.rs). There are many more [examples](./examples).
+For a larger example that uses most features of tii see [basic](./examples/src/bin/basic.rs). There are many more [examples](./examples/src/bin).
 
 ```rust no_run
 use std::net::TcpListener;

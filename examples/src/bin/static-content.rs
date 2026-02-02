@@ -4,7 +4,7 @@
 //! This example must be run from the `static-content` directory to successfully find the paths.
 //! This is because content is found relative to the CWD instead of the binary.
 
-use tii::extras::{builtin_endpoints, Connector, TcpConnector};
+use tii::extras::{Connector, TcpConnector, builtin_endpoints};
 
 use tii::ServerBuilder;
 use tii::TiiResult;

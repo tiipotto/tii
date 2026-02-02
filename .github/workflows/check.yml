@@ -35,7 +35,8 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --features extras,log --target ${{ matrix.target }}
+          cd examples
+          cargo run --bin shutdown --target ${{ matrix.target }}
 
   valgrind_linux:
     name: Valgrind
@@ -57,12 +58,14 @@ jobs:
           toolchain: 1.86
       - name: 64-bit Valgrind
         run: |
-          cargo build --examples --features extras,log
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_multiple
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/shutdown_unix
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/examples/websocket_broadcast 5
           cargo valgrind test --all-features
+          cd examples
+          cargo build
+          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown
+          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown_multiple
+          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown_unix
+          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/websocket_broadcast 5
+
 
   build_linux:
     name: Build Linux
@@ -101,7 +104,8 @@ jobs:
       - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
-          cargo build --examples --all-features --target ${{ matrix.target }}
+          cd examples
+          cargo build --all-features --target ${{ matrix.target }}
         if: ${{ !(contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')) }}
       - name: Build with no and default features
         run: |
@@ -141,7 +145,8 @@ jobs:
         run: |
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --no-default-features --target ${{ matrix.target }}
-          cargo build --examples --target ${{ matrix.target }}
+          cd examples
+          cargo build --target ${{ matrix.target }}
 
   test_windows:
     name: Test Windows
@@ -176,7 +181,8 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example shutdown --features extras,log --target ${{ matrix.target }}
+          cd examples
+          cargo run --bin shutdown --target ${{ matrix.target }}
 
   fmt:
       runs-on: ubuntu-latest
@@ -186,7 +192,10 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: rustfmt
-        - run: cargo fmt --check
+        - run: |
+            cargo fmt --check
+            cd examples
+            cargo fmt --check
 
   clippy_check:
       name: clippy
@@ -199,6 +208,7 @@ jobs:
             toolchain: 1.86
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
+        - run: cd examples && cargo clippy -- --deny warnings
 
   docs_check:
       name: docs
