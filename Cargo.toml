@@ -15,7 +15,7 @@ rust-version = "1.86"
 [dependencies]
 backtrace = { version = "0.3.76", optional = true }
 tii-procmacro = { version = "0.0.2" }
-getrandom = { version = "0.3", optional = true }
+getrandom = { version = "0.4", optional = true }
 log = { version = "^0.4.29", optional = true }
 unowned-buf = "0.1.2"
 urlencoding = "2.1.3"
