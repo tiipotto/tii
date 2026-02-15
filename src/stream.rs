@@ -1,6 +1,4 @@
 //! Provides a wrapper around the stream to allow for simpler APIs.
-//! TODO docs before release
-#![allow(missing_docs)]
 
 use std::fmt::Debug;
 use std::io;
@@ -16,21 +14,31 @@ use std::time::Duration;
 /// Separate concurrent calls to read and write must be possible independent of each other.
 ///
 /// The implementation of this trait can assume that multiple concurrent calls to either read or write are not made.
+/// Most implementations can therefore choose a simple Mutex to synchronize for each end of the stream and not expect much if any contention.
 ///
-/// How concurrent invocations of set_read_timeout/set_write_timeout are handled is implementation and platform specific.
+/// In general, tii requires a stream to be reference counted; all the "ref" related functions relate to this.
+///
+/// How concurrent invocations of set_read_timeout/set_write_timeout are handled is implementation- and platform-specific.
 /// Possible outcomes are:
 /// - blocking read/write calls are canceled (fail with an error)
 /// - set_read_timeout/set_write_timeout blocks until read/write calls are finished
-/// - set_read_timeout/set_write_timeout only applies for future invocations of read/write and current invocations are left as is and will keep blocking.
+/// - set_read_timeout/set_write_timeout only applies for future invocations of read/write, and current invocations are left as is and will keep blocking.
 ///
 ///
 pub trait ConnectionStream: ConnectionStreamRead + ConnectionStreamWrite {
+  /// create a new detached reference to the stream.
   fn new_ref(&self) -> Box<dyn ConnectionStream>;
 
+  /// String representation of the remote address.
+  /// Only intended for debugging/logging purposes.
   fn peer_addr(&self) -> io::Result<String>;
+
+  /// String representation of the local address.
+  /// Only intended for debugging/logging purposes.
   fn local_addr(&self) -> io::Result<String>;
 }
 
+/// Reading end of a stream
 pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
   ///De-mut of Read
   fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
@@ -60,17 +68,23 @@ pub trait ConnectionStreamRead: Sync + Send + Debug + Read {
   ///De-mut of Read
   fn read_exact(&self, buf: &mut [u8]) -> io::Result<()>;
 
+  /// Create a new detached reference to the reading end of the stream
   fn new_ref_read(&self) -> Box<dyn Read + Send + Sync>;
 
+  /// Dyn-cast
   fn as_stream_read(&self) -> &dyn ConnectionStreamRead;
 
+  /// Create a new detached reference to the reading end of the stream
   fn new_ref_stream_read(&self) -> Box<dyn ConnectionStreamRead>;
 
+  /// Sets the read timeout of the stream
   fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 
+  /// Gets the read timeout of the stream
   fn get_read_timeout(&self) -> io::Result<Option<Duration>>;
 }
 
+/// Writing end of the stream
 pub trait ConnectionStreamWrite: Sync + Send + Debug + Write {
   ///De-mut of Write
   fn write(&self, buf: &[u8]) -> io::Result<usize>;
@@ -80,23 +94,31 @@ pub trait ConnectionStreamWrite: Sync + Send + Debug + Write {
   ///De-mut of Write
   fn flush(&self) -> io::Result<()>;
 
+  /// Set the write timeout of the stream
   fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 
+  /// Return the write timeout of the stream
   fn get_write_timeout(&self) -> io::Result<Option<Duration>>;
 
+  /// Create a new detached reference to the writing end of the stream
   fn new_ref_write(&self) -> Box<dyn Write + Send + Sync>;
 
+  /// Create a new detached reference to the writing end of the stream
   fn new_ref_stream_write(&self) -> Box<dyn ConnectionStreamWrite>;
+
+  /// Dyn-cast
   fn as_stream_write(&self) -> &dyn ConnectionStreamWrite;
 }
 
+/// This type should be implemented for all types that can be turned into a connection for tii to use.
 pub trait IntoConnectionStream {
+  /// Turn the type into a connection for tii to use.
   fn into_connection_stream(self) -> Box<dyn ConnectionStream>;
 }
 
 impl IntoConnectionStream for TcpStream {
   fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
-    tcp::new(self)
+    tcp::new(self, &[])
   }
 }
 
@@ -112,6 +134,22 @@ impl IntoConnectionStream for (Box<dyn Read + Send>, Box<dyn Write + Send>) {
   }
 }
 
+/// Hook to create a tcp stream with prefix data.
+#[cfg(all(feature = "extras", feature = "tls"))]
+pub(crate) fn tcp_stream_new(stream: TcpStream, initial_data: &[u8]) -> Box<dyn ConnectionStream> {
+  tcp::new(stream, initial_data)
+}
+
+/// Hook to create a unix stream with prefix data.
+#[cfg(all(feature = "extras", feature = "tls"))]
+#[cfg(unix)]
+pub(crate) fn unix_stream_new(
+  stream: std::os::unix::net::UnixStream,
+  initial_data: &[u8],
+) -> Box<dyn ConnectionStream> {
+  unix::new(stream, initial_data)
+}
+
 mod tcp {
   use crate::stream::{ConnectionStream, ConnectionStreamRead, ConnectionStreamWrite};
   use crate::util::unwrap_poison;
@@ -123,8 +161,8 @@ mod tcp {
   use std::time::Duration;
   use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
-  pub fn new(stream: TcpStream) -> Box<dyn ConnectionStream> {
-    Box::new(TcpStreamOuter(Arc::new(TcpStreamInner::new(stream))))
+  pub fn new(stream: TcpStream, initial_data: &[u8]) -> Box<dyn ConnectionStream> {
+    Box::new(TcpStreamOuter(Arc::new(TcpStreamInner::new(stream, initial_data))))
   }
 
   #[derive(Debug, Clone)]
@@ -137,9 +175,13 @@ mod tcp {
     stream: TcpStream,
   }
   impl TcpStreamInner {
-    fn new(stream: TcpStream) -> TcpStreamInner {
+    fn new(stream: TcpStream, initial_data: &[u8]) -> TcpStreamInner {
+      //PANIC INFO, inital_data len must be less than 0x4000 in size, this should always be the case.
+      let mut read_buf = UnownedReadBuffer::new();
+      read_buf.copy_into_internal_buffer(initial_data);
+
       TcpStreamInner {
-        read_mutex: Mutex::new(UnownedReadBuffer::new()),
+        read_mutex: Mutex::new(read_buf),
         write_mutex: Mutex::new(UnownedWriteBuffer::new()),
         stream,
       }
@@ -413,7 +455,7 @@ mod boxed {
 #[cfg(unix)]
 impl IntoConnectionStream for std::os::unix::net::UnixStream {
   fn into_connection_stream(self) -> Box<dyn ConnectionStream> {
-    unix::new(self)
+    unix::new(self, &[])
   }
 }
 
@@ -429,8 +471,8 @@ mod unix {
   use std::time::Duration;
   use unowned_buf::{UnownedReadBuffer, UnownedWriteBuffer};
 
-  pub fn new(stream: UnixStream) -> Box<dyn ConnectionStream> {
-    Box::new(UnixStreamOuter(Arc::new(UnixStreamInner::new(stream))))
+  pub fn new(stream: UnixStream, initial_data: &[u8]) -> Box<dyn ConnectionStream> {
+    Box::new(UnixStreamOuter(Arc::new(UnixStreamInner::new(stream, initial_data))))
   }
 
   #[derive(Debug, Clone)]
@@ -444,9 +486,12 @@ mod unix {
   }
 
   impl UnixStreamInner {
-    fn new(stream: UnixStream) -> UnixStreamInner {
+    fn new(stream: UnixStream, initial_data: &[u8]) -> UnixStreamInner {
+      let mut read_buffer = UnownedReadBuffer::new();
+      read_buffer.copy_into_internal_buffer(initial_data);
+
       UnixStreamInner {
-        read_mutex: Mutex::new(UnownedReadBuffer::new()),
+        read_mutex: Mutex::new(read_buffer),
         write_mutex: Mutex::new(UnownedWriteBuffer::new()),
         stream,
       }

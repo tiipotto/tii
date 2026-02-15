@@ -65,12 +65,22 @@ fn main() -> TiiResult<()> {
   // TLS connectors
 
   //curl -k -v --unix-socket /tmp/tiitls.sock https://localhost:8443/tls
+  //
+  //Unless you change the last boolean parameter to false:
+  //curl -k -v --unix-socket /tmp/tiitls.sock http://localhost:8443/tls
   #[cfg(unix)]
-  let _unix_tls =
-    extras::TlsUnixConnector::start_unpooled("/tmp/tiitls.sock", config.clone(), app.clone())?;
+  let _unix_tls = extras::TlsUnixConnector::start_unpooled(
+    "/tmp/tiitls.sock",
+    config.clone(),
+    app.clone(),
+    true,
+  )?;
 
   //curl -k -v https://localhost:8443/tls
-  extras::TlsTcpConnector::start_unpooled("0.0.0.0:8443", config, app)?.join(None);
+  //
+  //Unless you change the last boolean parameter to false:
+  //curl -k -v http://localhost:8443/tls
+  extras::TlsTcpConnector::start_unpooled("0.0.0.0:8443", config, app, true)?.join(None);
 
   Ok(())
 }

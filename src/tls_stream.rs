@@ -133,7 +133,7 @@ impl<T: TlsCapableStream + ?Sized> Write for StreamWrapper<T> {
 #[derive(Debug, Clone)]
 pub struct TlsStream(Arc<TlsWrapperInner>);
 impl TlsStream {
-  /// Create a new TiiTlsStream using the given tcp stream.
+  /// Create a new TlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using `thread::Builder::new()::spawn`
   /// The threads are automatically stopped if the returned ConnectionStream is dropped.
   pub fn create_unpooled<S: TlsCapableStream + 'static>(
@@ -143,7 +143,7 @@ impl TlsStream {
     Self::create(tcp, tls, &DefaultThreadAdapter)
   }
 
-  /// Create a new TiiTlsStream using the given tcp stream.
+  /// Create a new TlsStream using the given tcp stream.
   /// Calling this fn will create 2 background threads using the provided thread spawn function.
   /// The tasks automatically return if the returned ConnectionStream is dropped.
   pub fn create<S: TlsCapableStream + 'static>(
@@ -151,14 +151,34 @@ impl TlsStream {
     tls: ServerConnection,
     spawner: &dyn ThreadAdapter,
   ) -> io::Result<Box<dyn ConnectionStream>> {
+    Self::create_with_initial_data(stream, &[], tls, spawner)
+  }
+
+  /// Create a new TlsStream using the given tcp stream.
+  /// Calling this fn will create 2 background threads using the provided thread spawn function.
+  /// The tasks automatically return if the returned ConnectionStream is dropped.
+  ///
+  /// The initial_data parameter contains data already read from the stream.
+  /// This should be the TLS client hello message or the start of it.
+  pub fn create_with_initial_data<S: TlsCapableStream + 'static>(
+    stream: S,
+    initial_data: &[u8],
+    tls: ServerConnection,
+    spawner: &dyn ThreadAdapter,
+  ) -> io::Result<Box<dyn ConnectionStream>> {
     let peer = stream.peer_addr()?.to_string();
     let local = stream.local_addr()?.to_string();
     let stream_wrapper = StreamWrapper(Arc::new(stream));
-    let tls =
-      RustTlsDuplexStream::new(tls, stream_wrapper.clone(), stream_wrapper.clone(), move |task| {
+    let tls = RustTlsDuplexStream::new_with_initial_data(
+      tls,
+      stream_wrapper.clone(),
+      stream_wrapper.clone(),
+      move |task| {
         spawner.spawn(task)?;
         Ok(())
-      })?;
+      },
+      initial_data.to_vec(),
+    )?;
 
     Ok(Box::new(Self(Arc::new(TlsWrapperInner {
       stream_ref: stream_wrapper.0 as Arc<_>,

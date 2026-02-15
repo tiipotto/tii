@@ -31,5 +31,8 @@ pub use tls_tcp_connector::*;
 mod tls_unix_connector;
 
 #[cfg(feature = "tls")]
+pub(crate) mod tls_connector_impl;
+
+#[cfg(feature = "tls")]
 #[cfg(unix)]
 pub use tls_unix_connector::*;
