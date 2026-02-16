@@ -320,6 +320,31 @@ impl Server {
     }
   }
 
+  /// Timeout until bytes from, for example, the headers/status line etc. are read.
+  pub fn read_timeout(&self) -> Option<Duration> {
+    self.read_timeout
+  }
+
+  /// Timeout until the connection is established (the first byte is sent)
+  pub fn connection_timeout(&self) -> Option<Duration> {
+    self.connection_timeout
+  }
+
+  /// Writing timeout.
+  pub fn write_timeout(&self) -> Option<Duration> {
+    self.write_timeout
+  }
+
+  /// Returns the time until the connection is closed by tii if no further request arrives at the same connection after processing a request.
+  pub fn keep_alive_timeout(&self) -> Option<Duration> {
+    self.keep_alive_timeout
+  }
+
+  /// Returns the read timeout during reading of a request body
+  pub fn request_body_io_timeout(&self) -> Option<Duration> {
+    self.request_body_io_timeout
+  }
+
   fn write_response(
     &self,
     stream: &dyn ConnectionStream,
