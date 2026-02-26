@@ -8,7 +8,7 @@ use crate::{WebsocketReceiver, WebsocketSender};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -117,9 +117,12 @@ pub trait HttpEndpoint: Send + Sync {
   /// If the endpoint does not receive structured data then this fn should return Ok(None)
   fn parse_entity(
     &self,
-    mime: &MimeType,
-    request: &RequestBody,
-  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>>;
+    _mime: &MimeType,
+    _request: &RequestBody,
+  ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
+    // This type of endpoint does not receive structured data.
+    Ok(None)
+  }
 }
 
 impl<F, R> HttpEndpoint for F
@@ -143,6 +146,64 @@ where
     Ok(None)
   }
 }
+
+pub(crate) trait AsRequestState {
+  type Target;
+
+  fn as_request_state(&self) -> &Self::Target;
+}
+
+impl<T> AsRequestState for Arc<T> {
+  type Target = T;
+
+  fn as_request_state(&self) -> &Self::Target {
+    self
+  }
+}
+
+impl<T> AsRequestState for Box<T> {
+  type Target = T;
+
+  fn as_request_state(&self) -> &Self::Target {
+    self
+  }
+}
+
+impl<T> AsRequestState for &T {
+  type Target = T;
+
+  fn as_request_state(&self) -> &Self::Target {
+    self
+  }
+}
+
+// I really hate the rust trait system sometimes.
+// UHH I DONT COMPILE CUS T COULD BE Arc<T>... mfer...
+impl<T> AsRequestState for (T, ) {
+  type Target = T;
+
+  fn as_request_state(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+
+
+impl<F, R, T, X> HttpEndpoint for (T, F)
+where
+    R: Into<TiiResult<Response>> ,
+    F: Fn(&X, &RequestContext) -> R + Send + Sync,
+    T: Send+Sync + 'static + AsRequestState<Target = X>,
+{
+  fn serve(&self, request: &RequestContext) -> TiiResult<Response> {
+    if request.get_request_entity().is_some() {
+      return Err(TiiError::UserError(UserError::BadFilterOrBadEndpointCausedEntityTypeMismatch));
+    }
+
+    (self.1)(self.0.as_request_state(), request).into()
+  }
+}
+
 
 /// Trait for De-Serializing request entities
 pub trait EntityDeserializer<T: Any + Send + Sync> {
