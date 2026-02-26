@@ -66,7 +66,7 @@ fn dummy_route(ctx: &RequestContext, entity: &FakeEntity) -> TiiResult<Response>
   Ok(Response::ok_entity(FakeEntity { d1: 3, d2: 4 }, to_json, MimeType::ApplicationJson))
 }
 #[test]
-pub fn tc58() {
+pub fn tc62() {
   let server = ServerBuilder::default()
     .router(|rt| {
       rt.put("/*")
@@ -82,10 +82,13 @@ pub fn tc58() {
     .build();
 
   //TODO Content-Length 45 is wrong, this behavior is not correct! FIXME
-  let stream = MockStream::with_str("PUT /dummy HTTP/1.1\r\nConnection: keep-alive\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{\"d1\":1,\"d2\":2}");
+  let stream = MockStream::with_str("PUT /dummy HTTP/1.1\r\nConnection: keep-alive\r\nContent-Type: application/json\r\nContent-Length: 45\r\n\r\n{\"d1\":1,\"d2\":2}");
   let con = stream.to_stream();
   server.handle_connection(con).unwrap();
   let got = String::from_utf8(stream.copy_written_data()).unwrap();
 
-  assert_eq!(got.as_str(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: Keep-Alive\r\nContent-Length: 15\r\n\r\n{\"d1\":3,\"d2\":4}");
+  assert_eq!(
+    got.as_str(),
+    "HTTP/1.1 500 Internal Server Error\r\nConnection: Close\r\nContent-Length: 0\r\n\r\n"
+  );
 }

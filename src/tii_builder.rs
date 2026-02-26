@@ -105,10 +105,10 @@ impl ServerBuilder {
   }
 
   /// Adds a new custom router to the server.
-  /// 
-  /// Routers will process a connection in natural order, 
+  ///
+  /// Routers will process a connection in natural order,
   /// the first router that wants to handle a request will handle it, and the rest of the routers are not called.
-  /// 
+  ///
   /// This is intended to be used for roughly sending a request into the correct part of your application.
   /// You can, for example, evaluate the Host header, or the path of the application.
   pub fn with_router(mut self, handler: impl Router + 'static) -> Self {

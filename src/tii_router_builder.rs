@@ -5,12 +5,13 @@ use crate::default_functions::{
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
 };
 use crate::functional_traits::{
-  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
+  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, StatefulEntityHttpEndpoint,
+  WebsocketEndpoint,
 };
 use crate::tii_builder::EntityHttpEndpoint;
-use crate::RequestContext;
 use crate::TiiResult;
 use crate::{AcceptMimeType, MimeType, RequestBody};
+use crate::{AsRequestState, RequestContext};
 use crate::{DefaultRouter, Response, Router};
 use crate::{EntityDeserializer, HttpMethod};
 use crate::{ErrorHandler, NotRouteableHandler};
@@ -156,6 +157,33 @@ impl RouteBuilder {
       deserializer,
       _p1: Default::default(),
       _p2: Default::default(),
+    };
+
+    self.endpoint(ehp)
+  }
+
+  /// Finish building the route by proving a stateful endpoint which requires a structured request body to call.
+  pub fn stateful_entity_endpoint<T, S, SR, R, F, D>(
+    self,
+    state: S,
+    handler: F,
+    deserializer: D,
+  ) -> TiiResult<RouterBuilder>
+  where
+    T: Any + Send + Sync + 'static,
+    R: Into<TiiResult<Response>> + Send + 'static,
+    F: Fn(&SR, &RequestContext, &T) -> R + Send + Sync + 'static,
+    D: EntityDeserializer<T> + Send + Sync + 'static,
+    S: AsRequestState<Target = SR> + Send + Sync + 'static,
+    SR: Send + Sync + 'static,
+  {
+    let ehp = StatefulEntityHttpEndpoint {
+      endpoint: handler,
+      state,
+      deserializer,
+      _p1: Default::default(),
+      _p2: Default::default(),
+      _p4: Default::default(),
     };
 
     self.endpoint(ehp)

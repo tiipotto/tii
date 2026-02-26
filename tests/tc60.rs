@@ -19,22 +19,18 @@ impl DummyState {
     assert_eq!(self.state, 5);
     Ok(Response::no_content())
   }
-
 }
-
 
 #[test]
 pub fn tc60() {
-  let state = DummyState {
-    state: 5,
-  };
+  let state = DummyState { state: 5 };
 
   let my_state = Arc::new(state);
 
   let server = ServerBuilder::default()
     .router(|rt| {
       rt.route_get("/dummy1", (my_state.clone(), DummyState::dummy_route))?
-          .route_get("/dummy2", (my_state.clone(), DummyState::dummy_route2))
+        .route_get("/dummy2", (my_state.clone(), DummyState::dummy_route2))
     })
     .expect("ERR")
     .build();
