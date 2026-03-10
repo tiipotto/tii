@@ -9,8 +9,8 @@ use crate::functional_traits::{
   WebsocketEndpoint,
 };
 use crate::tii_builder::EntityHttpEndpoint;
-use crate::TiiResult;
-use crate::{AcceptMimeType, MimeType, RequestBody};
+use crate::{AcceptMimeType, RequestBody};
+use crate::{AcceptMimeTypeWithCharset, MimeCharset, MimeTypeWithCharset, TiiResult};
 use crate::{AsRequestState, RequestContext};
 use crate::{DefaultRouter, Response, Router};
 use crate::{EntityDeserializer, HttpMethod};
@@ -63,7 +63,7 @@ impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
 
   fn parse_entity(
     &self,
-    mime: &MimeType,
+    mime: &MimeTypeWithCharset,
     request: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     self.0.parse_entity(mime, request)
@@ -101,8 +101,8 @@ pub struct RouteBuilder {
   inner: RouterBuilder,
   route: String,
   method: HttpMethod,
-  consumes: HashSet<AcceptMimeType>,
-  produces: HashSet<AcceptMimeType>,
+  consumes: HashSet<AcceptMimeTypeWithCharset>,
+  produces: HashSet<AcceptMimeTypeWithCharset>,
 }
 
 impl RouteBuilder {
@@ -121,13 +121,13 @@ impl RouteBuilder {
   }
 
   /// Add a mime type which the endpoint can consume.
-  pub fn consumes(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn consumes(mut self, mime: impl Into<AcceptMimeTypeWithCharset>) -> Self {
     self.consumes.insert(mime.into());
     self
   }
 
   /// Add a mime type which the endpoint may produce.
-  pub fn produces(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn produces(mut self, mime: impl Into<AcceptMimeTypeWithCharset>) -> Self {
     self.produces.insert(mime.into());
     self
   }
@@ -297,7 +297,10 @@ impl RouterBuilder {
     self.routes.push(HttpRoute::new(
       route,
       method,
-      HashSet::from([AcceptMimeType::Wildcard]),
+      HashSet::from([AcceptMimeTypeWithCharset::new(
+        AcceptMimeType::Wildcard,
+        MimeCharset::Unspecified,
+      )]),
       HashSet::new(),
       handler,
     )?);

@@ -1,9 +1,9 @@
 //! Defines traits for handler and filter functions.
 
-use crate::RequestContext;
 use crate::Response;
 use crate::TiiResult;
-use crate::{ConnectionStream, MimeType, RequestBody, ResponseContext, TiiError, UserError};
+use crate::{ConnectionStream, RequestBody, ResponseContext, TiiError, UserError};
+use crate::{MimeTypeWithCharset, RequestContext};
 use crate::{WebsocketReceiver, WebsocketSender};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -117,7 +117,7 @@ pub trait HttpEndpoint: Send + Sync {
   /// If the endpoint does not receive structured data then this fn should return Ok(None)
   fn parse_entity(
     &self,
-    _mime: &MimeType,
+    _mime: &MimeTypeWithCharset,
     _request: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     // This type of endpoint does not receive structured data.
@@ -139,7 +139,7 @@ where
   }
   fn parse_entity(
     &self,
-    _: &MimeType,
+    _: &MimeTypeWithCharset,
     _: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     // This type of endpoint does not receive structured data.
@@ -246,15 +246,15 @@ where
 pub trait EntityDeserializer<T: Any + Send + Sync> {
   /// Deserialize a RequestBody to T (or fail with an error)
   /// If the deserializer errors then the error handler is invoked next with the returned error.
-  fn deserialize(&self, mime: &MimeType, body: &RequestBody) -> TiiResult<T>;
+  fn deserialize(&self, mime: &MimeTypeWithCharset, body: &RequestBody) -> TiiResult<T>;
 }
 
 impl<F, T> EntityDeserializer<T> for F
 where
   T: Any + Send + Sync,
-  F: Fn(&MimeType, &RequestBody) -> TiiResult<T>,
+  F: Fn(&MimeTypeWithCharset, &RequestBody) -> TiiResult<T>,
 {
-  fn deserialize(&self, mime: &MimeType, body: &RequestBody) -> TiiResult<T> {
+  fn deserialize(&self, mime: &MimeTypeWithCharset, body: &RequestBody) -> TiiResult<T> {
     self(mime, body)
   }
 }
@@ -293,7 +293,7 @@ where
 
   fn parse_entity(
     &self,
-    mime: &MimeType,
+    mime: &MimeTypeWithCharset,
     request: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     let result: T = self.deserializer.deserialize(mime, request)?;
@@ -341,7 +341,7 @@ where
 
   fn parse_entity(
     &self,
-    mime: &MimeType,
+    mime: &MimeTypeWithCharset,
     request: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     let result: T = self.deserializer.deserialize(mime, request)?;

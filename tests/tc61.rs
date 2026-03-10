@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::io;
 use std::io::ErrorKind;
-use tii::{configure_type_system, MimeType, RequestBody, TiiResult};
+use tii::{configure_type_system, MimeType, MimeTypeWithCharset, RequestBody, TiiResult};
 use tii::{RequestContext, Response, ServerBuilder};
 
 mod mock_stream;
 
-fn to_json<T: Serialize>(mime: &MimeType, data: T) -> TiiResult<Vec<u8>> {
-  if &MimeType::ApplicationJson != mime {
+fn to_json<T: Serialize>(mime: &MimeTypeWithCharset, data: T) -> TiiResult<Vec<u8>> {
+  if &MimeType::ApplicationJson != mime.mime() {
     Err(io::Error::new(
       ErrorKind::InvalidInput,
       format!("Only application/json mime type is supported got {mime}"),
@@ -20,8 +20,8 @@ fn to_json<T: Serialize>(mime: &MimeType, data: T) -> TiiResult<Vec<u8>> {
   Ok(serde_json::to_vec(&data)?)
 }
 
-fn from_json<T: DeserializeOwned>(mime: &MimeType, data: &RequestBody) -> TiiResult<T> {
-  if &MimeType::ApplicationJson != mime {
+fn from_json<T: DeserializeOwned>(mime: &MimeTypeWithCharset, data: &RequestBody) -> TiiResult<T> {
+  if &MimeType::ApplicationJson != mime.mime() {
     Err(io::Error::new(
       ErrorKind::InvalidInput,
       format!("Only application/json mime type is supported got {mime}"),

@@ -5,12 +5,11 @@ use crate::http::headers::{Headers, HttpHeader, HttpHeaderName};
 use crate::http::status::StatusCode;
 
 use crate::http::method::HttpMethod;
-use crate::http::mime::MimeType;
 use crate::http::request::HttpVersion;
 use crate::http::response_body::ResponseBody;
 use crate::stream::ConnectionStreamWrite;
 use crate::tii_error::{TiiResult, UserError};
-use crate::EntitySerializer;
+use crate::{EntitySerializer, MimeTypeWithCharset};
 use std::fmt::Debug;
 use std::io::{Read, Seek};
 use std::{io, mem};
@@ -51,17 +50,17 @@ impl Response {
   }
 
   /// HTTP 200 OK with body.
-  pub fn ok(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn ok(bytes: impl Into<ResponseBody>, mime: impl Into<MimeTypeWithCharset>) -> Response {
     Self::new(StatusCode::OK)
       .with_body(bytes.into())
-      .with_header_unchecked("Content-Type", mime.into().as_str())
+      .with_header_unchecked("Content-Type", mime.into())
   }
 
   /// HTTP 200 OK with entity body.
   pub fn ok_entity<T: Debug + Send + 'static>(
     entity: T,
     serializer: impl EntitySerializer<T>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::ok(ResponseBody::from_entity(entity, serializer), mime)
   }
@@ -72,39 +71,45 @@ impl Response {
   /// Propagated from try_into call of bytes argument.
   pub fn try_ok<E>(
     bytes: impl TryInto<ResponseBody, Error = E>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Result<Response, E> {
     Ok(Self::ok(bytes.try_into()?, mime))
   }
 
   /// HTTP 201 Created with body.
-  pub fn created(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn created(bytes: impl Into<ResponseBody>, mime: impl Into<MimeTypeWithCharset>) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
-      .with_header_unchecked("Content-Type", mime.into().as_str())
+      .with_header_unchecked("Content-Type", mime.into())
   }
 
   /// HTTP 201 Created with entity body.
   pub fn created_entity<T: Debug + Send + 'static>(
     entity: T,
     serializer: impl EntitySerializer<T>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::created(ResponseBody::from_entity(entity, serializer), mime)
   }
 
   /// HTTP 202 Accepted with body.
-  pub fn accepted(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn accepted(
+    bytes: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::Created)
       .with_body(bytes.into())
-      .with_header_unchecked("Content-Type", mime.into().as_str())
+      .with_header_unchecked("Content-Type", mime.into())
   }
 
   /// HTTP 203 Non-Authoritative Information with body
-  pub fn non_authoritative(bytes: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn non_authoritative(
+    bytes: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::NonAuthoritative)
       .with_body(bytes.into())
-      .with_header_unchecked("Content-Type", mime.into().as_str())
+      .with_header_unchecked("Content-Type", mime.into())
   }
 
   /// HTTP 204 No Content
@@ -119,17 +124,23 @@ impl Response {
 
   /// HTTP 206 Partial Content
   /// Note: Content-Range header must still be set by the caller. TODO
-  pub fn partial_content(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn partial_content(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::PartialContent)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 300 Multiple Choices
-  pub fn multiple_choices(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn multiple_choices(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::MultipleChoices)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 300 Multiple Choices without body
@@ -139,53 +150,53 @@ impl Response {
 
   /// HTTP 301 Moved Permanently
   pub fn moved_permanently(
-    location: impl AsRef<str>,
+    location: impl ToString,
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::MovedPermanently)
       .with_header_unchecked(HttpHeaderName::Location, location)
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
       .with_body(body.into())
   }
 
   /// HTTP 301 Moved Permanently without body
-  pub fn moved_permanently_no_body(location: impl AsRef<str>) -> Response {
+  pub fn moved_permanently_no_body(location: impl ToString) -> Response {
     Self::new(StatusCode::MovedPermanently)
       .with_header_unchecked(HttpHeaderName::Location, location)
   }
 
   /// HTTP 302 Found
   pub fn found(
-    location: impl AsRef<str>,
+    location: impl ToString,
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::Found)
       .with_header_unchecked(HttpHeaderName::Location, location)
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
       .with_body(body.into())
   }
 
   /// HTTP 302 Found without body
-  pub fn found_no_body(location: impl AsRef<str>) -> Response {
+  pub fn found_no_body(location: impl ToString) -> Response {
     Self::new(StatusCode::Found).with_header_unchecked(HttpHeaderName::Location, location)
   }
 
   /// HTTP 303 See Other
   pub fn see_other(
-    location: impl AsRef<str>,
+    location: impl ToString,
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::SeeOther)
       .with_header_unchecked(HttpHeaderName::Location, location)
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
       .with_body(body.into())
   }
 
   /// HTTP 303 See Other without body
-  pub fn see_other_no_body(location: impl AsRef<str>) -> Response {
+  pub fn see_other_no_body(location: impl ToString) -> Response {
     Self::new(StatusCode::SeeOther).with_header_unchecked(HttpHeaderName::Location, location)
   }
 
@@ -196,45 +207,48 @@ impl Response {
 
   /// HTTP 307 Temporary Redirect
   pub fn temporary_redirect(
-    location: impl AsRef<str>,
+    location: impl ToString,
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::TemporaryRedirect)
       .with_header_unchecked(HttpHeaderName::Location, location)
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
       .with_body(body.into())
   }
 
   /// HTTP 307 Temporary Redirect without body
-  pub fn temporary_redirect_no_body(location: impl AsRef<str>) -> Response {
+  pub fn temporary_redirect_no_body(location: impl ToString) -> Response {
     Self::new(StatusCode::TemporaryRedirect)
       .with_header_unchecked(HttpHeaderName::Location, location)
   }
 
   /// HTTP 308 Permanent Redirect
   pub fn permanent_redirect(
-    location: impl AsRef<str>,
+    location: impl ToString,
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::PermanentRedirect)
       .with_body(body.into())
       .with_header_unchecked(HttpHeaderName::Location, location)
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 308 Permanent Redirect without body
-  pub fn permanent_redirect_no_body(location: impl AsRef<str>) -> Response {
+  pub fn permanent_redirect_no_body(location: impl ToString) -> Response {
     Self::new(StatusCode::PermanentRedirect)
       .with_header_unchecked(HttpHeaderName::Location, location)
   }
 
   /// HTTP 400 Bad Request
-  pub fn bad_request(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn bad_request(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::BadRequest)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 400 Bad Request without body
@@ -248,10 +262,13 @@ impl Response {
   }
 
   /// HTTP 402 Payment Required with body
-  pub fn payment_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn payment_required(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::PaymentRequired)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 402 Payment Required without body
@@ -260,10 +277,13 @@ impl Response {
   }
 
   /// HTTP 403 Forbidden
-  pub fn forbidden(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Response {
+  pub fn forbidden(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Response {
     Self::new(StatusCode::Forbidden)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 403 Forbidden
@@ -272,10 +292,10 @@ impl Response {
   }
 
   /// HTTP 404 Not Found with body
-  pub fn not_found(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn not_found(body: impl Into<ResponseBody>, mime: impl Into<MimeTypeWithCharset>) -> Self {
     Self::new(StatusCode::NotFound)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 404 Not Found without body
@@ -302,10 +322,13 @@ impl Response {
   }
 
   /// HTTP 406 Not Acceptable
-  pub fn not_acceptable(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn not_acceptable(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Self {
     Self::new(StatusCode::NotAcceptable)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 406 Not Acceptable without body
@@ -314,7 +337,7 @@ impl Response {
   }
 
   /// HTTP 407 Proxy Authentication Required
-  pub fn proxy_authentication_required(authenticate: impl AsRef<str>) -> Self {
+  pub fn proxy_authentication_required(authenticate: impl ToString) -> Self {
     Self::new(StatusCode::ProxyAuthenticationRequired)
       .with_header_unchecked(HttpHeaderName::ProxyAuthenticate, authenticate)
   }
@@ -325,10 +348,10 @@ impl Response {
   }
 
   /// HTTP 409 Conflict
-  pub fn conflict(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn conflict(body: impl Into<ResponseBody>, mime: impl Into<MimeTypeWithCharset>) -> Self {
     Self::new(StatusCode::Conflict)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 409 Conflict without body
@@ -337,10 +360,10 @@ impl Response {
   }
 
   /// HTTP 410 Gone
-  pub fn gone(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn gone(body: impl Into<ResponseBody>, mime: impl Into<MimeTypeWithCharset>) -> Self {
     Self::new(StatusCode::Gone)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 410 Gone
@@ -349,10 +372,13 @@ impl Response {
   }
 
   /// HTTP 411 Length Required
-  pub fn length_required(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn length_required(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Self {
     Self::new(StatusCode::LengthRequired)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 411 Length Required without body
@@ -366,10 +392,13 @@ impl Response {
   }
 
   /// HTTP 413 Content Too Large
-  pub fn content_too_large(body: impl Into<ResponseBody>, mime: impl Into<MimeType>) -> Self {
+  pub fn content_too_large(
+    body: impl Into<ResponseBody>,
+    mime: impl Into<MimeTypeWithCharset>,
+  ) -> Self {
     Self::new(StatusCode::ContentTooLarge)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 413 Content Too Large without body
@@ -380,11 +409,11 @@ impl Response {
   /// HTTP 415 Unsupported Media Type with body
   pub fn unsupported_media_type(
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::UnsupportedMediaType)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 415 Unsupported Media Type without body
@@ -402,11 +431,11 @@ impl Response {
   ///
   pub fn internal_server_error(
     body: impl Into<ResponseBody>,
-    mime: impl Into<MimeType>,
+    mime: impl Into<MimeTypeWithCharset>,
   ) -> Response {
     Self::new(StatusCode::InternalServerError)
       .with_body(body.into())
-      .with_header_unchecked(HttpHeaderName::ContentType, mime.into().as_str())
+      .with_header_unchecked(HttpHeaderName::ContentType, mime.into())
   }
 
   /// HTTP 500 Internal Server Error without body
@@ -455,14 +484,14 @@ impl Response {
 
   /// Adds the given header to the response.
   /// Returns itself for use in a builder pattern.
-  pub fn with_header(mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<Self> {
+  pub fn with_header(mut self, header: impl AsRef<str>, value: impl ToString) -> TiiResult<Self> {
     self.add_header(header, value)?;
     Ok(self)
   }
 
   /// Internal add header where the entire state of the request obj is known.
-  fn with_header_unchecked(mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-    self.headers.add(header, value);
+  fn with_header_unchecked(mut self, header: impl AsRef<str>, value: impl ToString) -> Self {
+    self.headers.push(HttpHeader::new(header, value.to_string()));
     self
   }
 
@@ -482,7 +511,7 @@ impl Response {
   }
 
   /// Adds the header to the Response.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     match &hdr.as_ref().into() {
       HttpHeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HttpHeaderName::ContentLength).into()
@@ -501,7 +530,7 @@ impl Response {
   }
 
   /// Replace all header values in the Response
-  pub fn set_header(&mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn set_header(&mut self, header: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     match &header.as_ref().into() {
       HttpHeaderName::ContentLength => {
         UserError::ImmutableResponseHeaderModified(HttpHeaderName::ContentLength).into()
@@ -578,9 +607,10 @@ impl Response {
   ) -> TiiResult<()> {
     if let Some(body) = self.set_body(None) {
       let mime = if let Some(mime) = self.get_header(HttpHeaderName::ContentType) {
-        MimeType::parse(mime).unwrap_or(MimeType::ApplicationOctetStream)
+        MimeTypeWithCharset::parse_from_content_type_header(mime)
+          .unwrap_or(MimeTypeWithCharset::APPLICATION_OCTET_STREAM)
       } else {
-        MimeType::ApplicationOctetStream
+        MimeTypeWithCharset::APPLICATION_OCTET_STREAM
       };
 
       self.set_body(Some(body.serialize_entity(&mime)?));

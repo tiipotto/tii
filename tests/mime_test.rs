@@ -1,4 +1,4 @@
-use tii::{AcceptMimeType, AcceptQualityMimeType, MimeGroup, MimeType, QValue};
+use tii::{AcceptMimeType, AcceptQualityMimeType, MimeCharset, MimeGroup, MimeType, QValue};
 
 #[test]
 fn test_not_valid() {
@@ -166,7 +166,7 @@ fn test_accept_q_display_and_parse() {
   for n in MimeGroup::well_known() {
     for i in 0..1000 {
       let q = QValue::from_clamped(i);
-      let orig = AcceptQualityMimeType::from_group(n.clone(), q);
+      let orig = AcceptQualityMimeType::from_group(n.clone(), q, MimeCharset::Unspecified);
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
 
@@ -182,7 +182,7 @@ fn test_accept_q_display_and_parse() {
   for n in MimeType::well_known() {
     for i in 0..1000 {
       let q = QValue::from_clamped(i);
-      let orig = AcceptQualityMimeType::from_mime(n.clone(), q);
+      let orig = AcceptQualityMimeType::from_mime(n.clone(), q, MimeCharset::Unspecified);
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
       assert_eq!(orig, parsed);
@@ -204,7 +204,7 @@ fn test_accept_q_display_and_parse() {
 
   for i in 0..1000 {
     let q = QValue::from_clamped(i);
-    let orig = AcceptQualityMimeType::wildcard(q);
+    let orig = AcceptQualityMimeType::wildcard(q, MimeCharset::Unspecified);
     let parsed =
       AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
     assert_eq!(orig, parsed);
@@ -214,14 +214,21 @@ fn test_accept_q_display_and_parse() {
     assert!(!parsed.is_specific());
   }
 
-  assert_eq!(AcceptQualityMimeType::default(), AcceptQualityMimeType::wildcard(QValue::default()));
+  assert_eq!(
+    AcceptQualityMimeType::default(),
+    AcceptQualityMimeType::wildcard(QValue::default(), MimeCharset::Unspecified)
+  );
 }
 
 #[test]
 fn test_accept_q_edge() {
   assert_eq!(
     AcceptQualityMimeType::parse("application/json;q=0.500").unwrap().into_iter().next().unwrap(),
-    AcceptQualityMimeType::from_mime(MimeType::ApplicationJson, QValue::from_clamped(500))
+    AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Unspecified
+    )
   );
   assert!(AcceptQualityMimeType::parse("application/json;sad=0.500").is_none());
   assert!(AcceptQualityMimeType::parse("application/json;q=4.0").is_none());
@@ -231,7 +238,38 @@ fn test_accept_q_edge() {
   assert!(AcceptQualityMimeType::parse("app*/json").is_none());
   assert_eq!(
     AcceptQualityMimeType::parse("application/*").unwrap().into_iter().next().unwrap(),
-    AcceptQualityMimeType::from_group(MimeGroup::Application, QValue::from_clamped(1000))
+    AcceptQualityMimeType::from_group(
+      MimeGroup::Application,
+      QValue::from_clamped(1000),
+      MimeCharset::Unspecified
+    )
+  );
+}
+
+#[test]
+fn test_accept_with_charset() {
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; charset=utf-8; q=0.5"),
+    Some(vec![AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Utf8
+    )])
+  );
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; q=0.5; charset=utf-8"),
+    Some(vec![AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Utf8
+    )])
+  );
+
+  assert_eq!(AcceptQualityMimeType::parse("application/json; q=0.5; charset=utf-8; q=0.6"), None);
+
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; charset=iso-8551-1; q=0.5; charset=utf-8"),
+    None
   );
 }
 
@@ -239,9 +277,26 @@ fn test_accept_q_edge() {
 fn test_accept_q_parse_all() {
   let mut types: Vec<AcceptQualityMimeType> = Vec::new();
   for n in MimeType::well_known() {
-    types.push(AcceptQualityMimeType::from_mime(n.clone(), QValue::from_clamped(500)));
+    types.push(AcceptQualityMimeType::from_mime(
+      n.clone(),
+      QValue::from_clamped(500),
+      MimeCharset::Unspecified,
+    ));
   }
 
+  let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
+  let parsed_types = AcceptQualityMimeType::parse(hdr_value).unwrap();
+  assert_eq!(types, parsed_types);
+}
+
+#[test]
+fn test_accept_q_parse_single() {
+  let mut types: Vec<AcceptQualityMimeType> = Vec::new();
+  types.push(AcceptQualityMimeType::from_mime(
+    MimeType::ImageHeic,
+    QValue::from_clamped(500),
+    MimeCharset::Unspecified,
+  ));
   let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
   let parsed_types = AcceptQualityMimeType::parse(hdr_value).unwrap();
   assert_eq!(types, parsed_types);

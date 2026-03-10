@@ -8,12 +8,12 @@ use crate::stream::ConnectionStream;
 use crate::tii_builder::{ErrorHandler, NotRouteableHandler};
 use crate::tii_error::{InvalidPathError, RequestHeadParsingError, TiiError, TiiResult};
 use crate::util::unwrap_some;
-use crate::HttpVersion;
+use crate::QValue;
 use crate::RequestContext;
 use crate::{trace_log, util};
 use crate::{warn_log, HttpHeaderName};
-use crate::{AcceptMimeType, QValue};
-use crate::{HttpMethod, MimeType, ResponseContext};
+use crate::{AcceptMimeTypeWithCharset, HttpVersion, MimeCharset, MimeTypeWithCharset};
+use crate::{HttpMethod, ResponseContext};
 use crate::{Response, StatusCode};
 use base64::Engine;
 use regex::{Error, Regex};
@@ -160,11 +160,11 @@ pub struct Routeable {
 
   /// The mime types this route can consume
   /// EMPTY SET means this route does not expect a request body.
-  consumes: HashSet<AcceptMimeType>,
+  consumes: HashSet<AcceptMimeTypeWithCharset>,
 
   /// The mime types this route can produce
   /// EMPTY SET means this route will produce a matching body type.
-  produces: HashSet<AcceptMimeType>,
+  produces: HashSet<AcceptMimeTypeWithCharset>,
 }
 
 pub(crate) struct HttpRoute {
@@ -185,8 +185,8 @@ impl HttpRoute {
   pub(crate) fn new(
     path: impl ToString,
     method: impl Into<HttpMethod>,
-    consumes: HashSet<AcceptMimeType>,
-    produces: HashSet<AcceptMimeType>,
+    consumes: HashSet<AcceptMimeTypeWithCharset>,
+    produces: HashSet<AcceptMimeTypeWithCharset>,
     route: impl HttpEndpoint + 'static,
   ) -> TiiResult<Self> {
     Ok(HttpRoute {
@@ -200,8 +200,8 @@ impl WebSocketRoute {
   pub(crate) fn new(
     path: impl ToString,
     method: impl Into<HttpMethod>,
-    consumes: HashSet<AcceptMimeType>,
-    produces: HashSet<AcceptMimeType>,
+    consumes: HashSet<AcceptMimeTypeWithCharset>,
+    produces: HashSet<AcceptMimeTypeWithCharset>,
     route: impl WebsocketEndpoint + 'static,
   ) -> TiiResult<Self> {
     Ok(WebSocketRoute {
@@ -279,8 +279,8 @@ impl Routeable {
   pub(crate) fn new(
     path: impl ToString,
     method: impl Into<HttpMethod>,
-    consumes: HashSet<AcceptMimeType>,
-    produces: HashSet<AcceptMimeType>,
+    consumes: HashSet<AcceptMimeTypeWithCharset>,
+    produces: HashSet<AcceptMimeTypeWithCharset>,
   ) -> TiiResult<Routeable> {
     let path = path.to_string();
     Ok(Routeable {
@@ -303,12 +303,12 @@ impl Routeable {
   }
 
   /// The mime types this route can consume
-  pub fn get_consumes(&self) -> &HashSet<AcceptMimeType> {
+  pub fn get_consumes(&self) -> &HashSet<AcceptMimeTypeWithCharset> {
     &self.consumes
   }
 
   /// The mime types this route can produce
-  pub fn get_produces(&self) -> &HashSet<AcceptMimeType> {
+  pub fn get_produces(&self) -> &HashSet<AcceptMimeTypeWithCharset> {
     &self.produces
   }
 
@@ -382,8 +382,10 @@ impl Routeable {
 
     if let Some(content_type) = route.get_content_type() {
       let mut found = false;
-      for mime in &self.consumes {
-        if mime.permits_specific(content_type) {
+      for acceptable in &self.consumes {
+        if acceptable.mime().permits_specific(content_type)
+          && (!acceptable.has_charset() || acceptable.charset() == content_type.charset())
+        {
           found = true;
           break;
         }
@@ -405,11 +407,34 @@ impl Routeable {
       return RoutingDecision::MimeMismatch;
     }
 
+    // TODO Should we offer this as a map? type -> q?
+    // Probably not because requests with more than a few accept charsets are not really... common...
+    let accept_charset_from_hdr = route.get_accept();
+
     let mut current_q = None;
     for accept in acc {
       for mime in &self.produces {
-        if !accept.get_type().permits(mime) {
+        if !accept.get_type().permits(mime.mime()) {
           continue;
+        }
+
+        if accept.charset() != &MimeCharset::Unspecified
+          && mime.charset() != &MimeCharset::Unspecified
+          && mime.charset() != accept.charset()
+        {
+          // TODO this is not correct. We have to split q for content type and charset. They have semi independent q.
+          // This is likely good enough tho and will only cause issues with seriously retarded requests.
+          let mut found = false;
+          for accepted_charset in accept_charset_from_hdr.iter().map(|c| c.charset()) {
+            if accepted_charset == mime.charset() {
+              found = true;
+              break;
+            }
+          }
+
+          if !found {
+            continue;
+          }
         }
 
         let qvalue = accept.qvalue();
@@ -756,7 +781,7 @@ impl DefaultRouter {
       if request.get_request_entity().is_none() {
         if let Some(body) = request.request_body() {
           request.set_request_entity(handler.handler.parse_entity(
-            request.get_content_type().unwrap_or(&MimeType::ApplicationOctetStream),
+            request.get_content_type().unwrap_or(&MimeTypeWithCharset::APPLICATION_OCTET_STREAM),
             body,
           )?);
         }
@@ -810,7 +835,10 @@ impl Router for DefaultRouter {
   }
 }
 
-impl Router for Arc<DefaultRouter> {
+impl<T> Router for Arc<T>
+where
+  T: Router + ?Sized,
+{
   fn serve(&self, request: &mut RequestContext) -> TiiResult<Option<Response>> {
     Arc::as_ref(self).serve(request)
   }

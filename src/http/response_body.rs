@@ -6,7 +6,8 @@ use crate::http::response_entity::ResponseEntity;
 use crate::stream::ConnectionStreamWrite;
 use crate::util::unwrap_some;
 use crate::{
-  trace_log, EntitySerializer, MimeType, TiiError, TiiResult, TypeSystem, TypeSystemError,
+  trace_log, EntitySerializer, MimeTypeWithCharset, TiiError, TiiResult, TypeSystem,
+  TypeSystemError,
 };
 use defer_heavy::defer;
 use libflate::gzip;
@@ -196,7 +197,7 @@ impl ResponseBody {
   /// After this further dynamic operations on the entity are no longer possible.
   /// This call also Drop's the entity.
   /// It has no effect on other Body types.
-  pub fn serialize_entity(self, mime: &MimeType) -> TiiResult<ResponseBody> {
+  pub fn serialize_entity(self, mime: &MimeTypeWithCharset) -> TiiResult<ResponseBody> {
     Ok(match self.0 {
       ResponseBodyInner::Entity(entity) => {
         ResponseBody(ResponseBodyInner::FixedSizeBinaryData(entity.serialize(mime)?))
@@ -269,7 +270,7 @@ impl ResponseBody {
   /// This raw data does not have any http specific content or transfer encoding applies and contains the raw bytes
   /// just like the other side should interpret them after undoing the encodings.
   ///
-  pub fn write_to_raw(self, mime: &MimeType, stream: &mut impl Write) -> TiiResult<()> {
+  pub fn write_to_raw(self, mime: &MimeTypeWithCharset, stream: &mut impl Write) -> TiiResult<()> {
     match self.0 {
       ResponseBodyInner::FixedSizeBinaryDataStaticSlice(data) => stream.write_all(data)?,
       ResponseBodyInner::FixedSizeBinaryData(data) => stream.write_all(data.as_ref())?,
@@ -350,10 +351,16 @@ impl ResponseBody {
             return Ok(());
           }
 
-          stream.write_all(io_buf.get_mut(..read).ok_or(io::Error::other("buffer overflow"))?)?;
           written = written
             .checked_add(u64::try_from(read).map_err(|_| io::Error::other("usize->u64 failed"))?)
             .ok_or(io::Error::other("u64 overflow"))?;
+
+          if written > size {
+            //TODO, handle this better...
+            return Err(TiiError::from_io_kind(io::ErrorKind::FileTooLarge));
+          }
+
+          stream.write_all(io_buf.get_mut(..read).ok_or(io::Error::other("buffer overflow"))?)?;
         }
       }
       ResponseBodyInner::Stream(mut handler) => {
@@ -393,7 +400,7 @@ impl ResponseBody {
         // This should be unreachable under normal circumstances,
         // if we got here anyway we are writing it in Chunked Transfer Encoding.
         let sink = ChunkedSink(request_id, stream.as_stream_write());
-        sink.write_all(&entity.serialize(&MimeType::ApplicationOctetStream)?)?;
+        sink.write_all(&entity.serialize(&MimeTypeWithCharset::APPLICATION_OCTET_STREAM)?)?;
         sink.finish()?
       }
     };

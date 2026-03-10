@@ -9,8 +9,9 @@ use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
 use crate::{
-  debug_log, error_log, trace_log, util, warn_log, AcceptQualityMimeType, Cookie, HttpHeader,
-  HttpMethod, MimeType, TypeSystem, TypeSystemError, UserError,
+  debug_log, error_log, trace_log, util, warn_log, AcceptMimeCharset, AcceptQualityMimeType,
+  Cookie, HttpHeader, HttpMethod, MimeType, MimeTypeWithCharset, TypeSystem, TypeSystemError,
+  UserError,
 };
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -733,7 +734,7 @@ impl RequestContext {
   /// This is usually equivalent to parsing the raw get_header() value of Content-Type.
   /// The only case where this is different is if the request as received from the network had an invalid Content-Type value then this value is ApplicationOctetStream even tho the raw header value is different.
   /// This returns none if the Content-Type header was not present at all. (For example ordinary GET requests do not have this header)
-  pub fn get_content_type(&self) -> Option<&MimeType> {
+  pub fn get_content_type(&self) -> Option<&MimeTypeWithCharset> {
     self.request.get_content_type()
   }
 
@@ -743,13 +744,20 @@ impl RequestContext {
   }
 
   /// Removes the content type header. get_content_type will return None after this call.
-  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+  pub fn remove_content_type(&mut self) -> Option<MimeTypeWithCharset> {
     self.request.remove_content_type()
   }
 
-  /// Returns the acceptable mime types
+  /// Returns the acceptable mime types.
+  /// The returned accepted mime types are in the order the client sent them over the network.
   pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
     self.request.get_accept()
+  }
+
+  /// Returns the acceptable charsets.
+  /// The returned accepted charset types are in the order the client sent them over the network.
+  pub fn get_accept_charset(&self) -> &[AcceptMimeCharset] {
+    self.request.get_accept_charset()
   }
 
   /// Returns an iterator over all headers.
@@ -778,12 +786,12 @@ impl RequestContext {
   }
 
   /// Sets the header value. Some header values cannot be modified through this fn and attempting to change them will result in Err.
-  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     self.request.set_header(hdr, value)
   }
 
   /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     self.request.add_header(hdr, value)
   }
 

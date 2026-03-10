@@ -1,6 +1,6 @@
 //! Provides functionality for handling HTTP requests.
 
-use crate::{error_log, HttpMethod};
+use crate::{error_log, AcceptMimeCharset, HttpMethod, MimeCharset, MimeTypeWithCharset};
 use crate::{trace_log, Cookie};
 use crate::{Headers, HttpHeader, HttpHeaderName};
 
@@ -11,6 +11,7 @@ use crate::ConnectionStream;
 use crate::{AcceptQualityMimeType, MimeType, QValue};
 use std::fmt::{Display, Formatter};
 use std::io::ErrorKind;
+use std::vec;
 
 /// Enum for http versions tii supports.
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
@@ -102,7 +103,9 @@ pub(crate) struct RequestHead {
 
   accept: Vec<AcceptQualityMimeType>,
 
-  content_type: Option<MimeType>,
+  content_type: Option<MimeTypeWithCharset>,
+
+  accept_charset: Vec<AcceptMimeCharset>,
 
   /// A list of headers included in the request.
   headers: Headers,
@@ -358,7 +361,12 @@ impl RequestHead {
         status_line,
         path,
         query,
-        accept: vec![AcceptQualityMimeType::from_mime(MimeType::TextHtml, QValue::default())],
+        accept: vec![AcceptQualityMimeType::from_mime(
+          MimeType::TextHtml,
+          QValue::default(),
+          MimeCharset::Unspecified,
+        )],
+        accept_charset: vec![AcceptMimeCharset::new(MimeCharset::UsAscii, QValue::default())],
         content_type: None,
         headers: Default::default(),
       });
@@ -373,8 +381,15 @@ impl RequestHead {
       )));
     };
 
+    let accept_charset_hdr = headers.get(HttpHeaderName::AcceptCharset).unwrap_or("");
+    let Some(accept_charset) = AcceptMimeCharset::parse(accept_charset_hdr) else {
+      return Err(TiiError::UserError(UserError::IllegalAcceptHeaderValueSet(
+        accept_hdr.to_string(),
+      )));
+    };
+
     let content_type = if let Some(ctype_raw) = headers.get(HttpHeaderName::ContentType) {
-      let Some(ctype) = MimeType::parse_from_content_type_header(ctype_raw) else {
+      let Some(ctype) = MimeTypeWithCharset::parse_from_content_type_header(ctype_raw) else {
         return Err(TiiError::UserError(UserError::IllegalContentTypeHeaderValueSet(
           ctype_raw.to_string(),
         )));
@@ -384,7 +399,17 @@ impl RequestHead {
       None
     };
 
-    Ok(Self { method, version, status_line, path, query, accept, content_type, headers })
+    Ok(Self {
+      method,
+      version,
+      status_line,
+      path,
+      query,
+      accept,
+      accept_charset,
+      content_type,
+      headers,
+    })
   }
 
   /// Attempts to read and parse one HTTP request from the given reader.
@@ -469,7 +494,12 @@ impl RequestHead {
         version,
         headers,
         content_type: None,
-        accept: vec![AcceptQualityMimeType::from_mime(MimeType::TextHtml, QValue::default())], // Http 0.9 only accepts html.
+        accept: vec![AcceptQualityMimeType::from_mime(
+          MimeType::TextHtml,
+          QValue::default(),
+          MimeCharset::Unspecified,
+        )], // Http 0.9 only accepts html.
+        accept_charset: vec![AcceptMimeCharset::new(MimeCharset::UsAscii, QValue::default())],
         status_line: status_line.to_string(),
       });
     }
@@ -539,7 +569,7 @@ impl RequestHead {
     let accept = accept.unwrap_or_else(|| vec![AcceptQualityMimeType::default()]);
 
     let content_type = headers.get(HttpHeaderName::ContentType).map(|ctype_raw| {
-      let ctype = MimeType::parse_from_content_type_header(ctype_raw);
+      let ctype = MimeTypeWithCharset::parse_from_content_type_header(ctype_raw);
       if ctype.is_none() {
         warn_log!(
          "tii: Request to '{}' has invalid Content-Type header '{}' will assume 'Content-Type: application/octet-stream'",
@@ -548,8 +578,21 @@ impl RequestHead {
         );
       }
 
-      ctype.unwrap_or(MimeType::ApplicationOctetStream)
+      ctype.unwrap_or(MimeTypeWithCharset::APPLICATION_OCTET_STREAM)
     });
+
+    let accept_charset_hdr = headers.get(HttpHeaderName::AcceptCharset).unwrap_or("");
+    let accept_charset = AcceptMimeCharset::parse(accept_charset_hdr);
+    if accept_charset.is_none() {
+      // TODO should this be a hard error?
+      warn_log!(
+        "tii: Request to '{}' has invalid Accept-Charset header '{}' will assume the header is not set",
+        path.as_str(),
+        accept_charset_hdr
+      );
+    }
+
+    let accept_charset = accept_charset.unwrap_or_default();
 
     Ok(Self {
       method,
@@ -558,6 +601,7 @@ impl RequestHead {
       version,
       headers,
       accept,
+      accept_charset,
       content_type,
       status_line: status_line.to_string(),
     })
@@ -729,19 +773,20 @@ impl RequestHead {
   /// this value is ApplicationOctetStream even tho the raw header value is different.
   /// This returns none if the Content-Type header was not present at all.
   /// (For example ordinary GET requests do not have this header)
-  pub fn get_content_type(&self) -> Option<&MimeType> {
+  pub fn get_content_type(&self) -> Option<&MimeTypeWithCharset> {
     self.content_type.as_ref()
   }
 
   /// sets the content type header to given MimeType.
   /// This will affect both the header and the return value of get_content_type.
-  pub fn set_content_type(&mut self, content_type: MimeType) {
-    self.headers.set(HttpHeaderName::ContentType, content_type.as_str());
+  pub fn set_content_type(&mut self, content_type: impl Into<MimeTypeWithCharset>) {
+    let content_type = content_type.into();
+    self.headers.set(HttpHeaderName::ContentType, content_type.to_string());
     self.content_type = Some(content_type);
   }
 
   /// Removes the content type header. get_content_type will return None after this call.
-  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+  pub fn remove_content_type(&mut self) -> Option<MimeTypeWithCharset> {
     self.headers.remove(HttpHeaderName::ContentType);
     self.content_type.take()
   }
@@ -749,6 +794,10 @@ impl RequestHead {
   /// Returns the acceptable mime types
   pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
     self.accept.as_slice()
+  }
+
+  pub fn get_accept_charset(&self) -> &[AcceptMimeCharset] {
+    self.accept_charset.as_slice()
   }
 
   /// Returns an iterator over all headers.
@@ -806,11 +855,11 @@ impl RequestHead {
 
   /// Sets the header value.
   /// Some header values cannot be modified through this fn and attempting to change them are a noop.
-  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
-    let hdr_value = value.as_ref();
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
+    let hdr_value = value.to_string();
     match &hdr.as_ref().into() {
       HttpHeaderName::Accept => {
-        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
+        if let Some(accept) = AcceptQualityMimeType::parse(&hdr_value) {
           self.accept = accept;
           self.headers.set(hdr, value);
           return Ok(());
@@ -819,7 +868,7 @@ impl RequestHead {
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
       HttpHeaderName::ContentType => {
-        let mime = MimeType::parse(hdr_value)
+        let mime = MimeTypeWithCharset::parse_from_content_type_header(&hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
         self.headers.set(HttpHeaderName::ContentType, hdr_value);
         self.content_type = Some(mime);
@@ -843,17 +892,14 @@ impl RequestHead {
   }
 
   /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
-    let hdr_value = value.as_ref();
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
+    let hdr_value = value.to_string();
     match &hdr.as_ref().into() {
       HttpHeaderName::Accept => {
-        if let Some(accept) = AcceptQualityMimeType::parse(hdr_value) {
-          if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
-            return UserError::MultipleAcceptHeaderValuesSet(
-              old_value.to_string(),
-              hdr_value.to_string(),
-            )
-            .into();
+        if let Some(accept) = AcceptQualityMimeType::parse(&hdr_value) {
+          if let Some(old_value) = self.headers.try_set(hdr, &hdr_value) {
+            return UserError::MultipleAcceptHeaderValuesSet(old_value.to_string(), hdr_value)
+              .into();
           }
           self.accept = accept;
           return Ok(());
@@ -861,14 +907,11 @@ impl RequestHead {
         UserError::IllegalAcceptHeaderValueSet(hdr_value.to_string()).into()
       }
       HttpHeaderName::ContentType => {
-        let mime = MimeType::parse(hdr_value)
+        let mime = MimeTypeWithCharset::parse_from_content_type_header(&hdr_value)
           .ok_or_else(|| UserError::IllegalContentTypeHeaderValueSet(hdr_value.to_string()))?;
-        if let Some(old_value) = self.headers.try_set(hdr, hdr_value) {
-          return UserError::MultipleContentTypeHeaderValuesSet(
-            old_value.to_string(),
-            hdr_value.to_string(),
-          )
-          .into();
+        if let Some(old_value) = self.headers.try_set(hdr, &hdr_value) {
+          return UserError::MultipleContentTypeHeaderValuesSet(old_value.to_string(), hdr_value)
+            .into();
         }
         self.content_type = Some(mime);
         Ok(())

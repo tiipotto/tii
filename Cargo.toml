@@ -26,6 +26,7 @@ defer-heavy = "0.1.0"
 #GZIP/ZLIB in pure rust
 libflate = "2.2.1"
 listener_poll = { version = "0.1.1", optional = true }
+uintx = "0.1.0"
 
 ## SSL
 rustls = { version = "0.23", optional = true, default-features = false, features = ["std"] }

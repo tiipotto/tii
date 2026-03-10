@@ -1,26 +1,26 @@
 use crate::util::unwrap_some;
-use crate::{MimeType, TiiResult};
+use crate::{MimeTypeWithCharset, TiiResult};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Trait for serializing entities to some bytes.
 pub trait EntitySerializer<T: Any + Debug + 'static>: Any + Send {
   /// Perform the serialization
-  fn serialize(&self, mime: &MimeType, data: T) -> TiiResult<Vec<u8>>;
+  fn serialize(&self, mime: &MimeTypeWithCharset, data: T) -> TiiResult<Vec<u8>>;
 }
 
 impl<F, T> EntitySerializer<T> for F
 where
   T: Any + Debug + Send + 'static,
-  F: Fn(&MimeType, T) -> TiiResult<Vec<u8>> + Send + 'static,
+  F: Fn(&MimeTypeWithCharset, T) -> TiiResult<Vec<u8>> + Send + 'static,
 {
-  fn serialize(&self, mime: &MimeType, data: T) -> TiiResult<Vec<u8>> {
+  fn serialize(&self, mime: &MimeTypeWithCharset, data: T) -> TiiResult<Vec<u8>> {
     self(mime, data)
   }
 }
 
 trait DynResponseEntityInner: Debug + Send {
-  fn serialize(&mut self, mime: &MimeType) -> TiiResult<Vec<u8>>;
+  fn serialize(&mut self, mime: &MimeTypeWithCharset) -> TiiResult<Vec<u8>>;
   fn get_serializer(&self) -> &dyn Any;
   fn get_serializer_mut(&mut self) -> &mut dyn Any;
   fn get_entity(&self) -> &dyn Any;
@@ -39,7 +39,7 @@ impl<T: Any + Debug + Send + 'static> Debug for ResponseEntityInner<T> {
   }
 }
 impl<T: Any + Debug + Send + 'static> DynResponseEntityInner for ResponseEntityInner<T> {
-  fn serialize(&mut self, mime: &MimeType) -> TiiResult<Vec<u8>> {
+  fn serialize(&mut self, mime: &MimeTypeWithCharset) -> TiiResult<Vec<u8>> {
     unwrap_some(self.serializer.as_ref()).serialize(mime, unwrap_some(self.entity.take()))
   }
 
@@ -81,7 +81,7 @@ impl ResponseEntity {
       serializer: Some(Box::new(serializer) as Box<dyn EntitySerializer<T>>),
     }) as Box<dyn DynResponseEntityInner>)
   }
-  pub fn serialize(mut self, mime: &MimeType) -> TiiResult<Vec<u8>> {
+  pub fn serialize(mut self, mime: &MimeTypeWithCharset) -> TiiResult<Vec<u8>> {
     //We must consume! not consuming self will panic upon second call via dynamic dispatch!
     self.0.serialize(mime)
   }
