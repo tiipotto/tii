@@ -1,5 +1,4 @@
 use crate::mock_stream::MockStream;
-use std::os::linux::raw::stat;
 use tii::TiiResult;
 use tii::{RequestContext, Response, ServerBuilder};
 

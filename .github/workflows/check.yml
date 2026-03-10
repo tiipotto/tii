@@ -50,12 +50,12 @@ jobs:
         run: sudo apt update
       - name: Install valgrind
         run: sudo apt install valgrind
-      - name: Install cargo valgrind
-        run: cargo install cargo-valgrind
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.86
+      - name: Install cargo valgrind
+        run: cargo install cargo-valgrind --version 2.4.0
       - name: 64-bit Valgrind
         run: |
           cargo valgrind test --all-features
