@@ -105,10 +105,13 @@ impl DummyState {
   }
 }
 #[test]
+#[allow(unsafe_code)] //Safe alternative is Box::leak but that trips valgrind!
 pub fn tc61() {
   let state = DummyState { state: 5 };
 
-  let my_state: &'static DummyState = Box::leak(Box::new(state));
+  let raw = Box::into_raw(Box::new(state));
+
+  let my_state: &'static DummyState = unsafe { raw.as_ref().unwrap() };
 
   let server = ServerBuilder::default()
     .router(|rt| {
@@ -134,4 +137,6 @@ pub fn tc61() {
   let got = String::from_utf8(stream.copy_written_data()).unwrap();
 
   assert_eq!(got.as_str(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: Keep-Alive\r\nContent-Length: 15\r\n\r\n{\"d1\":3,\"d2\":4}HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: Keep-Alive\r\nContent-Length: 15\r\n\r\n{\"d1\":5,\"d2\":6}");
+
+  _ = unsafe { Box::from_raw(raw) };
 }
