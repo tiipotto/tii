@@ -1,4 +1,5 @@
 use crate::mock_stream::MockStream;
+use std::os::linux::raw::stat;
 use tii::TiiResult;
 use tii::{RequestContext, Response, ServerBuilder};
 
@@ -16,10 +17,13 @@ impl DummyState {
 }
 
 #[test]
+#[allow(unsafe_code)] //Safe alternative is Box::leak but that trips valgrind!
 pub fn tc59() {
   let state = DummyState { state: 5 };
 
-  let my_state: &'static DummyState = Box::leak(Box::new(state));
+  let raw = Box::into_raw(Box::new(state));
+
+  let my_state: &'static DummyState = unsafe { raw.as_ref().unwrap() };
 
   let server = ServerBuilder::default()
     .router(|rt| rt.route_get("/*", (my_state, DummyState::dummy_route)))
@@ -37,4 +41,6 @@ pub fn tc59() {
     got.as_str(),
     "HTTP/1.1 204 No Content\r\nConnection: Keep-Alive\r\nContent-Length: 0\r\n\r\n"
   );
+
+  _ = unsafe { Box::from_raw(raw) };
 }

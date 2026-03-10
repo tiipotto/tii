@@ -40,7 +40,10 @@ use std::fmt::Debug;
 use std::io;
 use std::io::ErrorKind;
 use tii::extras::{Connector, TcpConnector};
-use tii::{MimeType, RequestBody, RequestContext, Response, ResponseBody, ResponseContext, ServerBuilder, TiiResult, configure_type_system, MimeTypeWithCharset};
+use tii::{
+  MimeType, MimeTypeWithCharset, RequestBody, RequestContext, Response, ResponseBody,
+  ResponseContext, ServerBuilder, TiiResult, configure_type_system,
+};
 
 /// Serializer, it may do whatever you want it to do, in this case we use serde to create json.
 /// You could make xml, plain text, yaml...
