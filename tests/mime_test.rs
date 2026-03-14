@@ -314,3 +314,122 @@ fn test_mime_type2group() {
     MimeGroup::parse("application/dubdub").unwrap()
   );
 }
+
+#[test]
+fn test_files() {
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/DCM/JPEG2000.dcm")),
+    &[MimeType::ApplicationDicom]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.xz")),
+    &[MimeType::ApplicationXz]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.gz")),
+    &[MimeType::ApplicationGzip]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.zip")),
+    &[MimeType::ApplicationZip, MimeType::ApplicationJar, MimeType::ApplicationEpub]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.7z")),
+    &[MimeType::Application7Zip]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.avif")),
+    &[MimeType::ImageAvif]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.bmp")),
+    &[MimeType::ImageBmp]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.heic")),
+    &[MimeType::ImageHeic]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.ico")),
+    &[MimeType::ImageIcon]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.jpg")),
+    &[MimeType::ImageJpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.png")),
+    &[MimeType::ImagePng]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.qoi")),
+    &[MimeType::ImageQoi]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.tif")),
+    &[MimeType::ImageTiff]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.webp")),
+    &[MimeType::ImageWebp]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.mp2")),
+    &[MimeType::AudioMpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.mp3")),
+    &[MimeType::AudioMp3]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.ogg")),
+    &[MimeType::VideoOgg, MimeType::AudioOgg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.wav")),
+    &[MimeType::AudioWaveform]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.m4a")),
+    &[MimeType::AudioMp4]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.aac")),
+    &[MimeType::AudioAac]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.webm")),
+    &[MimeType::VideoWebm, MimeType::AudioWebm]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.3gp")),
+    &[MimeType::Video3gpp, MimeType::Video3gpp2, MimeType::Audio3gpp, MimeType::Audio3gpp2]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.mp4")),
+    &[MimeType::VideoMp4, MimeType::AudioMp4]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.m2ts")),
+    &[MimeType::VideoMpegTransportStream]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.mpeg")),
+    &[MimeType::VideoMpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.webm")),
+    &[MimeType::VideoWebm, MimeType::AudioWebm]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.avi")),
+    &[MimeType::VideoAvi]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.3gp")),
+    &[MimeType::Video3gpp, MimeType::Video3gpp2, MimeType::Audio3gpp, MimeType::Audio3gpp2]
+  );
+}

@@ -101,6 +101,7 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
   if let Some(num) = slice_it(data, 0..12, u96::from_be_bytes) {
     match num.as_num() {
       0xFFD8FFE000104A4649460001 => return &[ImageJpeg],
+      0x000100000013010000040030 => return &[FontTtf],
       _ => (),
     }
 
@@ -109,10 +110,19 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
       _ => (),
     }
 
-    match num.as_num() & 0xFFFFFF000000FFFFFF {
+    match num.as_num() & 0xFFFFFFFF_00000000_FFFFFFFF {
       0x52494646_00000000_57415645 => return &[AudioWaveform],
       0x52494646_00000000_41564920 => return &[VideoAvi],
       0x52494646_00000000_57454250 => return &[ImageWebp],
+      _ => (),
+    }
+
+    match num.as_num() & 0x00000000FFFFFFFFFFFFFFFF {
+      0x000000006674797069736F6D | 0x00000000667479704D534E56 => return &[VideoMp4, AudioMp4],
+      0x000000006674797061766966 => return &[ImageAvif],
+      0x000000006674797068656963 => return &[ImageHeic],
+      0x00000000667479704d344120 => return &[AudioMp4],
+      0x000000006674797033677034 => return &[Video3gpp, Video3gpp2, Audio3gpp, Audio3gpp2],
       _ => (),
     }
   }
@@ -120,8 +130,6 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
   if let Some(num) = slice_it(data, 0..8, u64::from_be_bytes) {
     match num {
       0x89504E470D0A1A0A => return &[ImagePng],
-      0x6674797068656963 => return &[ImageHeic],
-      0x6674797069736F6D | 0x667479704D534E56 => return &[VideoMp4, AudioMp4, AudioAac],
       0xD0CF11E0A1B11AE1 => {
         return &[
           ApplicationMicrosoftWord,
@@ -165,13 +173,14 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
       0xFFD8FFDB | 0xFFD8FFEE | 0xFFD8FFE0 => return &[ImageJpeg],
       0x49492A00 | 0x4D4D002A | 0x49492B00 | 0x4D4D002B => return &[ImageTiff],
       0x0061736D => return &[ApplicationWasm],
-      0x000001BA => return &[VideoMpeg, AudioMpeg],
-      0x000001B3 => return &[VideoMpeg, AudioMpeg],
+      0x000001BA => return &[VideoMpeg],
+      0x000001B3 => return &[VideoMpeg],
       0x00000100 => return &[ImageIcon],
       0x1B4C7561 => return &[ApplicationLuaBytecode],
-      0x1A45DFA3 => return &[AudioWebm, VideoWebm],
+      0x1A45DFA3 => return &[VideoWebm, AudioWebm],
       0x4F676753 => return &[VideoOgg, AudioOgg],
       0x4D546864 => return &[AudioMidi],
+      0x716f6966 => return &[ImageQoi],
       _ => (),
     };
   }
@@ -187,7 +196,9 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
     match num {
       0x1F8B => return &[ApplicationGzip],
       0x4D5A => return &[ApplicationDosMZExe],
-      0xFFFB => return &[AudioMp4],
+      0xFFFB => return &[AudioMp3],
+      0xFFFD => return &[AudioMpeg],
+      0xFFF1 => return &[AudioAac],
       0x424D => return &[ImageBmp],
       _ => (),
     }
@@ -208,6 +219,13 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
       0x7573746172003030 | 0x7573746172202000 => return &[ApplicationTapeArchive],
       _ => (),
     }
+  }
+
+  if data.get(4).copied() == Some(0x47)
+    && data.get(196).copied() == Some(0x47)
+    && data.get(388).copied() == Some(0x47)
+  {
+    return &[VideoMpegTransportStream];
   }
 
   &[]
