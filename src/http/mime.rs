@@ -1124,7 +1124,6 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::ApplicationDosMZExe,
   MimeType::ApplicationMicrosoftInstaller,
   MimeType::VideoMp4,
-
   MimeType::VideoOgg,
   MimeType::VideoWebm,
   MimeType::VideoAvi,
@@ -1302,7 +1301,7 @@ impl MimeType {
   /// If a file extension is available, then use `MimeType::from_file_extension`
   ///
   /// This method does not perform overly costly or deep analysis of the file header
-  /// so its accuracy limited.
+  /// so its accuracy is limited.
   ///
   /// # Returns
   /// Empty slice if the mime type could not be detected based on header bytes.

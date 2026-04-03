@@ -700,6 +700,90 @@ impl RequestContext {
     self.request.get_query_param(key)
   }
 
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// # Returns
+  /// Ok(None) if no such query parameter exists.
+  /// Ok(Some) if the query parameter exists and can be parsed
+  /// Err(...) if the query parameter exists but parsing fails.
+  pub fn parse_query_param<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+  ) -> TiiResult<Option<T>> {
+    let name = name.as_ref();
+    let Some(param) = self.get_query_param(name) else {
+      return Ok(None);
+    };
+
+    param.parse::<T>().map(Some).map_err(|e| {
+      TiiError::UserError(UserError::InvalidQueryParameter(
+        name.to_string(),
+        TypeId::of::<T>(),
+        Box::new(e),
+      ))
+    })
+  }
+
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// If no such query parameter exists then this function calls the provided
+  /// fallback constructor function.
+  ///
+  /// # Example
+  /// ```rust
+  /// use tii::{RequestContext, Response, TiiResult};
+  ///
+  /// fn endpoint(ctx: &RequestContext) -> TiiResult<Response> {
+  ///   let timeout = ctx.parse_query_param_or::<u64, _>("timeout_ms", 10_000)?;
+  ///   println!("timeout_ms is {timeout}");
+  ///   todo!()
+  /// }
+  /// ```
+  ///
+  /// # Returns
+  /// Ok - parsing succeeds or no such query parameter existed and the value was provided by the fallback constructor function.
+  /// Err - query parameter exists but parsing failed.
+  pub fn parse_query_param_or<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+    default_value: T,
+  ) -> TiiResult<T> {
+    Ok(self.parse_query_param(name)?.unwrap_or(default_value))
+  }
+
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// If no such query parameter exists then this function calls the provided
+  /// fallback constructor function.
+  ///
+  /// # Example
+  /// ```rust
+  /// use tii::{RequestContext, Response, TiiResult};
+  ///
+  /// fn endpoint(ctx: &RequestContext) -> TiiResult<Response> {
+  ///   let timeout = ctx.parse_query_param_or_else::<u64, _>("timeout_ms", || 10_000)?;
+  ///   println!("timeout_ms is {timeout}");
+  ///   todo!()
+  /// }
+  /// ```
+  ///
+  /// # Returns
+  /// Ok - parsing succeeds or no such query parameter existed and the value was provided by the fallback constructor function.
+  /// Err - query parameter exists but parsing failed.
+  pub fn parse_query_param_or_else<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+    default_value: impl FnOnce() -> T,
+  ) -> TiiResult<T> {
+    Ok(self.parse_query_param(name)?.unwrap_or_else(default_value))
+  }
+
   /// Gets all query params in order of appearance that contain the given key. Returns empty vec if the key doesn’t exist.
   pub fn get_query_params(&self, key: impl AsRef<str>) -> Vec<&str> {
     self.request.get_query_params(key)
