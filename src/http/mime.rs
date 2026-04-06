@@ -881,6 +881,9 @@ pub enum MimeType {
   /// application/vnd.apple.installer+xml
   ApplicationAppleInstallerPackage,
 
+  ///application/x-mach-binary
+  ApplicationAppleMachBinary,
+
   /// application/vnd.oasis.opendocument.presentation
   ApplicationOpenDocumentPresentation,
 
@@ -1099,6 +1102,7 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::ApplicationPdf,
   MimeType::ApplicationZip,
   MimeType::ApplicationAppleInstallerPackage,
+  MimeType::ApplicationAppleMachBinary,
   MimeType::ApplicationOpenDocumentPresentation,
   MimeType::ApplicationOpenDocumentSpreadsheet,
   MimeType::ApplicationOpenDocumentText,
@@ -1235,6 +1239,7 @@ impl MimeType {
       "bin" => MimeType::ApplicationOctetStream,
       "jsonld" => MimeType::ApplicationJsonLd,
       "mpkg" => MimeType::ApplicationAppleInstallerPackage,
+      "dylib" => MimeType::ApplicationAppleMachBinary,
       "odp" => MimeType::ApplicationOpenDocumentPresentation,
       "ods" => MimeType::ApplicationOpenDocumentSpreadsheet,
       "odt" => MimeType::ApplicationOpenDocumentText,
@@ -1339,6 +1344,7 @@ impl MimeType {
       MimeType::ApplicationPdf => "pdf",
       MimeType::ApplicationZip => "zip",
       MimeType::ApplicationAppleInstallerPackage => "mpkg",
+      MimeType::ApplicationAppleMachBinary => "dylib",
       MimeType::ApplicationOpenDocumentPresentation => "odp",
       MimeType::ApplicationOpenDocumentSpreadsheet => "ods",
       MimeType::ApplicationOpenDocumentText => "odt",
@@ -1438,6 +1444,7 @@ impl MimeType {
       MimeType::ApplicationPdf => &MimeGroup::Application,
       MimeType::ApplicationZip => &MimeGroup::Application,
       MimeType::ApplicationAppleInstallerPackage => &MimeGroup::Application,
+      MimeType::ApplicationAppleMachBinary => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentPresentation => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentSpreadsheet => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentText => &MimeGroup::Application,
@@ -1583,6 +1590,7 @@ impl MimeType {
       MimeType::ApplicationJavaClass => "application/x-java-class",
       MimeType::ApplicationJsonLd => "application/ld+json",
       MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationAppleMachBinary => "application/x-mach-binary",
       MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
@@ -1690,6 +1698,7 @@ impl MimeType {
       MimeType::ApplicationJavaClass => "application/x-java-class",
       MimeType::ApplicationJsonLd => "application/ld+json",
       MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationAppleMachBinary => "application/x-mach-binary",
       MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
@@ -1807,6 +1816,7 @@ impl MimeType {
       "application/x-java-class" => MimeType::ApplicationJavaClass,
       "application/ld+json" => MimeType::ApplicationJsonLd,
       "application/vnd.apple.installer+xml" => MimeType::ApplicationAppleInstallerPackage,
+      "application/x-mach-binary" => MimeType::ApplicationAppleMachBinary,
       "application/vnd.oasis.opendocument.presentation" => {
         MimeType::ApplicationOpenDocumentPresentation
       }

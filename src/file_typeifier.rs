@@ -165,7 +165,21 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
   if let Some(num) = slice_it(data, 0..4, u32::from_be_bytes) {
     match num {
       0x7F454C46 => return &[ApplicationElf],
-      0xCAFEBABE => return &[ApplicationJavaClass],
+      0xCAFEBABE => {
+        if let Some(num) = slice_it(data, 0..8, u32::from_be_bytes) {
+          if num < 0x20 {
+            // This is a hack, the apple mach-o binary stores the number of
+            // supported CPU's in this field. This number as of now is always less than 0x20.
+            // The jvm stores the jvm version in this field.
+            // Java 1.0 uses the value "0x2D" here, and it has only been increased with newer version.
+            return &[ApplicationAppleMachBinary];
+          }
+        }
+
+        return &[ApplicationJavaClass];
+      }
+      //32 bit/64 bit mach binary with a single architecture.
+      0xFEEDFACE | 0xFEEDFACF => return &[ApplicationAppleMachBinary],
       0x52617221 => return &[ApplicationRar],
       0x504B0304 | 0x504B0506 | 0x504B0708 => {
         return &[ApplicationZip, ApplicationJar, ApplicationEpub]
