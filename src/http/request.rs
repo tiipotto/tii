@@ -473,7 +473,7 @@ impl RequestHead {
       .map_err(|_| {
         TiiError::from(RequestHeadParsingError::InvalidPathUrlEncoding(raw_path.to_string()))
       })?
-      .replace('+', " ");
+      .to_string();
 
     let raw_query = uri_iter.next().unwrap_or("");
     let query = parse_raw_query(raw_query)?;
