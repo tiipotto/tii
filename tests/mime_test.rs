@@ -432,4 +432,10 @@ fn test_files() {
     MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.3gp")),
     &[MimeType::Video3gpp, MimeType::Video3gpp2, MimeType::Audio3gpp, MimeType::Audio3gpp2]
   );
+
+  //Dumped with xxd from a mac binary.
+  assert_eq!(
+    MimeType::from_file_header(&[0xca,0xfe,0xba,0xbe,0x00,0x00,0x00,0x02,0x01,0x00,0x00,0x07,0x00,0x00,0x00,0x03]),
+    &[MimeType::ApplicationAppleMachBinary]
+  );
 }

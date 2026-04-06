@@ -166,7 +166,7 @@ pub(crate) fn typeify_header(data: &[u8]) -> &'static [MimeType] {
     match num {
       0x7F454C46 => return &[ApplicationElf],
       0xCAFEBABE => {
-        if let Some(num) = slice_it(data, 0..8, u32::from_be_bytes) {
+        if let Some(num) = slice_it(data, 4..8, u32::from_be_bytes) {
           if num < 0x20 {
             // This is a hack, the apple mach-o binary stores the number of
             // supported CPU's in this field. This number as of now is always less than 0x20.
