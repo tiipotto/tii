@@ -645,7 +645,7 @@ impl MimeTypeWithCharset {
 impl Display for MimeTypeWithCharset {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     if let Some(charset) = self.charset.as_str() {
-      f.write_fmt(format_args!("{}; {}", self.mime.as_str(), charset))
+      f.write_fmt(format_args!("{}; charset={}", self.mime.as_str(), charset))
     } else {
       f.write_str(self.mime.as_str())
     }
