@@ -39,7 +39,7 @@ impl Headers {
   }
 
   /// Create and add a new header with the given name and value.
-  pub fn add(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
+  pub fn add(&mut self, name: impl AsRef<str>, value: impl ToString) {
     self.0.push(HttpHeader::new(name, value));
   }
 
@@ -58,7 +58,7 @@ impl Headers {
 
   /// Removes all previous instances of the header and sets the header to the single value.
   /// Its guaranteed that the header is only present exactly once after this call returns.
-  pub fn set(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) {
+  pub fn set(&mut self, name: impl AsRef<str>, value: impl ToString) {
     self.remove(&name);
     self.add(name, value);
   }
@@ -66,7 +66,7 @@ impl Headers {
   /// Will Set the header value if it is not already set.
   /// Should the value already be set then the previous value is returned as Some().
   /// Returns None if the value was set.
-  pub fn try_set(&mut self, header: impl AsRef<str>, value: impl AsRef<str>) -> Option<&str> {
+  pub fn try_set(&mut self, header: impl AsRef<str>, value: impl ToString) -> Option<&str> {
     if self.get(&header).is_some() {
       return self.get(header);
     }
@@ -76,7 +76,7 @@ impl Headers {
 
   /// Replaces all header values with a single header.
   /// The returned Vec contains the removed values. is len() == 0 if there were none.
-  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Vec<HttpHeader> {
+  pub fn replace_all(&mut self, name: impl AsRef<str>, value: impl ToString) -> Vec<HttpHeader> {
     let mut hcopy = Vec::with_capacity(self.len());
     let mut hrem = Vec::new();
     std::mem::swap(&mut self.0, &mut hcopy);
@@ -115,13 +115,12 @@ impl HttpHeader {
   ///
   /// You can either specify the header type as a `HeaderType`, e.g. `HeaderType::ContentType`, or as
   ///   a string, e.g. `Content-Type`.
-  pub fn new(name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-    Self { name: HttpHeaderName::from(name.as_ref()), value: value.as_ref().to_string() }
+  pub fn new(name: impl AsRef<str>, value: impl ToString) -> Self {
+    Self { name: HttpHeaderName::from(name.as_ref()), value: value.to_string() }
   }
 }
 
 /// Represents a header received in a request.
-///TODO implement to &str fn to prevent clone on serialization!
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum HttpHeaderName {
@@ -412,8 +411,8 @@ impl Ord for HttpHeaderName {
 
 impl From<&str> for HttpHeaderName {
   fn from(name: &str) -> Self {
-    //TODO to_ascii_lowercase is a heap allocation...
-    match name.to_ascii_lowercase().as_str() {
+    let mut stack_buffer = [0u8; 64];
+    match crate::util::ascii_to_lower_first_n(&mut stack_buffer, name) {
       "accept" => Self::Accept,
       "accept-charset" => Self::AcceptCharset,
       "accept-encoding" => Self::AcceptEncoding,

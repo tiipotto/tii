@@ -104,13 +104,14 @@ impl ServerBuilder {
     self
   }
 
-  /// Adds a new host sub-app to the server.
-  /// The host can contain wildcards, for example `*.example.com`.
+  /// Adds a new custom router to the server.
   ///
-  /// ## Panics
-  /// This function will panic if the host is equal to `*`, since this is the default host.
-  /// If you want to add a route to every host, simply add it directly to the main app.
-  pub fn add_router(mut self, handler: impl Router + 'static) -> Self {
+  /// Routers will process a connection in natural order,
+  /// the first router that wants to handle a request will handle it, and the rest of the routers are not called.
+  ///
+  /// This is intended to be used for roughly sending a request into the correct part of your application.
+  /// You can, for example, evaluate the Host header, or the path of the application.
+  pub fn with_router(mut self, handler: impl Router + 'static) -> Self {
     self.routers.push(Box::new(handler));
     self
   }
@@ -120,7 +121,7 @@ impl ServerBuilder {
     self,
     builder: T,
   ) -> TiiResult<Self> {
-    Ok(self.add_router(builder(RouterBuilder::default())?.build()))
+    Ok(self.with_router(builder(RouterBuilder::default())?.build()))
   }
 
   /// Sets the error handler for the server.

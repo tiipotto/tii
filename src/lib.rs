@@ -37,4 +37,5 @@ pub mod extras;
 mod default_functions;
 mod functional_traits;
 
+mod file_typeifier;
 mod util;

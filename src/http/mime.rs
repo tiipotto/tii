@@ -1,6 +1,5 @@
 //! Provides functionality for handling MIME types.
 
-use crate::util::unwrap_some;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -164,7 +163,7 @@ impl AcceptMimeType {
     }
   }
 
-  /// Returns true if this AcceptMimeType will accept ANY mime from the given group.
+  /// Returns true if this AcceptMimeType accepts ANY mime from the given group.
   pub fn permits_group(&self, mime_group: impl AsRef<MimeGroup>) -> bool {
     match self {
       AcceptMimeType::GroupWildcard(group) => group == mime_group.as_ref(),
@@ -173,7 +172,7 @@ impl AcceptMimeType {
     }
   }
 
-  /// Returns true if this AcceptMimeType will permit ANY mime type permitted by the other AcceptMimeType.
+  /// Returns true if this AcceptMimeType permits ANY mime type permitted by the other AcceptMimeType.
   pub fn permits(&self, mime_type: impl AsRef<AcceptMimeType>) -> bool {
     match mime_type.as_ref() {
       AcceptMimeType::GroupWildcard(group) => self.permits_group(group),
@@ -200,13 +199,66 @@ impl Display for AcceptMimeType {
   }
 }
 
+/// AcceptMimeType with a charset.
+#[derive(Clone, PartialEq, Debug, Eq, Hash)]
+pub struct AcceptMimeTypeWithCharset {
+  mime: AcceptMimeType,
+  charset: MimeCharset,
+}
+
+impl AcceptMimeTypeWithCharset {
+  /// Constructor
+  pub const fn new(mime: AcceptMimeType, charset: MimeCharset) -> Self {
+    Self { mime, charset }
+  }
+
+  /// The underlying mime type
+  pub const fn mime(&self) -> &AcceptMimeType {
+    &self.mime
+  }
+
+  /// The underlying charset
+  pub const fn charset(&self) -> &MimeCharset {
+    &self.charset
+  }
+
+  /// Does this have a charset?
+  pub const fn has_charset(&self) -> bool {
+    !matches!(self.charset, MimeCharset::Unspecified)
+  }
+}
+impl<T> From<T> for AcceptMimeTypeWithCharset
+where
+  T: Into<AcceptMimeType>,
+{
+  fn from(value: T) -> Self {
+    AcceptMimeTypeWithCharset::new(value.into(), MimeCharset::Unspecified)
+  }
+}
+
+impl<T, Y> From<(T, Y)> for AcceptMimeTypeWithCharset
+where
+  T: Into<AcceptMimeType>,
+  Y: Into<MimeCharset>,
+{
+  fn from(value: (T, Y)) -> Self {
+    AcceptMimeTypeWithCharset::new(value.0.into(), value.1.into())
+  }
+}
+
 ///
-/// Represents one part of an accept mime
+/// Represents one part of a mime string as passed in the Accept Header.
+/// It's basically a combination of mime, charset, and quality value.
+///
+/// If no charset is specified, then `MimeCharset::Unspecified` is set.
+/// If no quality is specified, then `QValue::default()` is used which corresponds to 1.0.
+///
 /// # See
 /// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept>
 #[derive(Clone, PartialEq, Debug, Eq)]
 pub struct AcceptQualityMimeType {
   value: AcceptMimeType,
+  charset: MimeCharset,
   q: QValue,
 }
 
@@ -226,47 +278,44 @@ impl AcceptQualityMimeType {
   /// This fn parses an Accept header value from a client http request.
   /// The returned Vec is sorted in descending order of quality value q.
   pub fn parse(value: impl AsRef<str>) -> Option<Vec<Self>> {
+    let mut stack_buffer = [0u8; 8];
     let value = value.as_ref();
     let mut data = Vec::new();
-    for mut mime in value.split(",") {
-      mime = mime.trim();
-
-      if let Some((mime, rawq)) = mime.split_once(";") {
-        if !rawq.starts_with("q=") {
-          // TODO we dont support level notation...
-          return None;
-        }
-
-        let qvalue = QValue::parse(&rawq[2..])?;
-
-        if mime == "*/*" {
-          data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: qvalue });
+    for mut accept_mime in value.split(",") {
+      accept_mime = accept_mime.trim();
+      let mut iter = accept_mime.split(";");
+      let mime = iter.next()?;
+      let mut q = None;
+      let mut charset = None;
+      for raw_part in iter.map(str::trim) {
+        if raw_part.starts_with("q=") {
+          if q.is_some() {
+            // Multiple q
+            return None;
+          }
+          q = Some(QValue::parse(raw_part.get(2..)?)?);
           continue;
         }
 
-        match MimeType::parse(mime) {
-          None => match MimeGroup::parse(mime) {
-            Some(group) => {
-              if &mime[group.as_str().len()..] != "/*" {
-                return None;
-              }
-              data.push(AcceptQualityMimeType {
-                value: AcceptMimeType::GroupWildcard(group),
-                q: qvalue,
-              })
-            }
-            None => return None,
-          },
-          Some(mime) => {
-            data.push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q: qvalue })
+        if crate::util::ascii_to_lower_first_n(&mut stack_buffer, raw_part).starts_with("charset=")
+        {
+          if charset.is_some() {
+            // Multiple charset
+            return None;
           }
-        };
+          charset = Some(MimeCharset::parse(raw_part.get(8..)?)?);
+          continue;
+        }
 
-        continue;
+        //We don't support other attributes like level notation yet.
+        return None;
       }
 
+      let q = q.unwrap_or_default();
+      let charset = charset.unwrap_or_default();
+
       if mime == "*/*" {
-        data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q: QValue::default() });
+        data.push(AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q, charset });
         continue;
       }
 
@@ -278,18 +327,17 @@ impl AcceptQualityMimeType {
             }
             data.push(AcceptQualityMimeType {
               value: AcceptMimeType::GroupWildcard(group),
-              q: QValue::default(),
+              q,
+              charset,
             })
           }
           None => return None,
         },
-        Some(mime) => data.push(AcceptQualityMimeType {
-          value: AcceptMimeType::Specific(mime),
-          q: QValue::default(),
-        }),
+        Some(mime) => {
+          data.push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q, charset })
+        }
       };
     }
-
     data.sort();
     Some(data)
   }
@@ -316,6 +364,11 @@ impl AcceptQualityMimeType {
   /// Get the QValue of this accept mime.
   pub const fn qvalue(&self) -> QValue {
     self.q
+  }
+
+  /// Get the charset of this accept mime.
+  pub const fn charset(&self) -> &MimeCharset {
+    &self.charset
   }
 
   /// Is this a */* accept?
@@ -351,24 +404,37 @@ impl AcceptQualityMimeType {
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `*/*`
-  pub const fn wildcard(q: QValue) -> AcceptQualityMimeType {
-    AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q }
+  pub const fn wildcard(q: QValue, charset: MimeCharset) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Wildcard, q, charset }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/*` depending on MimeGroup.
-  pub const fn from_group(group: MimeGroup, q: QValue) -> AcceptQualityMimeType {
-    AcceptQualityMimeType { value: AcceptMimeType::GroupWildcard(group), q }
+  pub const fn from_group(
+    group: MimeGroup,
+    q: QValue,
+    charset: MimeCharset,
+  ) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::GroupWildcard(group), q, charset }
   }
 
   /// Returns a AcceptMime equivalent to calling parse with `group/type` depending on MimeType.
-  pub const fn from_mime(mime: MimeType, q: QValue) -> AcceptQualityMimeType {
-    AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q }
+  pub const fn from_mime(mime: MimeType, q: QValue, charset: MimeCharset) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q, charset }
+  }
+
+  /// Returns a AcceptQualityMimeType with a specific q value and charset.
+  pub const fn from_accept_mime(
+    mime: AcceptMimeType,
+    q: QValue,
+    charset: MimeCharset,
+  ) -> AcceptQualityMimeType {
+    AcceptQualityMimeType { value: mime, q, charset }
   }
 }
 
 impl Default for AcceptQualityMimeType {
   fn default() -> Self {
-    AcceptQualityMimeType::wildcard(QValue::default())
+    AcceptQualityMimeType::wildcard(QValue::default(), MimeCharset::default())
   }
 }
 
@@ -380,6 +446,228 @@ impl Display for AcceptQualityMimeType {
       f.write_str(self.q.as_str())?;
     }
     Ok(())
+  }
+}
+
+/// Charset that may be included as part of an Accept-Charset header, Accept header, or Content-Type header.
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
+#[non_exhaustive]
+pub enum MimeCharset {
+  /// Utf-8 charset
+  Utf8,
+  /// ISO-88591 charset, which was widely used on the web before utf-8 became common.
+  Iso88591,
+
+  /// US-ASCII charset
+  UsAscii,
+
+  /// There is no charset information
+  #[default]
+  Unspecified,
+  /// Other custom charset
+  Other(String),
+}
+
+impl MimeCharset {
+  /// Returns the string representation of the charset that is suitable for use in http headers.
+  pub fn as_str(&self) -> Option<&str> {
+    Some(match self {
+      MimeCharset::Unspecified => return None,
+      MimeCharset::Utf8 => "UTF-8",
+      MimeCharset::UsAscii => "US-ASCII",
+      MimeCharset::Iso88591 => "ISO-8859-1",
+      MimeCharset::Other(s) => s,
+    })
+  }
+
+  /// Attempt to parse http charset from the string of an http header.
+  /// # Returns
+  /// None if the data contains unexpected symbols.
+  pub fn parse(data: impl AsRef<str>) -> Option<Self> {
+    let data = data.as_ref();
+
+    //Must be at least one longer than max match arm length!
+    let mut stack_buffer = [0u8; 16];
+
+    Some(match crate::util::ascii_to_lower_first_n(&mut stack_buffer, data) {
+      "utf-8" | "utf8" => MimeCharset::Utf8,
+      "iso-8859-1" => MimeCharset::Iso88591,
+      "us-ascii" => MimeCharset::UsAscii,
+      "" => MimeCharset::Unspecified,
+      _ => {
+        for c in data.chars() {
+          if c.is_ascii_digit() {
+            continue;
+          }
+
+          if c.is_ascii_alphabetic() {
+            continue;
+          }
+
+          //https://www.iana.org/assignments/character-sets/character-sets.xhtml
+          if c == '-' || c == '_' || c == '.' || c == '(' || c == ')' || c == ':' {
+            continue;
+          }
+
+          return None;
+        }
+
+        MimeCharset::Other(data.to_string())
+      }
+    })
+  }
+}
+
+/// Charset as present in the Accept-Charset http header.
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
+pub struct AcceptMimeCharset {
+  charset: MimeCharset,
+  q: QValue,
+}
+
+impl AcceptMimeCharset {
+  /// Parses a Accept-Charset header value.
+  pub fn parse(value: impl AsRef<str>) -> Option<Vec<Self>> {
+    let value = value.as_ref().trim();
+    if value.is_empty() {
+      return Some(vec![]);
+    }
+
+    let mut data = Vec::new();
+    for part in value.split(",").map(str::trim) {
+      let mut iter = part.split(";");
+      let charset_name = iter.next()?.trim();
+      let charset = MimeCharset::parse(charset_name)?;
+      let mut q = None;
+
+      loop {
+        let Some(next) = iter.next().map(str::trim) else {
+          break;
+        };
+
+        if let Some(raw_q) = next.strip_prefix("q=") {
+          if q.is_some() {
+            // Multiple Q
+            return None;
+          }
+          q = Some(QValue::parse(raw_q)?);
+        }
+      }
+
+      let q = q.unwrap_or_default();
+
+      data.push(AcceptMimeCharset::new(charset, q));
+    }
+
+    Some(data)
+  }
+
+  /// Constructor
+  pub const fn new(charset: MimeCharset, q: QValue) -> Self {
+    Self { charset, q }
+  }
+
+  /// Gets the charset
+  pub const fn charset(&self) -> &MimeCharset {
+    &self.charset
+  }
+
+  /// Gets the quality of the charset
+  pub const fn quality(&self) -> QValue {
+    self.q
+  }
+}
+
+/// Mime type with charset, suitable for use in a Content-Type header.
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct MimeTypeWithCharset {
+  mime: MimeType,
+  charset: MimeCharset,
+}
+
+impl AsRef<MimeType> for MimeTypeWithCharset {
+  fn as_ref(&self) -> &MimeType {
+    &self.mime
+  }
+}
+
+impl MimeTypeWithCharset {
+  /// Constant for application/octet-stream without a charset.
+  pub const APPLICATION_OCTET_STREAM: MimeTypeWithCharset =
+    MimeTypeWithCharset::from_mime(MimeType::ApplicationOctetStream);
+
+  /// Constructor
+  pub const fn new(mime: MimeType, charset: MimeCharset) -> Self {
+    Self { mime, charset }
+  }
+
+  /// Constructor, unspecified charset
+  pub const fn from_mime(mime: MimeType) -> Self {
+    Self { mime, charset: MimeCharset::Unspecified }
+  }
+
+  /// This fn parses the mime type and assumes that its in the format of a valid Content-Type header.
+  pub fn parse_from_content_type_header(value: impl AsRef<str>) -> Option<Self> {
+    let mut iter = value.as_ref().split(";");
+    let ct = iter.next()?;
+    let mt = MimeType::parse(ct.trim())?;
+    let charset = loop {
+      let Some(next) = iter.next().map(str::trim) else { break MimeCharset::Unspecified };
+
+      let mut stack_buffer = [0u8; 8];
+      if !crate::util::ascii_to_lower_first_n(&mut stack_buffer, next).starts_with("charset=") {
+        //boundry=..... for example
+        continue;
+      }
+
+      break MimeCharset::parse(next.get(8..)?)?;
+    };
+
+    Some(MimeTypeWithCharset::new(mt, charset))
+  }
+
+  /// Ref to the mime type
+  pub const fn mime(&self) -> &MimeType {
+    &self.mime
+  }
+
+  /// Ref to the charset
+  pub const fn charset(&self) -> &MimeCharset {
+    &self.charset
+  }
+
+  /// Does this have a specified charset?
+  pub const fn has_charset(&self) -> bool {
+    !matches!(self.charset, MimeCharset::Unspecified)
+  }
+}
+
+impl Display for MimeTypeWithCharset {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    if let Some(charset) = self.charset.as_str() {
+      f.write_fmt(format_args!("{}; charset={}", self.mime.as_str(), charset))
+    } else {
+      f.write_str(self.mime.as_str())
+    }
+  }
+}
+
+impl<T> From<T> for MimeTypeWithCharset
+where
+  T: Into<MimeType>,
+{
+  fn from(value: T) -> Self {
+    MimeTypeWithCharset::new(value.into(), MimeCharset::Unspecified)
+  }
+}
+
+impl<T, Y> From<(T, Y)> for MimeTypeWithCharset
+where
+  T: Into<MimeType>,
+  Y: Into<MimeCharset>,
+{
+  fn from(value: (T, Y)) -> Self {
+    MimeTypeWithCharset::new(value.0.into(), value.1.into())
   }
 }
 
@@ -593,6 +881,9 @@ pub enum MimeType {
   /// application/vnd.apple.installer+xml
   ApplicationAppleInstallerPackage,
 
+  ///application/x-mach-binary
+  ApplicationAppleMachBinary,
+
   /// application/vnd.oasis.opendocument.presentation
   ApplicationOpenDocumentPresentation,
 
@@ -638,6 +929,9 @@ pub enum MimeType {
   /// application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
   ApplicationMicrosoftExcelXml,
 
+  /// application/x-ms-installer
+  ApplicationMicrosoftInstaller,
+
   /// application/xml
   /// text/xml
   ApplicationXml,
@@ -656,6 +950,15 @@ pub enum MimeType {
 
   /// application/wasm
   ApplicationWasm,
+
+  /// application/toml
+  ApplicationToml,
+
+  /// application/x-elf
+  ApplicationElf,
+
+  /// application/x-msdownload
+  ApplicationDosMZExe,
 
   ////////////////////////////////////// VIDEO
   /// video/mp4
@@ -695,6 +998,9 @@ pub enum MimeType {
   /// image/png
   ImagePng,
 
+  /// image/qoi
+  ImageQoi,
+
   /// image/apng
   ImageApng,
 
@@ -707,6 +1013,9 @@ pub enum MimeType {
 
   /// image/tiff
   ImageTiff,
+
+  /// image/heic
+  ImageHeic,
 
   ///////////////////////////////////// AUDIO
   /// audio/aac
@@ -734,6 +1043,12 @@ pub enum MimeType {
   /// audio/3gpp2
   Audio3gpp2,
 
+  /// audio/mpeg
+  AudioMp3,
+
+  /// audio/mp4
+  AudioMp4,
+
   //////////////////////////////////// Text documents
   /// text/css
   TextCss,
@@ -741,6 +1056,10 @@ pub enum MimeType {
   TextHtml,
   /// text/javascript
   TextJavaScript,
+  /// text/rust
+  TextRust,
+  /// text/x-python
+  TextPython,
   /// text/plain
   TextPlain,
   /// text/csv
@@ -783,6 +1102,7 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::ApplicationPdf,
   MimeType::ApplicationZip,
   MimeType::ApplicationAppleInstallerPackage,
+  MimeType::ApplicationAppleMachBinary,
   MimeType::ApplicationOpenDocumentPresentation,
   MimeType::ApplicationOpenDocumentSpreadsheet,
   MimeType::ApplicationOpenDocumentText,
@@ -803,6 +1123,10 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::ApplicationDicom,
   MimeType::Application7Zip,
   MimeType::ApplicationWasm,
+  MimeType::ApplicationToml,
+  MimeType::ApplicationElf,
+  MimeType::ApplicationDosMZExe,
+  MimeType::ApplicationMicrosoftInstaller,
   MimeType::VideoMp4,
   MimeType::VideoOgg,
   MimeType::VideoWebm,
@@ -816,22 +1140,28 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
   MimeType::ImageJpeg,
   MimeType::ImageAvif,
   MimeType::ImagePng,
+  MimeType::ImageQoi,
   MimeType::ImageApng,
   MimeType::ImageWebp,
   MimeType::ImageSvg,
   MimeType::ImageIcon,
   MimeType::ImageTiff,
+  MimeType::ImageHeic,
   MimeType::AudioAac,
   MimeType::AudioMidi,
   MimeType::AudioMpeg,
+  MimeType::AudioMp3,
   MimeType::AudioOgg,
   MimeType::AudioWaveform,
   MimeType::AudioWebm,
   MimeType::Audio3gpp,
   MimeType::Audio3gpp2,
+  MimeType::AudioMp4,
   MimeType::TextCss,
   MimeType::TextHtml,
   MimeType::TextJavaScript,
+  MimeType::TextRust,
+  MimeType::TextPython,
   MimeType::TextPlain,
   MimeType::TextCsv,
   MimeType::TextCalendar,
@@ -842,22 +1172,42 @@ const WELL_KNOWN_TYPES: &[MimeType] = &[
 ];
 
 impl MimeType {
+  /// Associate this mime type with a given charset
+  pub const fn with_charset(self, charset: MimeCharset) -> MimeTypeWithCharset {
+    MimeTypeWithCharset::new(self, charset)
+  }
+
+  /// Associate this mime type the unspecified charset.
+  /// The client will have to figure out the charset.
+  pub const fn unspecified_charset(self) -> MimeTypeWithCharset {
+    MimeTypeWithCharset::new(self, MimeCharset::Unspecified)
+  }
+
+  /// Associate this mime type with the utf-8 charset.
+  pub const fn utf8(self) -> MimeTypeWithCharset {
+    MimeTypeWithCharset::new(self, MimeCharset::Utf8)
+  }
+
   /// Converts from a file extension without the `.` to the enum variant.
   /// If the MIME type cannot be inferred from the extension, returns `MimeType::ApplicationOctetStream`.
   pub fn from_extension(extension: impl AsRef<str>) -> Self {
-    //TODO Heap allocation to_ascii_lowercase
-    match extension.as_ref().to_ascii_lowercase().as_str() {
+    let mut stack_buffer = [0u8; 8];
+
+    match crate::util::ascii_to_lower_first_n(&mut stack_buffer, extension.as_ref()) {
       "css" => MimeType::TextCss,
       "html" => MimeType::TextHtml,
       "htm" => MimeType::TextHtml,
       "js" => MimeType::TextJavaScript,
       "mjs" => MimeType::TextJavaScript,
+      "rs" => MimeType::TextRust,
+      "py" => MimeType::TextPython,
       "txt" => MimeType::TextPlain,
       "bmp" => MimeType::ImageBmp,
       "gif" => MimeType::ImageGif,
       "jpeg" => MimeType::ImageJpeg,
       "jpg" => MimeType::ImageJpeg,
       "png" => MimeType::ImagePng,
+      "qoi" => MimeType::ImageQoi,
       "webp" => MimeType::ImageWebp,
       "svg" => MimeType::ImageSvg,
       "ico" => MimeType::ImageIcon,
@@ -865,6 +1215,7 @@ impl MimeType {
       "pdf" => MimeType::ApplicationPdf,
       "zip" => MimeType::ApplicationZip,
       "mp4" => MimeType::VideoMp4,
+      "m4a" => MimeType::AudioMp4,
       "ogv" => MimeType::VideoOgg,
       "webm" => MimeType::VideoWebm,
       "ttf" => MimeType::FontTtf,
@@ -888,6 +1239,7 @@ impl MimeType {
       "bin" => MimeType::ApplicationOctetStream,
       "jsonld" => MimeType::ApplicationJsonLd,
       "mpkg" => MimeType::ApplicationAppleInstallerPackage,
+      "dylib" => MimeType::ApplicationAppleMachBinary,
       "odp" => MimeType::ApplicationOpenDocumentPresentation,
       "ods" => MimeType::ApplicationOpenDocumentSpreadsheet,
       "odt" => MimeType::ApplicationOpenDocumentText,
@@ -918,7 +1270,11 @@ impl MimeType {
       "tif" => MimeType::ImageTiff,
       "aac" => MimeType::AudioAac,
       "mid" => MimeType::AudioMidi,
-      "mp3" => MimeType::AudioMpeg,
+      "mp2" => MimeType::AudioMpeg,
+      "mpa" => MimeType::AudioMpeg,
+      "mp2a" => MimeType::AudioMpeg,
+      "m2a" => MimeType::AudioMpeg,
+      "mp3" => MimeType::AudioMp3,
       "oga" => MimeType::AudioOgg,
       "wav" => MimeType::AudioWaveform,
       "weba" => MimeType::AudioWebm,
@@ -928,8 +1284,34 @@ impl MimeType {
       "lua" => MimeType::TextLua,
       "luac" => MimeType::ApplicationLuaBytecode,
       "xz" => MimeType::ApplicationXz,
+      "toml" => MimeType::ApplicationToml,
+      "so" => MimeType::ApplicationElf,
+      "o" => MimeType::ApplicationElf,
+      "ko" => MimeType::ApplicationElf,
+      "exe" => MimeType::ApplicationDosMZExe,
+      "com" => MimeType::ApplicationDosMZExe,
+      "dll" => MimeType::ApplicationDosMZExe,
+      "sys" => MimeType::ApplicationDosMZExe,
+      "heic" => MimeType::ImageHeic,
+      "msi" => MimeType::ApplicationMicrosoftInstaller,
       _ => MimeType::ApplicationOctetStream,
     }
+  }
+
+  /// This function will attempt to detect the mimetype of a file based on its header bytes.
+  /// Some files share the same header.
+  /// In this case this function returns all known mime types with the first one being the most commonly used type that uses the given file header.
+  ///
+  /// It is intended to be used with files that do not have a file extension.
+  /// If a file extension is available, then use `MimeType::from_file_extension`
+  ///
+  /// This method does not perform overly costly or deep analysis of the file header
+  /// so its accuracy is limited.
+  ///
+  /// # Returns
+  /// Empty slice if the mime type could not be detected based on header bytes.
+  pub fn from_file_header(data: impl AsRef<[u8]>) -> &'static [Self] {
+    crate::file_typeifier::typeify_header(data.as_ref())
   }
 
   /// returns the file extension that is most likely correct for the given file type.
@@ -951,6 +1333,7 @@ impl MimeType {
       MimeType::ApplicationMicrosoftWord => "doc",
       MimeType::ApplicationMicrosoftWordXml => "docx",
       MimeType::ApplicationMicrosoftFont => "eot",
+      MimeType::ApplicationMicrosoftInstaller => "msi",
       MimeType::ApplicationEpub => "epub",
       MimeType::ApplicationGzip => "gz",
       MimeType::ApplicationJar => "jar",
@@ -961,6 +1344,7 @@ impl MimeType {
       MimeType::ApplicationPdf => "pdf",
       MimeType::ApplicationZip => "zip",
       MimeType::ApplicationAppleInstallerPackage => "mpkg",
+      MimeType::ApplicationAppleMachBinary => "dylib",
       MimeType::ApplicationOpenDocumentPresentation => "odp",
       MimeType::ApplicationOpenDocumentSpreadsheet => "ods",
       MimeType::ApplicationOpenDocumentText => "odt",
@@ -994,22 +1378,28 @@ impl MimeType {
       MimeType::ImageJpeg => "jpg",
       MimeType::ImageAvif => "avif",
       MimeType::ImagePng => "png",
+      MimeType::ImageQoi => "qoi",
       MimeType::ImageApng => "apng",
       MimeType::ImageWebp => "webp",
       MimeType::ImageSvg => "svg",
       MimeType::ImageIcon => "ico",
       MimeType::ImageTiff => "tif",
+      MimeType::ImageHeic => "heic",
       MimeType::AudioAac => "aac",
       MimeType::AudioMidi => "mid",
-      MimeType::AudioMpeg => "mp3",
+      MimeType::AudioMpeg => "mp2",
       MimeType::AudioOgg => "oga",
       MimeType::AudioWaveform => "wav",
       MimeType::AudioWebm => "weba",
       MimeType::Audio3gpp => "3gp",
       MimeType::Audio3gpp2 => "3g2",
+      MimeType::AudioMp4 => "m4a",
+      MimeType::AudioMp3 => "mp3",
       MimeType::TextCss => "css",
       MimeType::TextHtml => "html",
       MimeType::TextJavaScript => "js",
+      MimeType::TextRust => "rs",
+      MimeType::TextPython => "py",
       MimeType::TextPlain => "txt",
       MimeType::TextCsv => "csv",
       MimeType::TextCalendar => "cal",
@@ -1018,6 +1408,9 @@ impl MimeType {
       MimeType::ApplicationLuaBytecode => "luac",
       MimeType::ApplicationXz => "xz",
       MimeType::Other(_, _) => "bin",
+      MimeType::ApplicationToml => "toml",
+      MimeType::ApplicationElf => "o",
+      MimeType::ApplicationDosMZExe => "exe",
     }
   }
 
@@ -1037,6 +1430,7 @@ impl MimeType {
       MimeType::ApplicationCShell => &MimeGroup::Application,
       MimeType::ApplicationMicrosoftWord => &MimeGroup::Application,
       MimeType::ApplicationMicrosoftWordXml => &MimeGroup::Application,
+      MimeType::ApplicationMicrosoftInstaller => &MimeGroup::Application,
       MimeType::ApplicationMicrosoftFont => &MimeGroup::Application,
       MimeType::ApplicationEpub => &MimeGroup::Application,
       MimeType::ApplicationGzip => &MimeGroup::Application,
@@ -1050,6 +1444,7 @@ impl MimeType {
       MimeType::ApplicationPdf => &MimeGroup::Application,
       MimeType::ApplicationZip => &MimeGroup::Application,
       MimeType::ApplicationAppleInstallerPackage => &MimeGroup::Application,
+      MimeType::ApplicationAppleMachBinary => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentPresentation => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentSpreadsheet => &MimeGroup::Application,
       MimeType::ApplicationOpenDocumentText => &MimeGroup::Application,
@@ -1071,6 +1466,9 @@ impl MimeType {
       MimeType::Application7Zip => &MimeGroup::Application,
       MimeType::ApplicationXz => &MimeGroup::Application,
       MimeType::ApplicationWasm => &MimeGroup::Application,
+      MimeType::ApplicationToml => &MimeGroup::Application,
+      MimeType::ApplicationElf => &MimeGroup::Application,
+      MimeType::ApplicationDosMZExe => &MimeGroup::Application,
       MimeType::VideoMp4 => &MimeGroup::Video,
       MimeType::VideoOgg => &MimeGroup::Video,
       MimeType::VideoWebm => &MimeGroup::Video,
@@ -1084,11 +1482,13 @@ impl MimeType {
       MimeType::ImageJpeg => &MimeGroup::Image,
       MimeType::ImageAvif => &MimeGroup::Image,
       MimeType::ImagePng => &MimeGroup::Image,
+      MimeType::ImageQoi => &MimeGroup::Image,
       MimeType::ImageApng => &MimeGroup::Image,
       MimeType::ImageWebp => &MimeGroup::Image,
       MimeType::ImageSvg => &MimeGroup::Image,
       MimeType::ImageIcon => &MimeGroup::Image,
       MimeType::ImageTiff => &MimeGroup::Image,
+      MimeType::ImageHeic => &MimeGroup::Image,
       MimeType::AudioAac => &MimeGroup::Audio,
       MimeType::AudioMidi => &MimeGroup::Audio,
       MimeType::AudioMpeg => &MimeGroup::Audio,
@@ -1097,9 +1497,13 @@ impl MimeType {
       MimeType::AudioWebm => &MimeGroup::Audio,
       MimeType::Audio3gpp => &MimeGroup::Audio,
       MimeType::Audio3gpp2 => &MimeGroup::Audio,
+      MimeType::AudioMp4 => &MimeGroup::Audio,
+      MimeType::AudioMp3 => &MimeGroup::Audio,
       MimeType::TextCss => &MimeGroup::Text,
       MimeType::TextHtml => &MimeGroup::Text,
       MimeType::TextJavaScript => &MimeGroup::Text,
+      MimeType::TextRust => &MimeGroup::Text,
+      MimeType::TextPython => &MimeGroup::Text,
       MimeType::TextLua => &MimeGroup::Text,
       MimeType::TextPlain => &MimeGroup::Text,
       MimeType::TextCsv => &MimeGroup::Text,
@@ -1114,6 +1518,8 @@ impl MimeType {
     match self {
       MimeType::Video3gpp2 | MimeType::Audio3gpp2 => false, //3g2 is shared
       MimeType::Video3gpp | MimeType::Audio3gpp => false,   //3gp is shared
+      MimeType::AudioMp4 | MimeType::VideoMp4 | MimeType::AudioAac => false, //.mp4 can also only contain audio, aac is always in an mp4 container.
+      MimeType::AudioMpeg | MimeType::VideoMpeg => false, //mpeg container can contain both audio and video with the same extension
       MimeType::Other(_, _) => false, //We don't know what the extension even is.
       _ => true,
     }
@@ -1143,11 +1549,14 @@ impl MimeType {
       MimeType::TextCss => "text/css",
       MimeType::TextHtml => "text/html",
       MimeType::TextJavaScript => "text/javascript",
+      MimeType::TextRust => "text/rust",
+      MimeType::TextPython => "text/x-python",
       MimeType::TextPlain => "text/plain",
       MimeType::ImageBmp => "image/bmp",
       MimeType::ImageGif => "image/gif",
       MimeType::ImageJpeg => "image/jpeg",
       MimeType::ImagePng => "image/png",
+      MimeType::ImageQoi => "image/qoi",
       MimeType::ImageWebp => "image/webp",
       MimeType::ImageSvg => "image/svg+xml",
       MimeType::ImageIcon => "image/vnd.microsoft.icon",
@@ -1173,6 +1582,7 @@ impl MimeType {
       MimeType::ApplicationMicrosoftWordXml => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       }
+      MimeType::ApplicationMicrosoftInstaller => "application/x-ms-installer",
       MimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
       MimeType::ApplicationEpub => "application/epub+zip",
       MimeType::ApplicationGzip => "application/gzip",
@@ -1180,6 +1590,7 @@ impl MimeType {
       MimeType::ApplicationJavaClass => "application/x-java-class",
       MimeType::ApplicationJsonLd => "application/ld+json",
       MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationAppleMachBinary => "application/x-mach-binary",
       MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
@@ -1208,6 +1619,9 @@ impl MimeType {
       MimeType::ApplicationDicom => "application/dicom",
       MimeType::Application7Zip => "application/x-7z-compressed",
       MimeType::ApplicationWasm => "application/wasm",
+      MimeType::ApplicationToml => "application/toml",
+      MimeType::ApplicationElf => "application/x-elf",
+      MimeType::ApplicationDosMZExe => "application/x-msdownload",
       MimeType::VideoAvi => "video/x-msvideo",
       MimeType::VideoMpeg => "video/mpeg",
       MimeType::VideoMpegTransportStream => "video/mp2t",
@@ -1216,14 +1630,17 @@ impl MimeType {
       MimeType::ImageAvif => "image/avif",
       MimeType::ImageApng => "image/apng",
       MimeType::ImageTiff => "image/tiff",
+      MimeType::ImageHeic => "image/heic",
       MimeType::AudioAac => "audio/aac",
       MimeType::AudioMidi => "audio/midi",
-      MimeType::AudioMpeg => "audio/mpeg",
+      MimeType::AudioMpeg => "audio/mpa",
       MimeType::AudioOgg => "audio/ogg",
       MimeType::AudioWaveform => "audio/wav",
       MimeType::AudioWebm => "audio/webm",
       MimeType::Audio3gpp => "audio/3gpp",
       MimeType::Audio3gpp2 => "audio/3gpp2",
+      MimeType::AudioMp4 => "audio/mp4",
+      MimeType::AudioMp3 => "audio/mpeg",
       MimeType::TextCsv => "text/csv",
       MimeType::TextCalendar => "text/calendar",
       MimeType::ApplicationYaml => "application/yaml",
@@ -1240,11 +1657,14 @@ impl MimeType {
       MimeType::TextCss => "text/css",
       MimeType::TextHtml => "text/html",
       MimeType::TextJavaScript => "text/javascript",
+      MimeType::TextRust => "text/rust",
+      MimeType::TextPython => "text/x-python",
       MimeType::TextPlain => "text/plain",
       MimeType::ImageBmp => "image/bmp",
       MimeType::ImageGif => "image/gif",
       MimeType::ImageJpeg => "image/jpeg",
       MimeType::ImagePng => "image/png",
+      MimeType::ImageQoi => "image/qoi",
       MimeType::ImageWebp => "image/webp",
       MimeType::ImageSvg => "image/svg+xml",
       MimeType::ImageIcon => "image/vnd.microsoft.icon",
@@ -1270,6 +1690,7 @@ impl MimeType {
       MimeType::ApplicationMicrosoftWordXml => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       }
+      MimeType::ApplicationMicrosoftInstaller => "application/x-ms-installer",
       MimeType::ApplicationMicrosoftFont => "application/vnd.ms-fontobject",
       MimeType::ApplicationEpub => "application/epub+zip",
       MimeType::ApplicationGzip => "application/gzip",
@@ -1277,6 +1698,7 @@ impl MimeType {
       MimeType::ApplicationJavaClass => "application/x-java-class",
       MimeType::ApplicationJsonLd => "application/ld+json",
       MimeType::ApplicationAppleInstallerPackage => "application/vnd.apple.installer+xml",
+      MimeType::ApplicationAppleMachBinary => "application/x-mach-binary",
       MimeType::ApplicationOpenDocumentPresentation => {
         "application/vnd.oasis.opendocument.presentation"
       }
@@ -1305,6 +1727,9 @@ impl MimeType {
       MimeType::ApplicationDicom => "application/dicom",
       MimeType::Application7Zip => "application/x-7z-compressed",
       MimeType::ApplicationWasm => "application/wasm",
+      MimeType::ApplicationToml => "application/toml",
+      MimeType::ApplicationElf => "application/x-elf",
+      MimeType::ApplicationDosMZExe => "application/x-msdownload",
       MimeType::VideoAvi => "video/x-msvideo",
       MimeType::VideoMpeg => "video/mpeg",
       MimeType::VideoMpegTransportStream => "video/mp2t",
@@ -1313,14 +1738,17 @@ impl MimeType {
       MimeType::ImageAvif => "image/avif",
       MimeType::ImageApng => "image/apng",
       MimeType::ImageTiff => "image/tiff",
+      MimeType::ImageHeic => "image/heic",
       MimeType::AudioAac => "audio/aac",
       MimeType::AudioMidi => "audio/midi",
-      MimeType::AudioMpeg => "audio/mpeg",
+      MimeType::AudioMpeg => "audio/mpa",
       MimeType::AudioOgg => "audio/ogg",
       MimeType::AudioWaveform => "audio/wav",
       MimeType::AudioWebm => "audio/webm",
       MimeType::Audio3gpp => "audio/3gpp",
       MimeType::Audio3gpp2 => "audio/3gpp2",
+      MimeType::AudioMp4 => "audio/mp4",
+      MimeType::AudioMp3 => "audio/mpeg",
       MimeType::TextCsv => "text/csv",
       MimeType::TextCalendar => "text/calendar",
       MimeType::ApplicationYaml => "application/yaml",
@@ -1332,13 +1760,8 @@ impl MimeType {
   }
 
   /// returns the AcceptQualityMimeType for this MimeType with the given QValue
-  pub fn into_accept(self, q: QValue) -> AcceptQualityMimeType {
-    AcceptQualityMimeType::from_mime(self, q)
-  }
-
-  /// This fn parses the mime type and assumes that its in the format of a valid Content-Type header.
-  pub fn parse_from_content_type_header<T: AsRef<str>>(value: T) -> Option<Self> {
-    Self::parse(unwrap_some(value.as_ref().split(";").next())) //strips ; charset=utf-8 or ; boundry=..., which we don't care about here.
+  pub const fn into_accept(self, q: QValue, mime_charset: MimeCharset) -> AcceptQualityMimeType {
+    AcceptQualityMimeType::from_mime(self, q, mime_charset)
   }
 
   /// Parses the string value and returns a mime type.
@@ -1348,11 +1771,16 @@ impl MimeType {
       "text/css" => MimeType::TextCss,
       "text/html" => MimeType::TextHtml,
       "text/javascript" => MimeType::TextJavaScript,
+      "text/rust" => MimeType::TextRust,
+      "text/x-rust" => MimeType::TextRust,
+      "text/x-python" => MimeType::TextPython,
+      "text/python" => MimeType::TextPython,
       "text/plain" => MimeType::TextPlain,
       "image/bmp" => MimeType::ImageBmp,
       "image/gif" => MimeType::ImageGif,
       "image/jpeg" => MimeType::ImageJpeg,
       "image/png" => MimeType::ImagePng,
+      "image/qoi" => MimeType::ImageQoi,
       "image/webp" => MimeType::ImageWebp,
       "image/svg+xml" => MimeType::ImageSvg,
       "image/vnd.microsoft.icon" => MimeType::ImageIcon,
@@ -1378,6 +1806,9 @@ impl MimeType {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
         MimeType::ApplicationMicrosoftWordXml
       }
+      "application/x-ms-installer" => MimeType::ApplicationMicrosoftInstaller,
+      "application/x-msi" => MimeType::ApplicationMicrosoftInstaller,
+      "application/x-windows-installer" => MimeType::ApplicationMicrosoftInstaller,
       "application/vnd.ms-fontobject" => MimeType::ApplicationMicrosoftFont,
       "application/epub+zip" => MimeType::ApplicationEpub,
       "application/gzip" => MimeType::ApplicationGzip,
@@ -1385,6 +1816,7 @@ impl MimeType {
       "application/x-java-class" => MimeType::ApplicationJavaClass,
       "application/ld+json" => MimeType::ApplicationJsonLd,
       "application/vnd.apple.installer+xml" => MimeType::ApplicationAppleInstallerPackage,
+      "application/x-mach-binary" => MimeType::ApplicationAppleMachBinary,
       "application/vnd.oasis.opendocument.presentation" => {
         MimeType::ApplicationOpenDocumentPresentation
       }
@@ -1413,6 +1845,12 @@ impl MimeType {
       "application/dicom" => MimeType::ApplicationDicom,
       "application/x-7z-compressed" => MimeType::Application7Zip,
       "application/wasm" => MimeType::ApplicationWasm,
+      "application/toml" => MimeType::ApplicationToml,
+      "application/x-elf" => MimeType::ApplicationElf,
+      "application/x-msdownload"
+      | "application/exe"
+      | "application/x-exe"
+      | "application/win32-exe" => MimeType::ApplicationDosMZExe,
       "video/x-msvideo" => MimeType::VideoAvi,
       "video/mpeg" => MimeType::VideoMpeg,
       "video/mp2t" => MimeType::VideoMpegTransportStream,
@@ -1420,12 +1858,15 @@ impl MimeType {
       "video/3gpp2" => MimeType::Video3gpp2,
       "audio/3gpp" => MimeType::Audio3gpp,
       "audio/3gpp2" => MimeType::Audio3gpp2,
+      "audio/mp4" => MimeType::AudioMp4,
+      "audio/mpeg" => MimeType::AudioMp3,
       "image/avif" => MimeType::ImageAvif,
       "image/apng" => MimeType::ImageApng,
       "image/tiff" => MimeType::ImageTiff,
+      "image/heic" => MimeType::ImageHeic,
       "audio/aac" => MimeType::AudioAac,
       "audio/midi" => MimeType::AudioMidi,
-      "audio/mpeg" => MimeType::AudioMpeg,
+      "audio/mpa" => MimeType::AudioMpeg,
       "audio/ogg" => MimeType::AudioOgg,
       "audio/wav" => MimeType::AudioWaveform,
       "audio/webm" => MimeType::AudioWebm,

@@ -1,15 +1,19 @@
 use crate::mock_stream::MockStream;
-use tii::RequestContext;
 use tii::Response;
 use tii::ServerBuilder;
 use tii::TiiResult;
 use tii::{AcceptQualityMimeType, MimeType, QValue};
+use tii::{MimeCharset, RequestContext};
 
 mod mock_stream;
 
 fn filter(ctx: &mut RequestContext) -> TiiResult<()> {
   if ctx.get_path() == "/dummy" {
-    ctx.set_accept(vec![AcceptQualityMimeType::from_mime(MimeType::TextPlain, QValue::default())]);
+    ctx.set_accept(vec![AcceptQualityMimeType::from_mime(
+      MimeType::TextPlain,
+      QValue::default(),
+      MimeCharset::Unspecified,
+    )]);
   }
 
   Ok(())

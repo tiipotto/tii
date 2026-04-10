@@ -9,8 +9,9 @@ use crate::tii_error::{RequestHeadParsingError, TiiError, TiiResult};
 use crate::tii_server::ConnectionStreamMetadata;
 use crate::util::unwrap_some;
 use crate::{
-  debug_log, error_log, trace_log, util, warn_log, AcceptQualityMimeType, Cookie, HttpHeader,
-  HttpMethod, MimeType, TypeSystem, TypeSystemError, UserError,
+  debug_log, error_log, trace_log, util, warn_log, AcceptMimeCharset, AcceptQualityMimeType,
+  Cookie, HttpHeader, HttpMethod, MimeType, MimeTypeWithCharset, TypeSystem, TypeSystemError,
+  UserError,
 };
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -699,6 +700,90 @@ impl RequestContext {
     self.request.get_query_param(key)
   }
 
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// # Returns
+  /// Ok(None) if no such query parameter exists.
+  /// Ok(Some) if the query parameter exists and can be parsed
+  /// Err(...) if the query parameter exists but parsing fails.
+  pub fn parse_query_param<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+  ) -> TiiResult<Option<T>> {
+    let name = name.as_ref();
+    let Some(param) = self.get_query_param(name) else {
+      return Ok(None);
+    };
+
+    param.parse::<T>().map(Some).map_err(|e| {
+      TiiError::UserError(UserError::InvalidQueryParameter(
+        name.to_string(),
+        TypeId::of::<T>(),
+        Box::new(e),
+      ))
+    })
+  }
+
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// If no such query parameter exists then this function calls the provided
+  /// fallback constructor function.
+  ///
+  /// # Example
+  /// ```rust
+  /// use tii::{RequestContext, Response, TiiResult};
+  ///
+  /// fn endpoint(ctx: &RequestContext) -> TiiResult<Response> {
+  ///   let timeout = ctx.parse_query_param_or::<u64, _>("timeout_ms", 10_000)?;
+  ///   println!("timeout_ms is {timeout}");
+  ///   todo!()
+  /// }
+  /// ```
+  ///
+  /// # Returns
+  /// Ok - parsing succeeds or no such query parameter existed and the value was provided by the fallback constructor function.
+  /// Err - query parameter exists but parsing failed.
+  pub fn parse_query_param_or<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+    default_value: T,
+  ) -> TiiResult<T> {
+    Ok(self.parse_query_param(name)?.unwrap_or(default_value))
+  }
+
+  /// Parses a query parameter into a given type.
+  ///
+  /// This function only looks at the first query parameter with the given name.
+  ///
+  /// If no such query parameter exists then this function calls the provided
+  /// fallback constructor function.
+  ///
+  /// # Example
+  /// ```rust
+  /// use tii::{RequestContext, Response, TiiResult};
+  ///
+  /// fn endpoint(ctx: &RequestContext) -> TiiResult<Response> {
+  ///   let timeout = ctx.parse_query_param_or_else::<u64, _>("timeout_ms", || 10_000)?;
+  ///   println!("timeout_ms is {timeout}");
+  ///   todo!()
+  /// }
+  /// ```
+  ///
+  /// # Returns
+  /// Ok - parsing succeeds or no such query parameter existed and the value was provided by the fallback constructor function.
+  /// Err - query parameter exists but parsing failed.
+  pub fn parse_query_param_or_else<T: Any + FromStr<Err = E>, E: Error + Send + Sync + 'static>(
+    &self,
+    name: impl AsRef<str>,
+    default_value: impl FnOnce() -> T,
+  ) -> TiiResult<T> {
+    Ok(self.parse_query_param(name)?.unwrap_or_else(default_value))
+  }
+
   /// Gets all query params in order of appearance that contain the given key. Returns empty vec if the key doesn’t exist.
   pub fn get_query_params(&self, key: impl AsRef<str>) -> Vec<&str> {
     self.request.get_query_params(key)
@@ -733,7 +818,7 @@ impl RequestContext {
   /// This is usually equivalent to parsing the raw get_header() value of Content-Type.
   /// The only case where this is different is if the request as received from the network had an invalid Content-Type value then this value is ApplicationOctetStream even tho the raw header value is different.
   /// This returns none if the Content-Type header was not present at all. (For example ordinary GET requests do not have this header)
-  pub fn get_content_type(&self) -> Option<&MimeType> {
+  pub fn get_content_type(&self) -> Option<&MimeTypeWithCharset> {
     self.request.get_content_type()
   }
 
@@ -743,13 +828,20 @@ impl RequestContext {
   }
 
   /// Removes the content type header. get_content_type will return None after this call.
-  pub fn remove_content_type(&mut self) -> Option<MimeType> {
+  pub fn remove_content_type(&mut self) -> Option<MimeTypeWithCharset> {
     self.request.remove_content_type()
   }
 
-  /// Returns the acceptable mime types
+  /// Returns the acceptable mime types.
+  /// The returned accepted mime types are in the order the client sent them over the network.
   pub fn get_accept(&self) -> &[AcceptQualityMimeType] {
     self.request.get_accept()
+  }
+
+  /// Returns the acceptable charsets.
+  /// The returned accepted charset types are in the order the client sent them over the network.
+  pub fn get_accept_charset(&self) -> &[AcceptMimeCharset] {
+    self.request.get_accept_charset()
   }
 
   /// Returns an iterator over all headers.
@@ -778,12 +870,12 @@ impl RequestContext {
   }
 
   /// Sets the header value. Some header values cannot be modified through this fn and attempting to change them will result in Err.
-  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn set_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     self.request.set_header(hdr, value)
   }
 
   /// Adds a new header value to the headers. This can be the first value with the given key or an additional value.
-  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl AsRef<str>) -> TiiResult<()> {
+  pub fn add_header(&mut self, hdr: impl AsRef<str>, value: impl ToString) -> TiiResult<()> {
     self.request.add_header(hdr, value)
   }
 

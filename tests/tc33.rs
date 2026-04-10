@@ -25,7 +25,7 @@ fn dummy_route(ctx: &RequestContext) -> TiiResult<Response> {
   assert_eq!(String::from_utf8(v).unwrap(), "{}");
 
   COUNTER.fetch_add(1, Ordering::SeqCst);
-  assert_eq!(ctx.get_content_type().unwrap(), &MimeType::TextPlain);
+  assert_eq!(ctx.get_content_type().unwrap().mime(), &MimeType::TextPlain);
   Ok(Response::no_content())
 }
 

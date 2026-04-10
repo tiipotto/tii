@@ -5,12 +5,13 @@ use crate::default_functions::{
   default_not_found_handler, default_pre_routing_filter, default_unsupported_media_type_handler,
 };
 use crate::functional_traits::{
-  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, WebsocketEndpoint,
+  HttpEndpoint, RequestFilter, ResponseFilter, RouterFilter, StatefulEntityHttpEndpoint,
+  WebsocketEndpoint,
 };
 use crate::tii_builder::EntityHttpEndpoint;
-use crate::RequestContext;
-use crate::TiiResult;
-use crate::{AcceptMimeType, MimeType, RequestBody};
+use crate::{AcceptMimeType, RequestBody};
+use crate::{AcceptMimeTypeWithCharset, MimeCharset, MimeTypeWithCharset, TiiResult};
+use crate::{AsRequestState, RequestContext};
 use crate::{DefaultRouter, Response, Router};
 use crate::{EntityDeserializer, HttpMethod};
 use crate::{ErrorHandler, NotRouteableHandler};
@@ -62,7 +63,7 @@ impl<T: HttpEndpoint + 'static> HttpEndpoint for RouteWrapper<T> {
 
   fn parse_entity(
     &self,
-    mime: &MimeType,
+    mime: &MimeTypeWithCharset,
     request: &RequestBody,
   ) -> TiiResult<Option<Box<dyn Any + Send + Sync>>> {
     self.0.parse_entity(mime, request)
@@ -100,8 +101,8 @@ pub struct RouteBuilder {
   inner: RouterBuilder,
   route: String,
   method: HttpMethod,
-  consumes: HashSet<AcceptMimeType>,
-  produces: HashSet<AcceptMimeType>,
+  consumes: HashSet<AcceptMimeTypeWithCharset>,
+  produces: HashSet<AcceptMimeTypeWithCharset>,
 }
 
 impl RouteBuilder {
@@ -120,13 +121,13 @@ impl RouteBuilder {
   }
 
   /// Add a mime type which the endpoint can consume.
-  pub fn consumes(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn consumes(mut self, mime: impl Into<AcceptMimeTypeWithCharset>) -> Self {
     self.consumes.insert(mime.into());
     self
   }
 
   /// Add a mime type which the endpoint may produce.
-  pub fn produces(mut self, mime: impl Into<AcceptMimeType>) -> Self {
+  pub fn produces(mut self, mime: impl Into<AcceptMimeTypeWithCharset>) -> Self {
     self.produces.insert(mime.into());
     self
   }
@@ -156,6 +157,33 @@ impl RouteBuilder {
       deserializer,
       _p1: Default::default(),
       _p2: Default::default(),
+    };
+
+    self.endpoint(ehp)
+  }
+
+  /// Finish building the route by proving a stateful endpoint which requires a structured request body to call.
+  pub fn stateful_entity_endpoint<T, S, SR, R, F, D>(
+    self,
+    state: S,
+    handler: F,
+    deserializer: D,
+  ) -> TiiResult<RouterBuilder>
+  where
+    T: Any + Send + Sync + 'static,
+    R: Into<TiiResult<Response>> + Send + 'static,
+    F: Fn(&SR, &RequestContext, &T) -> R + Send + Sync + 'static,
+    D: EntityDeserializer<T> + Send + Sync + 'static,
+    S: AsRequestState<Target = SR> + Send + Sync + 'static,
+    SR: Send + Sync + 'static,
+  {
+    let ehp = StatefulEntityHttpEndpoint {
+      endpoint: handler,
+      state,
+      deserializer,
+      _p1: Default::default(),
+      _p2: Default::default(),
+      _p4: Default::default(),
     };
 
     self.endpoint(ehp)
@@ -269,7 +297,10 @@ impl RouterBuilder {
     self.routes.push(HttpRoute::new(
       route,
       method,
-      HashSet::from([AcceptMimeType::Wildcard]),
+      HashSet::from([AcceptMimeTypeWithCharset::new(
+        AcceptMimeType::Wildcard,
+        MimeCharset::Unspecified,
+      )]),
       HashSet::new(),
       handler,
     )?);

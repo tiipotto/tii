@@ -1,4 +1,4 @@
-use tii::{AcceptMimeType, AcceptQualityMimeType, MimeGroup, MimeType, QValue};
+use tii::{AcceptMimeType, AcceptQualityMimeType, MimeCharset, MimeGroup, MimeType, QValue};
 
 #[test]
 fn test_not_valid() {
@@ -166,7 +166,7 @@ fn test_accept_q_display_and_parse() {
   for n in MimeGroup::well_known() {
     for i in 0..1000 {
       let q = QValue::from_clamped(i);
-      let orig = AcceptQualityMimeType::from_group(n.clone(), q);
+      let orig = AcceptQualityMimeType::from_group(n.clone(), q, MimeCharset::Unspecified);
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
 
@@ -182,7 +182,7 @@ fn test_accept_q_display_and_parse() {
   for n in MimeType::well_known() {
     for i in 0..1000 {
       let q = QValue::from_clamped(i);
-      let orig = AcceptQualityMimeType::from_mime(n.clone(), q);
+      let orig = AcceptQualityMimeType::from_mime(n.clone(), q, MimeCharset::Unspecified);
       let parsed =
         AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
       assert_eq!(orig, parsed);
@@ -204,7 +204,7 @@ fn test_accept_q_display_and_parse() {
 
   for i in 0..1000 {
     let q = QValue::from_clamped(i);
-    let orig = AcceptQualityMimeType::wildcard(q);
+    let orig = AcceptQualityMimeType::wildcard(q, MimeCharset::Unspecified);
     let parsed =
       AcceptQualityMimeType::parse(orig.to_string()).unwrap().into_iter().next().unwrap();
     assert_eq!(orig, parsed);
@@ -214,14 +214,21 @@ fn test_accept_q_display_and_parse() {
     assert!(!parsed.is_specific());
   }
 
-  assert_eq!(AcceptQualityMimeType::default(), AcceptQualityMimeType::wildcard(QValue::default()));
+  assert_eq!(
+    AcceptQualityMimeType::default(),
+    AcceptQualityMimeType::wildcard(QValue::default(), MimeCharset::Unspecified)
+  );
 }
 
 #[test]
 fn test_accept_q_edge() {
   assert_eq!(
     AcceptQualityMimeType::parse("application/json;q=0.500").unwrap().into_iter().next().unwrap(),
-    AcceptQualityMimeType::from_mime(MimeType::ApplicationJson, QValue::from_clamped(500))
+    AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Unspecified
+    )
   );
   assert!(AcceptQualityMimeType::parse("application/json;sad=0.500").is_none());
   assert!(AcceptQualityMimeType::parse("application/json;q=4.0").is_none());
@@ -231,7 +238,38 @@ fn test_accept_q_edge() {
   assert!(AcceptQualityMimeType::parse("app*/json").is_none());
   assert_eq!(
     AcceptQualityMimeType::parse("application/*").unwrap().into_iter().next().unwrap(),
-    AcceptQualityMimeType::from_group(MimeGroup::Application, QValue::from_clamped(1000))
+    AcceptQualityMimeType::from_group(
+      MimeGroup::Application,
+      QValue::from_clamped(1000),
+      MimeCharset::Unspecified
+    )
+  );
+}
+
+#[test]
+fn test_accept_with_charset() {
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; charset=utf-8; q=0.5"),
+    Some(vec![AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Utf8
+    )])
+  );
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; q=0.5; charset=utf-8"),
+    Some(vec![AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::from_clamped(500),
+      MimeCharset::Utf8
+    )])
+  );
+
+  assert_eq!(AcceptQualityMimeType::parse("application/json; q=0.5; charset=utf-8; q=0.6"), None);
+
+  assert_eq!(
+    AcceptQualityMimeType::parse("application/json; charset=iso-8551-1; q=0.5; charset=utf-8"),
+    None
   );
 }
 
@@ -239,9 +277,26 @@ fn test_accept_q_edge() {
 fn test_accept_q_parse_all() {
   let mut types: Vec<AcceptQualityMimeType> = Vec::new();
   for n in MimeType::well_known() {
-    types.push(AcceptQualityMimeType::from_mime(n.clone(), QValue::from_clamped(500)));
+    types.push(AcceptQualityMimeType::from_mime(
+      n.clone(),
+      QValue::from_clamped(500),
+      MimeCharset::Unspecified,
+    ));
   }
 
+  let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
+  let parsed_types = AcceptQualityMimeType::parse(hdr_value).unwrap();
+  assert_eq!(types, parsed_types);
+}
+
+#[test]
+fn test_accept_q_parse_single() {
+  let mut types: Vec<AcceptQualityMimeType> = Vec::new();
+  types.push(AcceptQualityMimeType::from_mime(
+    MimeType::ImageHeic,
+    QValue::from_clamped(500),
+    MimeCharset::Unspecified,
+  ));
   let hdr_value = AcceptQualityMimeType::elements_to_header_value(&types);
   let parsed_types = AcceptQualityMimeType::parse(hdr_value).unwrap();
   assert_eq!(types, parsed_types);
@@ -257,5 +312,133 @@ fn test_mime_type2group() {
   assert_eq!(
     MimeGroup::from(MimeType::parse("application/dubdub").unwrap()),
     MimeGroup::parse("application/dubdub").unwrap()
+  );
+}
+
+#[test]
+fn test_files() {
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/DCM/JPEG2000.dcm")),
+    &[MimeType::ApplicationDicom]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.xz")),
+    &[MimeType::ApplicationXz]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.gz")),
+    &[MimeType::ApplicationGzip]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.zip")),
+    &[MimeType::ApplicationZip, MimeType::ApplicationJar, MimeType::ApplicationEpub]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/ARCHIVES/arc.7z")),
+    &[MimeType::Application7Zip]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.avif")),
+    &[MimeType::ImageAvif]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.bmp")),
+    &[MimeType::ImageBmp]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.heic")),
+    &[MimeType::ImageHeic]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.ico")),
+    &[MimeType::ImageIcon]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.jpg")),
+    &[MimeType::ImageJpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.png")),
+    &[MimeType::ImagePng]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.qoi")),
+    &[MimeType::ImageQoi]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.tif")),
+    &[MimeType::ImageTiff]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/IMAGES/testfile.webp")),
+    &[MimeType::ImageWebp]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.mp2")),
+    &[MimeType::AudioMpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.mp3")),
+    &[MimeType::AudioMp3]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.ogg")),
+    &[MimeType::VideoOgg, MimeType::AudioOgg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.wav")),
+    &[MimeType::AudioWaveform]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.m4a")),
+    &[MimeType::AudioMp4]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.aac")),
+    &[MimeType::AudioAac]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.webm")),
+    &[MimeType::VideoWebm, MimeType::AudioWebm]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/AUDIO/audio.3gp")),
+    &[MimeType::Video3gpp, MimeType::Video3gpp2, MimeType::Audio3gpp, MimeType::Audio3gpp2]
+  );
+
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.mp4")),
+    &[MimeType::VideoMp4, MimeType::AudioMp4]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.m2ts")),
+    &[MimeType::VideoMpegTransportStream]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.mpeg")),
+    &[MimeType::VideoMpeg]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.webm")),
+    &[MimeType::VideoWebm, MimeType::AudioWebm]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.avi")),
+    &[MimeType::VideoAvi]
+  );
+  assert_eq!(
+    MimeType::from_file_header(include_bytes!("../test_files/VIDEO/video.3gp")),
+    &[MimeType::Video3gpp, MimeType::Video3gpp2, MimeType::Audio3gpp, MimeType::Audio3gpp2]
+  );
+
+  //Dumped with xxd from a mac binary.
+  assert_eq!(
+    MimeType::from_file_header(&[
+      0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+      0x03
+    ]),
+    &[MimeType::ApplicationAppleMachBinary]
   );
 }

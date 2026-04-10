@@ -2,8 +2,8 @@ mod mock_stream;
 
 use crate::mock_stream::MockStream;
 use tii::{
-  AcceptQualityMimeType, Cookie, MimeType, QValue, RequestContext, RequestHeadParsingError,
-  TiiError, UserError,
+  AcceptQualityMimeType, Cookie, MimeCharset, MimeType, MimeTypeWithCharset, QValue,
+  RequestContext, RequestHeadParsingError, TiiError, UserError,
 };
 use tii::{HttpHeader, HttpHeaderName};
 use tii::{HttpMethod, TypeSystem};
@@ -263,11 +263,21 @@ fn test_mock_request_head() {
   .unwrap();
   assert_eq!(
     mock_head.get_accept().first(),
-    Some(&AcceptQualityMimeType::from_mime(MimeType::ApplicationJson, QValue::default()))
+    Some(&AcceptQualityMimeType::from_mime(
+      MimeType::ApplicationJson,
+      QValue::default(),
+      MimeCharset::Unspecified
+    ))
   );
-  assert_eq!(mock_head.get_content_type(), Some(&MimeType::TextPlain));
+  assert_eq!(
+    mock_head.get_content_type(),
+    Some(&MimeTypeWithCharset::from_mime(MimeType::TextPlain))
+  );
   mock_head.set_content_type(MimeType::Application7Zip);
-  assert_eq!(mock_head.get_content_type(), Some(&MimeType::Application7Zip));
+  assert_eq!(
+    mock_head.get_content_type(),
+    Some(&MimeTypeWithCharset::from_mime(MimeType::Application7Zip))
+  );
   assert_eq!(mock_head.get_header("Content-Type"), Some(MimeType::Application7Zip.as_str()));
   mock_head.remove_headers("Content-Type").unwrap();
   assert_eq!(mock_head.get_header("Content-Type"), None);
@@ -276,14 +286,16 @@ fn test_mock_request_head() {
   assert_eq!(mock_head.get_header("Accept"), Some("*/*"));
   assert_eq!(
     mock_head.get_accept().first(),
-    Some(&AcceptQualityMimeType::wildcard(QValue::default()))
+    Some(&AcceptQualityMimeType::wildcard(QValue::default(), MimeCharset::Unspecified))
   );
   mock_head.set_header("meep", "moop").unwrap();
   assert_eq!(mock_head.get_header("meep"), Some("moop"));
   mock_head.remove_headers("meep").unwrap();
   assert_eq!(mock_head.get_header("meep"), None);
   mock_head.set_content_type(MimeType::Application7Zip);
-  mock_head.set_accept(vec![MimeType::ApplicationJson.into_accept(QValue::default())]);
+  mock_head.set_accept(vec![
+    MimeType::ApplicationJson.into_accept(QValue::default(), MimeCharset::Unspecified)
+  ]);
   let err = mock_head.add_header(HttpHeaderName::ContentType, "application/zip").unwrap_err();
   match err {
     TiiError::UserError(UserError::MultipleContentTypeHeaderValuesSet(v1, v2)) => assert_eq!(

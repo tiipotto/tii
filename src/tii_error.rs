@@ -84,6 +84,8 @@ pub enum UserError {
   MissingPathParameter(String),
   /// name of the path parameter, TypeId for which parsing was attempted, error returned by FromStr trait.
   InvalidPathParameter(String, TypeId, Box<dyn Error + Send + Sync>),
+  /// name of the path parameter, TypeId for which parsing was attempted, error returned by FromStr trait.
+  InvalidQueryParameter(String, TypeId, Box<dyn Error + Send + Sync>),
 }
 
 impl Display for UserError {

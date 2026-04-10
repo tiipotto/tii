@@ -35,7 +35,7 @@ struct PhantomStreamMetadata;
 
 impl ConnectionStreamMetadata for PhantomStreamMetadata {
   fn as_any(&self) -> &dyn Any {
-    // This type is never instantiated. therefore this is unreachable.
+    // This type is never instantiated. therefore, this is unreachable.
     crate::util::unreachable()
   }
 }

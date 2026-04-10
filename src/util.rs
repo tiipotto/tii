@@ -55,6 +55,30 @@ pub fn unwrap_poison<T>(result: LockResult<T>) -> io::Result<T> {
   result.map_err(|_| io::Error::other("Poisoned Mutex"))
 }
 
+/// This utility function can be used to prevent a heap allocation just to do a start_with or match check.
+/// TODO in must be fast code we would call unsafe functions here, but lets not do that yet...
+pub fn ascii_to_lower_first_n<'a, const N: usize>(
+  stack_buffer: &'a mut [u8; N],
+  data: &'a str,
+) -> &'a str {
+  let data_bytes = data.as_bytes();
+  let mut data_bytes = unwrap_some(data_bytes.get(..N.min(data_bytes.len())));
+  while let Some(last_byte) = data_bytes.last().copied() {
+    //strip trailing mb sequence, otherwise our friend str::from_utf8 may not have a great day.
+    if last_byte & 0b1000_0000 == 0 {
+      break;
+    }
+
+    data_bytes = unwrap_some(data_bytes.get(..data_bytes.len() - 1));
+  }
+
+  let stack_buffer = unwrap_some(stack_buffer.get_mut(..data_bytes.len()));
+  stack_buffer.copy_from_slice(data_bytes);
+  stack_buffer.make_ascii_lowercase();
+
+  unwrap_ok(std::str::from_utf8(stack_buffer))
+}
+
 pub const fn three_digit_to_utf(num: u16) -> [u8; 3] {
   let n1 = num % 10;
   let n2 = ((num - n1) / 10) % 10;

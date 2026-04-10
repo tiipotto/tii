@@ -45,6 +45,8 @@ impl RequestBody {
     RequestBody(Arc::new(Mutex::new(RequestBodyInner::WithContentLength(
       RequestBodyWithContentLength {
         err: false,
+        len,
+        read: 0,
         data: (Box::new(read) as Box<dyn Read + Send>).take(len),
       },
     ))))
@@ -94,6 +96,8 @@ impl RequestBody {
   ) -> TiiResult<RequestBody> {
     let inner = RequestBodyInner::WithContentLength(RequestBodyWithContentLength {
       err: false,
+      len,
+      read: 0,
       data: (Box::new(read) as Box<dyn Read + Send>).take(len),
     });
 
@@ -209,6 +213,8 @@ impl Read for GzipRequestBody {
 
 struct RequestBodyWithContentLength {
   err: bool,
+  read: u64,
+  len: u64,
   data: Take<Box<dyn Read + Send>>,
 }
 
@@ -220,7 +226,24 @@ impl Read for RequestBodyWithContentLength {
         "Transfer stream has failed due to previous error",
       ));
     }
-    self.data.read(buf).inspect_err(|_| self.err = true)
+    let bytes_read = self.data.read(buf).inspect_err(|_| self.err = true)?;
+    self.read += bytes_read as u64;
+    if bytes_read == 0 && !buf.is_empty() && self.len != self.read {
+      // TODO think more later,
+      // I dont think I need to set err flag here.
+      // Doing so will only hide this state in consume body.
+      // If we get here for the very first time at consume body then id rather this be ignored (consume body ignored UnexpectedEof currently)
+      // because the endpoint did not fully read the request body or made the choice to ignore this error.
+      // We should send the response over the wire so lets not set the flag.
+      // See tc62.rs, if we change this we have to change the test as the connection would return Err to the caller then.
+      //self.err = true;
+      return Err(Error::new(
+        ErrorKind::UnexpectedEof,
+        "Received less bytes from client than content length indicated",
+      ));
+    }
+
+    Ok(bytes_read)
   }
 }
 
