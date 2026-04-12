@@ -619,6 +619,7 @@ impl Response {
     if version == HttpVersion::Http09 {
       if let Some(body) = self.body {
         body.write_to_http(request_id, destination)?;
+        destination.flush()?;
       }
 
       return Ok(());
