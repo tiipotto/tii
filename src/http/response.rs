@@ -39,6 +39,23 @@ pub struct Response {
   pub(crate) headers: Headers,
   /// The body of the response.
   pub body: Option<ResponseBody>,
+
+  /// If this field is set to true then tii will not send the body over the wire.
+  /// The response headers that would describe the omitted body will still be sent.
+  /// This should only be set to true as a response to HTTP HEAD requests.
+  ///
+  /// IMPLEMENTATION DETAIL: Setting this value to true forces 'Connection: Close'.
+  /// In case of HTTP 0.9 this value is completely ignored and the body is still sent.
+  ///
+  /// Use this field only if absolutely necessary!
+  ///
+  /// How HTTP clients will expect HEAD requests in regard to response body and Content-Lengths field values is highly dependent on the client
+  /// Every client seems to expect something else. Some clients prefer a response that simply has `Response::without_body`,
+  /// this however will also remove the Content-Length header! Other clients want the Content-Length header but
+  /// no actual body. The forcing of 'Connection: Close' is a safety measure because otherwise clients that do
+  /// actually want to read the body will just hang until timeout waiting for the body which
+  /// we will never send.
+  pub omit_body: bool,
 }
 
 impl Response {
@@ -46,7 +63,7 @@ impl Response {
   /// Automatically sets the HTTP version to "HTTP/1.1", sets no headers, and creates an empty body.
   pub fn new(status_code: impl Into<StatusCode>) -> Self {
     let status_code = status_code.into();
-    Self { status_code, headers: Headers::new(), body: None }
+    Self { status_code, headers: Headers::new(), body: None, omit_body: false }
   }
 
   /// HTTP 200 OK with body.
@@ -658,7 +675,9 @@ impl Response {
           }
         }
         destination.write_all(b"\r\n")?;
-        body.write_to_http(request_id, destination)?;
+        if !self.omit_body {
+          body.write_to_http(request_id, destination)?;
+        }
         destination.flush()?;
         return Ok(());
       }
@@ -679,7 +698,9 @@ impl Response {
 
       destination.write_all(b"\r\n")?;
 
-      body.write_to_http(request_id, destination)?;
+      if !self.omit_body {
+        body.write_to_http(request_id, destination)?;
+      }
       destination.flush()?;
       return Ok(());
     }

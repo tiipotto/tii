@@ -260,6 +260,10 @@ impl Server {
           .unwrap_or_else(|e| self.fallback_error_handler(&mut context, e)),
       });
 
+      if response.omit_body {
+        context.force_connection_close();
+      }
+
       keep_alive &= !context.is_connection_close_forced();
 
       let id = context.id();

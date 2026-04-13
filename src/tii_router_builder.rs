@@ -278,7 +278,8 @@ impl RouterBuilder {
       .route_post(route, wrapped.clone())?
       .route_patch(route, wrapped.clone())?
       .route_delete(route, wrapped.clone())?
-      .route_options(route, wrapped)
+      .route_options(route, wrapped.clone())?
+      .route_head(route, wrapped)
   }
 
   /// Helper fn to make some builder code look a bit cleaner.
@@ -345,6 +346,12 @@ impl RouterBuilder {
     handler: T,
   ) -> TiiResult<Self> {
     self.route_method(HttpMethod::Options, route, handler)
+  }
+
+  /// Adds a route that will handle the HEAD http method.
+  /// The endpoint will be called for any media type.
+  pub fn route_head<T: HttpEndpoint + 'static>(self, route: &str, handler: T) -> TiiResult<Self> {
+    self.route_method(HttpMethod::Head, route, handler)
   }
 
   /// Helper fn that will just call the passed closure,
