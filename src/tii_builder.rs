@@ -17,9 +17,12 @@ pub struct ServerBuilder {
   keep_alive_timeout: Option<Duration>,
   request_body_io_timeout: Option<Duration>,
   write_timeout: Option<Duration>,
+  continue_handler: ContinueHandler,
 }
 
-use crate::default_functions::{default_error_handler, default_fallback_not_found_handler};
+use crate::default_functions::{
+  default_continue_handler, default_error_handler, default_fallback_not_found_handler,
+};
 pub use crate::functional_traits::*;
 use crate::tii_error::{TiiError, TiiResult, UserError};
 use crate::tii_router::Routeable;
@@ -56,6 +59,7 @@ impl Default for ServerBuilder {
       read_timeout: None,
       request_body_io_timeout: None,
       write_timeout: None,
+      continue_handler: default_continue_handler,
     }
   }
 }
@@ -88,6 +92,7 @@ impl ServerBuilder {
       self.keep_alive_timeout,
       self.request_body_io_timeout,
       self.write_timeout,
+      self.continue_handler,
     )
   }
 
