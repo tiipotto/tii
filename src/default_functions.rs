@@ -97,11 +97,10 @@ pub(crate) fn default_unsupported_media_type_handler(
 
 pub(crate) fn default_continue_handler(request: &mut RequestContext) -> TiiResult<bool> {
   trace_log!(
-    "Request {} Emitting HTTP 100 continue {} {} {:?}",
+    "Request {} Emitting HTTP 100 continue for {} {}",
     request.id(),
     request.get_method(),
-    request.get_path(),
-    request.get_content_type()
+    request.get_path()
   );
   Ok(true)
 }
