@@ -1,5 +1,5 @@
-use crate::RequestContext;
 use crate::{error_log, info_log};
+use crate::{trace_log, RequestContext};
 use crate::{Response, StatusCode};
 use crate::{Routeable, RoutingDecision};
 use crate::{TiiError, TiiResult};
@@ -93,4 +93,14 @@ pub(crate) fn default_unsupported_media_type_handler(
     request.get_content_type()
   );
   Ok(Response::unsupported_media_type_no_body())
+}
+
+pub(crate) fn default_continue_handler(request: &mut RequestContext) -> TiiResult<bool> {
+  trace_log!(
+    "Request {} Emitting HTTP 100 continue for {} {}",
+    request.id(),
+    request.get_method(),
+    request.get_path()
+  );
+  Ok(true)
 }

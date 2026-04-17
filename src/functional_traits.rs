@@ -497,3 +497,9 @@ pub trait Router: Debug + Send + Sync {
     request: &mut RequestContext,
   ) -> TiiResult<RouterWebSocketServingResponse>;
 }
+
+/// Type for a customizable continue handler that is called for every request that
+/// request prior to processing when an Except: 100-continue is received.
+/// Return true -> emit 100 continue
+/// Return false -> do nothing
+pub type ContinueHandler = fn(&mut RequestContext) -> TiiResult<bool>;

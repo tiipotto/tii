@@ -20,12 +20,13 @@ getrandom = { version = "0.4", optional = true }
 log = { version = "^0.4.29", optional = true }
 unowned-buf = "0.2.0"
 urlencoding = "2.1.3"
-regex = "1.12.2"
+regex = "1.12.3"
 sha1 = "0.11.0"
 base64 = "0.22.1"
 defer-heavy = "0.1.0"
 #GZIP/ZLIB in pure rust
-libflate = "2.2.1"
+libflate = "~2.2.2"
+
 listener_poll = { version = "0.1.1", optional = true }
 uintx = "0.1.0"
 

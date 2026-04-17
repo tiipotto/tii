@@ -7,9 +7,9 @@ use crate::http::{Response, StatusCode};
 use crate::stream::{ConnectionStream, IntoConnectionStream};
 use crate::tii_builder::{ErrorHandler, NotFoundHandler, RouterWebSocketServingResponse};
 use crate::tii_error::{TiiError, TiiResult};
-use crate::RequestContext;
 use crate::{error_log, trace_log};
 use crate::{warn_log, HttpHeaderName};
+use crate::{ContinueHandler, RequestContext};
 use crate::{HttpVersion, TypeSystem, TypeSystemBuilder};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -55,6 +55,7 @@ pub struct Server {
   keep_alive_timeout: Option<Duration>,
   request_body_io_timeout: Option<Duration>,
   write_timeout: Option<Duration>,
+  continue_handler: ContinueHandler,
   shutdown_hooks: Hooks,
 }
 
@@ -85,6 +86,7 @@ impl Server {
     keep_alive_timeout: Option<Duration>,
     request_body_io_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
+    continue_handler: ContinueHandler,
   ) -> Self {
     Server {
       type_system: type_system.build(),
@@ -98,6 +100,7 @@ impl Server {
       keep_alive_timeout: keep_alive_timeout.or(read_timeout),
       request_body_io_timeout: request_body_io_timeout.or(read_timeout),
       write_timeout,
+      continue_handler,
       shutdown_hooks: Hooks::default(),
     }
   }
@@ -194,6 +197,17 @@ impl Server {
         self.type_system.clone(),
       )?;
       count += 1;
+
+      if let Some(value) = context.get_header(HttpHeaderName::Expect) {
+        if value == "100-continue" && (self.continue_handler)(&mut context)? {
+          match context.get_version() {
+            HttpVersion::Http10 => _ = stream.write("HTTP/1.0 100 Continue\r\n\r\n".as_bytes())?,
+            HttpVersion::Http11 => _ = stream.write("HTTP/1.1 100 Continue\r\n\r\n".as_bytes())?,
+            _ => (),
+          };
+          stream.flush()?;
+        }
+      }
 
       stream.set_read_timeout(self.request_body_io_timeout)?;
 
