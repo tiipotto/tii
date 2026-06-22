@@ -53,7 +53,7 @@ fn actual_main() -> TiiResult<()> {
   let _listen = TcpListener::bind("0.0.0.0:8080")?;
 
   info!("Done");
-  trivial_log::free();
+  // trivial_log::free();
   Ok(())
 }
 
