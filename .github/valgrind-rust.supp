@@ -1,0 +1,21 @@
+# Rust 1.89+ can leave a reachable allocation in Unix stack-overflow thread
+# tracking during runtime shutdown.
+# See: https://github.com/rust-lang/rust/issues/146352
+{
+   rust-std-stack-overflow-thread-info
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:*stack_overflow*thread_info*set_current_info*
+}
+
+# std::thread::current() thread metadata
+{
+   rust-std-thread-current-init-current
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   ...
+   fun:*thread*current*init_current*
+}

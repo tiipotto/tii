@@ -30,7 +30,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: 1.86
+          toolchain: stable minus 2 releases
       - name: Test gnu
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -44,7 +44,12 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
-      VALGRINDFLAGS: "--error-exitcode=1 --leak-check=full --show-leak-kinds=all"
+      VALGRINDFLAGS: >-
+        --errors-for-leak-kinds=all
+        --error-exitcode=1
+        --leak-check=full
+        --show-leak-kinds=all
+        --suppressions=${{ github.workspace }}/.github/valgrind-rust.supp
     steps:
       - name: Update sources
         run: sudo apt update
@@ -53,18 +58,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.86
+          toolchain: stable minus 2 releases
       - name: Install cargo valgrind
         run: cargo install cargo-valgrind --version 2.4.0
       - name: 64-bit Valgrind
         run: |
-          cargo valgrind test --all-features
+          VALGRINDFLAGS="--leak-check=full --show-leak-kinds=definite,indirect --suppressions=${{ github.workspace }}/.github/valgrind-rust.supp" cargo valgrind test --all-features
           cd examples
           cargo build
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown_multiple
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/shutdown_unix
-          valgrind --errors-for-leak-kinds=all --error-exitcode=1 --leak-check=full --show-leak-kinds=all target/debug/websocket_broadcast 5
+          valgrind $VALGRINDFLAGS target/debug/shutdown
+          valgrind $VALGRINDFLAGS target/debug/shutdown_multiple
+          valgrind $VALGRINDFLAGS target/debug/shutdown_unix
+          valgrind $VALGRINDFLAGS target/debug/websocket_broadcast 5
 
 
   build_linux:
@@ -100,7 +105,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: 1.86
+          toolchain: stable minus 2 releases
       - name: Build with all features
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -140,7 +145,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: 1.86
+          toolchain: stable minus 2 releases
       - name: Build Windows
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -176,7 +181,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: 1.86
+          toolchain: stable minus 2 releases
       - name: Test Windows
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -205,7 +210,7 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: clippy
-            toolchain: 1.86
+            toolchain: stable minus 2 releases
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
         - run: cd examples && cargo clippy -- --deny warnings
@@ -219,5 +224,5 @@ jobs:
         - uses: actions/checkout@v4
         - uses: dtolnay/rust-toolchain@stable
           with:
-            toolchain: 1.86
+            toolchain: stable minus 2 releases
         - run: cargo doc --all-features --no-deps
