@@ -540,11 +540,7 @@ impl AcceptMimeCharset {
       let charset = MimeCharset::parse(charset_name)?;
       let mut q = None;
 
-      loop {
-        let Some(next) = iter.next().map(str::trim) else {
-          break;
-        };
-
+      while let Some(next) = iter.next().map(str::trim) {
         if let Some(raw_q) = next.strip_prefix("q=") {
           if q.is_some() {
             // Multiple Q
