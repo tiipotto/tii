@@ -417,7 +417,7 @@ impl Server {
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .map(|a| a.as_millis())
         .unwrap_or_default();
-      let diff = now.checked_sub(request.get_timestamp()).unwrap_or_default();
+      let diff = now.saturating_sub(request.get_timestamp());
       crate::info_log!(
         "tii: Request {} from {} to {} {} ({}) served in {}ms",
         request.id(),
