@@ -216,6 +216,15 @@ pub enum HttpHeaderName {
   /// Indicates that a proxy server in the connection needs authentication.
   ProxyAuthenticate,
 
+  /// Http Range request header
+  Range,
+
+  /// Http accept ranges response header
+  AcceptRanges,
+
+  /// Http content range header
+  ContentRange,
+
   /// Custom header with a lowercase name
   Custom(String),
 }
@@ -267,6 +276,9 @@ static WELL_KNOWN: &[HttpHeaderName] = &[
   HttpHeaderName::Trailer,
   HttpHeaderName::TE,
   HttpHeaderName::ProxyAuthenticate,
+  HttpHeaderName::Range,
+  HttpHeaderName::AcceptRanges,
+  HttpHeaderName::ContentRange,
 ];
 
 impl HttpHeaderName {
@@ -338,6 +350,9 @@ impl HttpHeaderName {
       HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HttpHeaderName::TE => "TE",
       HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::Range => "Range",
+      HttpHeaderName::AcceptRanges => "Accept-Ranges",
+      HttpHeaderName::ContentRange => "Content-Range",
       HttpHeaderName::Custom(name) => name.as_str(),
     }
   }
@@ -392,6 +407,9 @@ impl HttpHeaderName {
       HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HttpHeaderName::Trailer => "Trailer",
       HttpHeaderName::TE => "TE",
+      HttpHeaderName::Range => "Range",
+      HttpHeaderName::AcceptRanges => "Accept-Ranges",
+      HttpHeaderName::ContentRange => "Content-Range",
       HttpHeaderName::Custom(_) => return None,
     })
   }
@@ -457,6 +475,9 @@ impl From<&str> for HttpHeaderName {
       "proxy-authenticate" => Self::ProxyAuthenticate,
       "te" => Self::TE,
       "trailer" => Self::Trailer,
+      "range" => Self::Range,
+      "content-range" => Self::ContentRange,
+      "accept-ranges" => Self::AcceptRanges,
       _ => Self::Custom(name.to_string()),
     }
   }
