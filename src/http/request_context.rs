@@ -23,6 +23,124 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use std::{io, mem};
 
+/// Parsed form of an http range request header.
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
+pub enum ByteRange {
+  /// Offset only: `bytes=1000-`
+  Offset(u64),
+  /// Trailing suffix: `bytes=-500`
+  Trailing(u64),
+  /// Range: `bytes=1000-2000`
+  Range(u64, u64),
+}
+
+impl ByteRange {
+  /// Returns start_idx, end_idx, len in bytes for the given file size.
+  /// Returns None if the range is out of bounds for the given size.
+  pub fn get_values_for_size(&self, size: u64) -> Option<(u64, u64, u64)> {
+    Some((
+      self.get_start_for_size(size)?,
+      self.get_end_for_size(size)?,
+      self.get_len_for_size(size)?,
+    ))
+  }
+
+  /// Returns a Content-Range header value that should accompany a successfully served range request.
+  /// Returns None if the range is out of bounds for the given size.
+  pub fn get_content_range_header_for_size(&self, size: u64) -> Option<String> {
+    Some(format!(
+      "bytes {}-{}/{size}",
+      self.get_start_for_size(size)?,
+      self.get_end_for_size(size)?
+    ))
+  }
+
+  /// Returns the start offset for a file of the given size or None if the range is out of bounds for the given size.
+  pub fn get_start_for_size(&self, size: u64) -> Option<u64> {
+    if size == 0 {
+      return None;
+    }
+    match self {
+      ByteRange::Offset(off) => {
+        if *off >= size {
+          None
+        } else {
+          Some(*off)
+        }
+      }
+      ByteRange::Trailing(trail) => {
+        if *trail > size {
+          None
+        } else {
+          Some(size - *trail)
+        }
+      }
+      ByteRange::Range(off, end) => {
+        if *off >= size || off > end || *end >= size {
+          None
+        } else {
+          Some(*off)
+        }
+      }
+    }
+  }
+
+  /// Returns the end index for a file of the given size or None if the range is out of bounds for the given size.
+  /// The end index is inclusive.
+  pub fn get_end_for_size(&self, size: u64) -> Option<u64> {
+    if size == 0 {
+      return None;
+    }
+    match self {
+      ByteRange::Offset(off) => {
+        if *off >= size {
+          None
+        } else {
+          size.checked_sub(1)
+        }
+      }
+      ByteRange::Trailing(trail) => {
+        if *trail > size && size > 0 {
+          None
+        } else {
+          size.checked_sub(1)
+        }
+      }
+      ByteRange::Range(off, end) => {
+        if *off >= size || off > end || *end >= size {
+          None
+        } else {
+          Some(*end)
+        }
+      }
+    }
+  }
+
+  /// Returns the len for a file of the given size or None if the range is out of bounds for the given size.
+  pub fn get_len_for_size(&self, size: u64) -> Option<u64> {
+    if size == 0 {
+      return None;
+    }
+    match self {
+      ByteRange::Offset(off) => size.checked_sub(*off),
+      ByteRange::Trailing(trail) => {
+        if *trail > size {
+          None
+        } else {
+          Some(*trail)
+        }
+      }
+      ByteRange::Range(off, end) => {
+        if *off > size || *end > size {
+          None
+        } else {
+          end.checked_sub(*off).and_then(|a| a.checked_add(1))
+        }
+      }
+    }
+  }
+}
+
 /// This struct contains all information needed to process a request as well as all state
 /// for a single request.
 #[derive(Debug)]
@@ -842,6 +960,51 @@ impl RequestContext {
   /// The returned accepted charset types are in the order the client sent them over the network.
   pub fn get_accept_charset(&self) -> &[AcceptMimeCharset] {
     self.request.get_accept_charset()
+  }
+
+  /// Returns a parsed form of the Http Range header
+  /// for "bytes" ranges.
+  /// Returns none to indicate that the header is either absent or malformed.
+  pub fn get_byte_range(&self) -> Option<ByteRange> {
+    let range = self.get_header("Range")?.trim();
+    if range.len() < 7 || range.len() > 50 {
+      //Note: the largest possible valid header is 47 characters long.
+      //The longest possible valid header would be "bytes=u64::MAX-u64::MAX".
+      //Technically this isn't an RFC limitation but no filesystem that I know will allow you to store
+      //larger than u64 files so we only parse file sizes as u64's.
+      //50 characters already leaves some leeway for malformed whitespaces...
+      return None;
+    }
+    let header_bytes = range.as_bytes();
+    header_bytes.get(..6).filter(|prefix| prefix.eq_ignore_ascii_case(b"bytes="))?;
+    let range = range.get(6..)?;
+
+    if let Some(trailing) = range.strip_prefix('-') {
+      let Ok(trailer) = u64::from_str(trailing) else {
+        return None;
+      };
+
+      return Some(ByteRange::Trailing(trailer));
+    }
+
+    let (pre, sub) = range.split_once('-')?;
+    let Ok(pre) = u64::from_str(pre) else {
+      return None;
+    };
+
+    if sub.is_empty() {
+      return Some(ByteRange::Offset(pre));
+    }
+
+    let Ok(sub) = u64::from_str(sub) else {
+      return None;
+    };
+
+    if sub < pre {
+      return None;
+    }
+
+    Some(ByteRange::Range(pre, sub))
   }
 
   /// Returns an iterator over all headers.

@@ -2,7 +2,7 @@ mod mock_stream;
 
 use crate::mock_stream::MockStream;
 use tii::{
-  AcceptQualityMimeType, Cookie, MimeCharset, MimeType, MimeTypeWithCharset, QValue,
+  AcceptQualityMimeType, ByteRange, Cookie, MimeCharset, MimeType, MimeTypeWithCharset, QValue,
   RequestContext, RequestHeadParsingError, TiiError, UserError,
 };
 use tii::{HttpHeader, HttpHeaderName};
@@ -74,6 +74,209 @@ fn test_proxied_request_from_stream() {
   let collected: Vec<HttpHeader> = request.iter_headers().cloned().collect();
 
   assert_eq!(collected, expected_headers);
+}
+
+#[test]
+fn test_range_request1() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=25-1023\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+
+  assert_eq!(range.get_values_for_size(5000), Some((25, 1023, 999)));
+  assert_eq!(range.get_content_range_header_for_size(5000), Some("bytes 25-1023/5000".to_string()));
+}
+
+#[test]
+fn test_range_request2() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=-1023\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(5000), Some((3977, 4999, 1023)));
+  assert_eq!(
+    range.get_content_range_header_for_size(5000),
+    Some("bytes 3977-4999/5000".to_string())
+  );
+}
+
+#[test]
+fn test_range_request3() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=501-\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(5000), Some((501, 4999, 4499)));
+  assert_eq!(
+    range.get_content_range_header_for_size(5000),
+    Some("bytes 501-4999/5000".to_string())
+  );
+}
+
+#[test]
+fn test_range_request4() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=-500\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(5000), Some((4500, 4999, 500)));
+}
+
+#[test]
+fn test_range_request5() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=1000-\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(5000), Some((1000, 4999, 4000)));
+}
+
+#[test]
+fn test_range_request6() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-0\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(1), Some((0, 0, 1)));
+  assert_eq!(range.get_content_range_header_for_size(1), Some("bytes 0-0/1".to_string()));
+}
+
+#[test]
+fn test_range_request7() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bYtEs=0-5\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range.get_values_for_size(6), Some((0, 5, 6)));
+  assert_eq!(range.get_content_range_header_for_size(6), Some("bytes 0-5/6".to_string()));
+}
+
+#[test]
+fn test_range_request8() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bYtEA=0-0\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  assert_eq!(request.get_byte_range(), None);
+}
+
+#[test]
+fn test_range_request9() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: no\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  assert_eq!(request.get_byte_range(), None);
+}
+
+#[test]
+fn test_range_request10() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  assert_eq!(request.get_byte_range(), None);
+}
+
+#[test]
+fn test_range_request11() {
+  let test_data = b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=55\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  assert_eq!(request.get_byte_range(), None);
+}
+
+#[test]
+fn test_range_request12() {
+  //18446744073709551615 == u64::MAX
+  let test_data =
+    b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-18446744073709551615\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range, ByteRange::Range(0, u64::MAX));
+  //This request cannot be answered correctly because index 18446744073709551615 would be inclusive which is out of bounds for u64.
+  assert_eq!(range.get_values_for_size(u64::MAX), None);
+  assert_eq!(range.get_content_range_header_for_size(u64::MAX), None);
+}
+
+#[test]
+fn test_range_request13() {
+  //18446744073709551614 == u64::MAX-1
+  let test_data =
+    b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-18446744073709551614\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  let range = request.get_byte_range().unwrap();
+  assert_eq!(range, ByteRange::Range(0, u64::MAX - 1));
+  assert_eq!(range.get_values_for_size(u64::MAX), Some((0, u64::MAX - 1, u64::MAX)));
+  assert_eq!(
+    range.get_content_range_header_for_size(u64::MAX),
+    Some("bytes 0-18446744073709551614/18446744073709551615".to_string())
+  );
+}
+
+#[test]
+fn test_range_request14() {
+  //18446744073709551615 == u64::MAX
+  let test_data =
+    b"GET /testpath HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-18446744073709551616\r\n\r\n";
+  let stream = MockStream::with_data(VecDeque::from_iter(test_data.iter().cloned()));
+  let raw_stream = stream.clone().into_connection_stream();
+
+  let request = RequestContext::read(raw_stream.as_ref(), None, 8096, TypeSystem::empty());
+
+  let request = request.unwrap();
+  assert_eq!(request.get_byte_range(), None);
 }
 
 #[test]

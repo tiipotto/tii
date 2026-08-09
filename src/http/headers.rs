@@ -216,6 +216,18 @@ pub enum HttpHeaderName {
   /// Indicates that a proxy server in the connection needs authentication.
   ProxyAuthenticate,
 
+  /// Http Range request header
+  Range,
+
+  /// Http accept ranges response header
+  AcceptRanges,
+
+  /// Http content range header
+  ContentRange,
+
+  /// Makes a range request conditional on the entity being unchanged.
+  IfRange,
+
   /// Custom header with a lowercase name
   Custom(String),
 }
@@ -267,6 +279,10 @@ static WELL_KNOWN: &[HttpHeaderName] = &[
   HttpHeaderName::Trailer,
   HttpHeaderName::TE,
   HttpHeaderName::ProxyAuthenticate,
+  HttpHeaderName::Range,
+  HttpHeaderName::AcceptRanges,
+  HttpHeaderName::ContentRange,
+  HttpHeaderName::IfRange,
 ];
 
 impl HttpHeaderName {
@@ -338,6 +354,10 @@ impl HttpHeaderName {
       HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HttpHeaderName::TE => "TE",
       HttpHeaderName::Trailer => "Trailer",
+      HttpHeaderName::Range => "Range",
+      HttpHeaderName::AcceptRanges => "Accept-Ranges",
+      HttpHeaderName::ContentRange => "Content-Range",
+      HttpHeaderName::IfRange => "If-Range",
       HttpHeaderName::Custom(name) => name.as_str(),
     }
   }
@@ -392,6 +412,10 @@ impl HttpHeaderName {
       HttpHeaderName::ProxyAuthenticate => "Proxy-Authenticate",
       HttpHeaderName::Trailer => "Trailer",
       HttpHeaderName::TE => "TE",
+      HttpHeaderName::Range => "Range",
+      HttpHeaderName::AcceptRanges => "Accept-Ranges",
+      HttpHeaderName::ContentRange => "Content-Range",
+      HttpHeaderName::IfRange => "If-Range",
       HttpHeaderName::Custom(_) => return None,
     })
   }
@@ -457,6 +481,10 @@ impl From<&str> for HttpHeaderName {
       "proxy-authenticate" => Self::ProxyAuthenticate,
       "te" => Self::TE,
       "trailer" => Self::Trailer,
+      "range" => Self::Range,
+      "content-range" => Self::ContentRange,
+      "accept-ranges" => Self::AcceptRanges,
+      "if-range" => Self::IfRange,
       _ => Self::Custom(name.to_string()),
     }
   }

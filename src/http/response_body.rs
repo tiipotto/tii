@@ -16,7 +16,7 @@ use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 pub(crate) type ResponseBodyHandler = dyn FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send;
@@ -41,6 +41,10 @@ enum ResponseBodyInner {
   //Streams a file.
   //Content length header will be set automatically
   FixedSizeFile(Box<dyn ReadAndSeek>, u64),
+
+  //Streams a file.
+  //Content length header will be set automatically
+  RangedFile(Box<dyn ReadAndSeek>, u64, u64), //offset, len!
 
   //Content length header will not be set.
   //This forces Connection-Close after the request has been processed.
@@ -79,6 +83,9 @@ impl Debug for ResponseBodyInner {
       }
       ResponseBodyInner::FixedSizeFile(_, size) => {
         f.write_fmt(format_args!("ResponseBody::FixedSizeFile(file, {size})"))
+      }
+      ResponseBodyInner::RangedFile(_, off, len) => {
+        f.write_fmt(format_args!("ResponseBody::RangedFile(file, {off}, {len})"))
       }
       ResponseBodyInner::Stream(_) => f.write_str("ResponseBody::Stream(...)"),
       ResponseBodyInner::ChunkedStream(_) => f.write_str("ResponseBody::ChunkedStream(...)"),
@@ -158,6 +165,32 @@ impl ResponseBody {
     file.seek(SeekFrom::End(0))?;
     let size = file.stream_position()?;
     Ok(Self(ResponseBodyInner::FixedSizeFile(Box::new(file), size)))
+  }
+
+  /// Construct a response that returns only a partial slice of the file.
+  /// This function returns io error "UnexpectedEof" if the given offsets are out of bounds for the file.
+  /// The Content-Length header is set automatically for the file.
+  ///
+  /// Note:
+  /// This function is useful for responding to http range requests,
+  /// but the Content-Range header must still be set manually.
+  /// Since there are also use cases for this function outside of range requests.
+  pub fn from_file_ranged<T: Read + Seek + Send + 'static>(
+    mut file: T,
+    offset: u64,
+    len: u64,
+  ) -> io::Result<Self> {
+    file.seek(SeekFrom::End(0))?;
+    let size = file.stream_position()?;
+    let Some(remaining_len) = size.checked_sub(offset) else {
+      return Err(ErrorKind::UnexpectedEof.into());
+    };
+
+    if remaining_len < len {
+      return Err(ErrorKind::UnexpectedEof.into());
+    }
+
+    Ok(Self(ResponseBodyInner::RangedFile(Box::new(file), offset, len)))
   }
 
   pub fn from_file_with_chunked_gzip<T: Read + Seek + Send + 'static>(file: T) -> Self {
@@ -277,12 +310,30 @@ impl ResponseBody {
       ResponseBodyInner::FixedSizeTextData(text) => stream.write_all(text.as_ref())?,
       ResponseBodyInner::FixedSizeFile(mut data, _)
       | ResponseBodyInner::ChunkedGzipFile(mut data) => {
+        data.seek(SeekFrom::Start(0))?;
         let mut io_buf = [0u8; 0x1_00_00];
         loop {
           let len = data.read(&mut io_buf)?;
           if len == 0 {
             return Ok(());
           }
+          stream.write_all(unwrap_some(io_buf.get(..len)))?
+        }
+      }
+      ResponseBodyInner::RangedFile(mut data, off, expected_len) => {
+        data.seek(SeekFrom::Start(off))?;
+        let mut taken = data.take(expected_len);
+        let mut io_buf = [0u8; 0x1_00_00];
+        let mut total_len = 0u64;
+        loop {
+          let len = taken.read(&mut io_buf)?;
+          if len == 0 {
+            if total_len != expected_len {
+              return Err(io::Error::new(ErrorKind::UnexpectedEof, len.to_string()).into());
+            }
+            return Ok(());
+          }
+          total_len += len as u64;
           stream.write_all(unwrap_some(io_buf.get(..len)))?
         }
       }
@@ -336,6 +387,32 @@ impl ResponseBody {
       ResponseBodyInner::FixedSizeBinaryData(data)
       | ResponseBodyInner::ExternallyGzippedData(data) => stream.write_all(data.as_slice())?,
       ResponseBodyInner::FixedSizeTextData(text) => stream.write_all(text.as_bytes())?,
+      ResponseBodyInner::RangedFile(mut file, off, expected_len) => {
+        let mut io_buf = [0u8; 0x1_00_00];
+        let mut written = 0u64;
+        file.seek(SeekFrom::Start(off))?;
+        let mut taken = file.take(expected_len);
+        loop {
+          let read = taken.read(io_buf.as_mut_slice())?;
+          if read == 0 {
+            if written != expected_len {
+              return Err(TiiError::from_io_kind(ErrorKind::InvalidData));
+            }
+            return Ok(());
+          }
+
+          written = written
+            .checked_add(u64::try_from(read).map_err(|_| io::Error::other("usize->u64 failed"))?)
+            .ok_or(io::Error::other("u64 overflow"))?;
+
+          if written > expected_len {
+            //unless take fucked up we cant get here no?
+            return Err(TiiError::from_io_kind(io::ErrorKind::FileTooLarge));
+          }
+
+          stream.write_all(io_buf.get_mut(..read).ok_or(io::Error::other("buffer overflow"))?)?;
+        }
+      }
       ResponseBodyInner::FixedSizeFile(mut file, size)
       | ResponseBodyInner::ExternallyGzippedFile(mut file, size) => {
         //TODO give option via cfg-if to move this to heap. Some unix systems only have 80kb stack and stuff like this has blown up in my face before.
@@ -440,6 +517,7 @@ impl ResponseBody {
       ResponseBodyInner::FixedSizeFile(_, sz) => Some(*sz),
       ResponseBodyInner::ExternallyGzippedData(data) => u64::try_from(data.len()).ok(),
       ResponseBodyInner::ExternallyGzippedFile(_, sz) => Some(*sz),
+      ResponseBodyInner::RangedFile(_, _, sz) => Some(*sz),
       _ => None,
     }
   }
