@@ -15,11 +15,67 @@ use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[derive(Debug, PartialEq, Eq)]
+enum CloseState {
+  Open,
+  CloseSent,
+  Closed,
+}
+
+#[derive(Debug)]
+enum WriteOutcome {
+  Written,
+  Closing,
+}
+
 #[derive(Debug)]
 struct WebSocketGuard {
   closed: AtomicBool,
-  write_mutex: Mutex<()>,
+  closing: AtomicBool,
+  write_mutex: Mutex<CloseState>,
   stream: Box<dyn ConnectionStream>,
+}
+
+impl WebSocketGuard {
+  fn is_closed(&self) -> bool {
+    self.closed.load(SeqCst) || self.closing.load(SeqCst)
+  }
+
+  fn write_frame(&self, opcode: Opcode, payload: &[u8]) -> TiiResult<WriteOutcome> {
+    let state = unwrap_poison(self.write_mutex.lock())?;
+    if self.closed.load(SeqCst) || !matches!(*state, CloseState::Open) {
+      return Ok(WriteOutcome::Closing);
+    }
+    Frame::write_unowned_payload_frame(self.stream.as_stream_write(), opcode, payload)
+      .inspect_err(|e| {
+        self.closed.store(true, SeqCst);
+        error_log!("WebSocketGuard::write_frame error: {}", e);
+      })?;
+    Ok(WriteOutcome::Written)
+  }
+
+  fn close(&self, reply: Option<&[u8]>) -> TiiResult<()> {
+    let mut state = unwrap_poison(self.write_mutex.lock())?;
+    if self.closed.load(SeqCst) {
+      return Ok(());
+    }
+    let send = *state == CloseState::Open;
+    self.closing.store(true, SeqCst);
+    if reply.is_some() {
+      *state = CloseState::Closed;
+      self.closed.store(true, SeqCst);
+    } else if send {
+      *state = CloseState::CloseSent;
+    } else {
+      return Ok(());
+    }
+    if send {
+      Frame::new(Opcode::Close, reply.unwrap_or_default().to_vec())
+        .write_to(self.stream.as_stream_write())
+        .inspect_err(|_| self.closed.store(true, SeqCst))?;
+    }
+    Ok(())
+  }
 }
 
 /// Sending side of a web socket
@@ -33,7 +89,8 @@ pub fn new_web_socket_stream(
 ) -> (WebsocketSender, WebsocketReceiver) {
   let guard = Arc::new(WebSocketGuard {
     closed: AtomicBool::new(false),
-    write_mutex: Mutex::new(()),
+    closing: AtomicBool::new(false),
+    write_mutex: Mutex::new(CloseState::Open),
     stream: connection.new_ref(),
   });
 
@@ -50,10 +107,17 @@ pub fn new_web_socket_stream(
 }
 
 impl WebsocketSender {
-  /// returns true if this web socket sender refers to a closed web socket.
+  fn write_frame(&self, opcode: Opcode, payload: &[u8]) -> TiiResult<()> {
+    match self.0.write_frame(opcode, payload)? {
+      WriteOutcome::Written => Ok(()),
+      WriteOutcome::Closing => Err(io::Error::from(ErrorKind::ConnectionReset).into()),
+    }
+  }
+
+  /// returns true once closing has started or the connection has failed
   #[must_use]
   pub fn is_closed(&self) -> bool {
-    self.0.closed.load(SeqCst)
+    self.0.is_closed()
   }
 
   /// Sends a message to the client.
@@ -66,40 +130,29 @@ impl WebsocketSender {
     }
   }
 
-  /// Closes the Websocket sending the close frame.
+  /// initiates a close, stopping further application writes.
   pub fn close(&self) -> TiiResult<()> {
-    let _g = unwrap_poison(self.0.write_mutex.lock())?;
-
-    if self.0.closed.swap(true, SeqCst) {
-      return Ok(()); //ALREADY CLOSED!
-    }
-
-    Frame::new(Opcode::Close, Vec::new()).write_to(self.0.stream.as_stream_write())
+    self.0.close(None)
   }
 
   /// Sends a binary message to the client
   pub fn binary(&self, message: impl Into<Vec<u8>>) -> TiiResult<()> {
-    let _g = unwrap_poison(self.0.write_mutex.lock())?;
-    Frame::new(Opcode::Binary, message.into()).write_to(self.0.stream.as_stream_write())
+    self.write_frame(Opcode::Binary, &message.into())
   }
 
   /// Sends a text message to the client
   pub fn text(&self, message: impl ToString) -> TiiResult<()> {
-    let _g = unwrap_poison(self.0.write_mutex.lock())?;
-    Frame::new(Opcode::Text, message.to_string().into_bytes())
-      .write_to(self.0.stream.as_stream_write())
+    self.write_frame(Opcode::Text, message.to_string().as_bytes())
   }
 
   /// Sends a ping to the client.
   pub fn ping(&self) -> TiiResult<()> {
-    let _g = unwrap_poison(self.0.write_mutex.lock())?;
-    Frame::new(Opcode::Ping, Vec::new()).write_to(self.0.stream.as_stream_write())
+    self.write_frame(Opcode::Ping, &[])
   }
 
-  /// Sends a pong message to the client.
+  /// Sends an empty pong message to the client.
   pub fn pong(&self) -> TiiResult<()> {
-    let _g = unwrap_poison(self.0.write_mutex.lock())?;
-    Frame::new(Opcode::Ping, Vec::new()).write_to(self.0.stream.as_stream_write())
+    self.write_frame(Opcode::Pong, &[])
   }
 
   /// Attempts to get the peer address of this stream.
@@ -129,15 +182,9 @@ pub enum ReadMessageTimeoutResult {
 }
 
 impl WebsocketReceiver {
-  /// Closes the Websocket sending the close frame to the client.
+  /// initializes close, stopping further application writes.
   pub fn close(&self) -> TiiResult<()> {
-    let _g = unwrap_poison(self.guard.write_mutex.lock())?;
-
-    if self.guard.closed.swap(true, SeqCst) {
-      return Ok(()); //ALREADY CLOSED!
-    }
-
-    Frame::new(Opcode::Close, Vec::new()).write_to(self.guard.stream.as_stream_write())
+    self.guard.close(None)
   }
 
   /// If the WebsocketReceiver is used with the "io::Read" trait then
@@ -185,17 +232,19 @@ impl WebsocketReceiver {
 
       let old_timeout = self.guard.stream.get_read_timeout()?.as_ref().cloned();
       if let Err(err) = self.guard.stream.set_read_timeout(timeout) {
+        let err = TiiError::from(err);
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error setting timeout for 1st byte of next frame {}", &err);
-        return Err(TiiError::from(err));
+        return Err(err);
       }
       let res = self.guard.stream.ensure_readable();
       let res2 = self.guard.stream.set_read_timeout(old_timeout);
 
       if let Err(err) = res2 {
+        let err = TiiError::from(err);
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_message_timeout error setting timeout back to read timeout after waiting for 1st byte of next frame {}", &err);
-        return Err(TiiError::from(err));
+        return Err(err);
       }
 
       if let Err(err) = res {
@@ -231,23 +280,26 @@ impl WebsocketReceiver {
         error_log!("WebsocketReceiver::read_next_frame Frame::from_stream error: {}", e);
       })?;
 
+      if frame.opcode == Opcode::Close {
+        self.state.clear();
+        self.guard.close(Some(&frame.payload))?;
+        return Ok(None);
+      }
+
+      if self.guard.is_closed() {
+        self.state.clear();
+        continue;
+      }
+
       if frame.opcode == Opcode::Ping {
-        return Ok(Some(WebsocketMessage::Ping));
+        match self.guard.write_frame(Opcode::Pong, &frame.payload)? {
+          WriteOutcome::Written => return Ok(Some(WebsocketMessage::Ping)),
+          WriteOutcome::Closing => continue,
+        }
       }
 
       if frame.opcode == Opcode::Pong {
         return Ok(Some(WebsocketMessage::Pong));
-      }
-
-      if frame.opcode == Opcode::Close {
-        self.guard.closed.store(true, SeqCst);
-        if self.state.is_empty() {
-          return Ok(None);
-        }
-
-        return Err(TiiError::RequestHeadParsing(
-          RequestHeadParsingError::WebSocketClosedDuringPendingMessage,
-        ));
       }
 
       self.state.push(frame);
@@ -323,14 +375,7 @@ impl Read for WebsocketReceiver {
 
 impl Write for WebsocketSender {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    if self.0.closed.load(SeqCst) {
-      return Err(io::Error::from(ErrorKind::ConnectionReset));
-    }
-    Frame::write_unowned_payload_frame(self.0.stream.as_stream_write(), Opcode::Binary, buf)
-      .inspect_err(|e| {
-        self.0.closed.store(true, SeqCst);
-        error_log!("WebsocketSender::write error: {}", e);
-      })?;
+    self.write_frame(Opcode::Binary, buf)?;
     Ok(buf.len())
   }
 
@@ -348,8 +393,7 @@ impl Drop for WebSocketGuard {
     }
 
     trace_log!("WebsocketReceiver::drop closing...");
-    if let Err(err) = Frame::new(Opcode::Close, Vec::new()).write_to(self.stream.as_stream_write())
-    {
+    if let Err(err) = self.close(None) {
       warn_log!("WebsocketSender::drop error: {}", err);
     }
     trace_log!("WebsocketReceiver::drop closed.");

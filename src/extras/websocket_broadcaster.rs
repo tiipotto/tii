@@ -87,6 +87,8 @@ pub enum WsbOutgoingMessage {
   Message(WebsocketMessage),
   /// A message to be sent to every connected client.
   Broadcast(WebsocketMessage),
+  /// Initiate a Close handshake and stop the connection's writer.
+  Close,
 }
 
 /// Represents a function able to handle a WebSocket event (a connection or disconnection).
@@ -410,6 +412,12 @@ fn exec(es: ExecState) {
             break;
           }
         }
+        WsbOutgoingMessage::Close => {
+          if let Err(e) = ws_sender.close() {
+            error_log!("tii: ws_app close: {}", e);
+          }
+          break;
+        }
         WsbOutgoingMessage::Broadcast(message) => {
           if es.broadcast.send(message).is_err() {
             break;
@@ -425,6 +433,8 @@ fn exec(es: ExecState) {
     }
   });
 
+  let writer_control = es.message_sender.clone();
+
   // read thread
   let read_thread = thread::spawn(move || loop {
     if es.shutdown_signal.load(Ordering::SeqCst) {
@@ -433,23 +443,12 @@ fn exec(es: ExecState) {
     let Some(ref mh) = es.message_handler else { break };
     match ws_receiver.read_message() {
       Ok(message) => match message {
-        Some(m) => {
-          match m {
-            WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
-              (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
-            }
-            WebsocketMessage::Ping => {
-              if es
-                .message_sender
-                .send(WsbOutgoingMessage::Message(WebsocketMessage::Pong))
-                .is_err()
-              {
-                break;
-              }
-            }
-            WebsocketMessage::Pong => (), // do nothing
+        Some(m) => match m {
+          WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
+            (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
           }
-        }
+          WebsocketMessage::Ping | WebsocketMessage::Pong => (),
+        },
         None => {
           if let Some(ref dh) = es.disconnect_handler {
             (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
@@ -470,6 +469,7 @@ fn exec(es: ExecState) {
   if let Err(e) = read_thread.join() {
     error_log!("tii: ws_app read: {:?} occurred", &e);
   }
+  let _ = writer_control.send(WsbOutgoingMessage::Close);
   if let Err(e) = write_thread.join() {
     error_log!("tii: ws_app read: {:?} occurred", &e);
   }

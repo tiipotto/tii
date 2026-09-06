@@ -274,5 +274,27 @@ Stability is not guaranteed (functionality may be moved to another crate or func
 
 Nothing in Tii will ever depend on anything in `extras`.
 
+## Testing
+
+### WebSockets
+
+WebSockets are tested with [Autobahn](https://github.com/crossbario/autobahn-testsuite).
+See the [config](./config/fuzzingclient.json) for the current status (over time, less will be excluded).
+
+```bash
+cargo run --manifest-path examples/Cargo.toml --bin echo_server
+```
+
+```bash
+mkdir -p reports
+podman run --rm \
+    -v "$PWD/config:/config:ro,z" \
+    -v "$PWD/reports:/reports:z" \
+    --network host \
+    --name fuzzingclient \
+    docker.io/crossbario/autobahn-testsuite \
+    wstest -m fuzzingclient -s /config/fuzzingclient.json
+```
+
 ## Special Thanks
 - [Humphrey](https://github.com/w-henderson/Humphrey)
