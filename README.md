@@ -287,7 +287,7 @@ cargo run --manifest-path examples/Cargo.toml --bin echo_server
 
 ```bash
 mkdir -p reports
-podman run --rm \
+docker run --rm \
     -v "$PWD/config:/config:ro,z" \
     -v "$PWD/reports:/reports:z" \
     --network host \

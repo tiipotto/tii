@@ -95,6 +95,8 @@ impl Frame {
     let mask = header[1] & 0x80 != 0;
 
     let mut length: u64 = (header[1] & 0x7F) as u64;
+    // https://www.rfc-editor.org/rfc/rfc6455#section-5.5
+    // `All control frames MUST have a payload length of 125 bytes or less and MUST NOT be fragmented.`
     if matches!(opcode, Opcode::Close | Opcode::Ping | Opcode::Pong)
       && (!fin || rsv.iter().any(|bit| *bit) || !mask || length > 125)
     {
