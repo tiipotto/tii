@@ -320,19 +320,17 @@ impl AcceptQualityMimeType {
       }
 
       match MimeType::parse(mime) {
-        None => match MimeGroup::parse(mime) {
-          Some(group) => {
-            if &mime[group.as_str().len()..] != "/*" {
-              return None;
-            }
-            data.push(AcceptQualityMimeType {
-              value: AcceptMimeType::GroupWildcard(group),
-              q,
-              charset,
-            })
+        None => {
+          let group = MimeGroup::parse(mime)?;
+          if &mime[group.as_str().len()..] != "/*" {
+            return None;
           }
-          None => return None,
-        },
+          data.push(AcceptQualityMimeType {
+            value: AcceptMimeType::GroupWildcard(group),
+            q,
+            charset,
+          })
+        }
         Some(mime) => {
           data.push(AcceptQualityMimeType { value: AcceptMimeType::Specific(mime), q, charset })
         }

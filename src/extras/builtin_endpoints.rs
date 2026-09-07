@@ -82,7 +82,7 @@ pub fn serve_dir(directory_path: &'static str) -> impl Fn(&RequestContext) -> Ti
       match located {
         LocatedPath::Directory => Ok(
           Response::new(StatusCode::MovedPermanently)
-            .with_header(HttpHeaderName::Location, format!("{}/", &request.get_path()))?,
+            .with_header(HttpHeaderName::Location, format!("{}/", request.get_path()))?,
         ),
         LocatedPath::File(path) => try_file_open(&path),
       }

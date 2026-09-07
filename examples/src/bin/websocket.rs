@@ -77,8 +77,7 @@ fn echo_handler(
           sender.send(WebsocketMessage::Binary(binary))?;
         }
         WebsocketMessage::Ping => {
-          info!("Received ping, responding with pong");
-          sender.send(WebsocketMessage::Pong)?;
+          info!("Received ping");
         }
         WebsocketMessage::Pong => {
           info!("Received pong");

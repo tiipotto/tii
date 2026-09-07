@@ -7,13 +7,15 @@
   cargo-test               {:doc     "Runs all cargo tests"
                             :depends [test_all_features test_no_default_features]}
   cargo-fmt                {:doc  "Checks cargo fmt"
-                            :task (shell "cargo fmt --check")}
+                            :task (do
+                                    (shell "cargo fmt --check")
+                                    (shell "cargo fmt --manifest-path examples/Cargo.toml --check"))}
   clippy-all-features      {:doc  "Cargo clippy with all features"
                             :task (shell "cargo clippy --all-features -- --deny warnings")}
   clippy-no-defaults       {:doc  "Cargo clippy with no default features"
                             :task (shell "cargo clippy --no-default-features -- --deny warnings")}
   clippy-examples          {:doc  "Cargo clippy on examples"
-                            :task (shell "cargo clippy --examples -- --deny warnings -A clippy::unwrap-used")}
+                            :task (shell "cargo clippy --manifest-path examples/Cargo.toml -- --deny warnings")}
   clippy                   {:doc     "Runs all variations of cargo clippy"
                             :depends [clippy-all-features clippy-no-defaults clippy-examples]}
   cov-all-features         {:doc  "Coverage, all features"
