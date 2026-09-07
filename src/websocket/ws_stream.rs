@@ -184,6 +184,11 @@ pub enum ReadMessageTimeoutResult {
 }
 
 impl WebsocketReceiver {
+  #[cfg(feature = "extras")]
+  pub(crate) fn read_timeout(&self) -> TiiResult<Option<Duration>> {
+    Ok(self.guard.stream.get_read_timeout()?)
+  }
+
   /// initializes close, stopping further application writes.
   pub fn close(&self) -> TiiResult<()> {
     self.guard.close(None)
