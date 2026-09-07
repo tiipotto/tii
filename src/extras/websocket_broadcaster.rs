@@ -5,7 +5,8 @@ use std::{io, thread, time::Duration};
 
 use crate::{error_log, info_log, util, warn_log};
 use crate::{
-  RequestContext, WebsocketEndpoint, WebsocketMessage, WebsocketReceiver, WebsocketSender,
+  ReadMessageTimeoutResult, RequestContext, WebsocketEndpoint, WebsocketMessage, WebsocketReceiver,
+  WebsocketSender,
 };
 
 type WebsocketContext = (WebsocketReceiver, WebsocketSender, String);
@@ -68,6 +69,7 @@ struct State {
 pub struct WsbHandle {
   addr: String,
   sender: Sender<WsbOutgoingMessage>,
+  broadcast: Sender<WebsocketMessage>,
 }
 
 /// Represents a global sender which can be used to broadcast messages to all clients.
@@ -265,6 +267,7 @@ impl WSBApp {
         if let Some(sd) = &self.state.shutdown {
           if sd.try_recv().is_ok() {
             info_log!("tii: shutdown received in WebSocketApp");
+            sd_flag.store(true, Ordering::SeqCst);
             break;
           }
         }
@@ -359,8 +362,12 @@ impl WSBApp {
 
 impl WsbHandle {
   /// Create a new handle.
-  pub fn new(addr: String, sender: Sender<WsbOutgoingMessage>) -> Self {
-    Self { addr, sender }
+  pub fn new(
+    addr: String,
+    sender: Sender<WsbOutgoingMessage>,
+    broadcast: Sender<WebsocketMessage>,
+  ) -> Self {
+    Self { addr, sender, broadcast }
   }
 
   /// Send a message to the client.
@@ -370,7 +377,7 @@ impl WsbHandle {
 
   /// Broadcast a message to all connected clients.
   pub fn broadcast(&self, message: WebsocketMessage) {
-    self.sender.send(WsbOutgoingMessage::Broadcast(message)).ok();
+    self.broadcast.send(message).ok();
   }
 
   /// Get the address of the stream.
@@ -395,14 +402,19 @@ fn exec(es: ExecState) {
   let (mut ws_receiver, ws_sender, addr) = (es.stream.0, es.stream.1, es.stream.2);
 
   if let Some(ch) = es.connect_handler {
-    let handle = WsbHandle::new(addr.clone(), es.message_sender.clone());
+    let handle = WsbHandle::new(addr.clone(), es.message_sender.clone(), es.broadcast.clone());
     (ch)(handle);
   }
+
+  let broadcast = es.broadcast.clone();
 
   // write thread
   let write_shutdown = es.shutdown_signal.clone();
   let write_thread = thread::spawn(move || loop {
     if write_shutdown.load(Ordering::SeqCst) {
+      if let Err(e) = ws_sender.close() {
+        error_log!("tii: ws_app close: {}", e);
+      }
       break;
     }
     match es.outgoing_messages.recv_timeout(es.timeout) {
@@ -438,20 +450,25 @@ fn exec(es: ExecState) {
   // read thread
   let read_thread = thread::spawn(move || loop {
     if es.shutdown_signal.load(Ordering::SeqCst) {
+      if let Err(e) = ws_receiver.close() {
+        error_log!("tii: ws_app close: {}", e);
+      }
       break;
     }
-    let Some(ref mh) = es.message_handler else { break };
-    match ws_receiver.read_message() {
+    match ws_receiver.read_message_timeout(Some(es.timeout)) {
       Ok(message) => match message {
-        Some(m) => match m {
+        ReadMessageTimeoutResult::Timeout => continue,
+        ReadMessageTimeoutResult::Message(m) => match m {
           WebsocketMessage::Binary(_) | WebsocketMessage::Text(_) => {
-            (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone()), m);
+            if let Some(ref mh) = es.message_handler {
+              (mh)(WsbHandle::new(addr.clone(), es.message_sender.clone(), broadcast.clone()), m);
+            }
           }
           WebsocketMessage::Ping | WebsocketMessage::Pong => (),
         },
-        None => {
+        ReadMessageTimeoutResult::Closed => {
           if let Some(ref dh) = es.disconnect_handler {
-            (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
+            (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone(), broadcast.clone()));
           }
           break;
         }
@@ -459,7 +476,7 @@ fn exec(es: ExecState) {
       Err(e) => {
         error_log!("tii: ws_app read: {:?} occurred", &e);
         if let Some(dh) = es.disconnect_handler {
-          (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone()));
+          (dh)(WsbHandle::new(addr.clone(), es.message_sender.clone(), broadcast.clone()));
         }
         break;
       }

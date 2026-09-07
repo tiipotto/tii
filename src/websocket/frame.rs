@@ -3,6 +3,7 @@
 use crate::stream::{ConnectionStreamRead, ConnectionStreamWrite};
 use crate::tii_error::{RequestHeadParsingError, TiiResult};
 use crate::util;
+use std::io::{self, ErrorKind};
 
 /// Represents a frame of WebSocket data.
 /// Follows [Section 5.2 of RFC 6455](https://datatracker.ietf.org/doc/html/rfc6455#section-5.2)
@@ -94,6 +95,13 @@ impl Frame {
     let mask = header[1] & 0x80 != 0;
 
     let mut length: u64 = (header[1] & 0x7F) as u64;
+    if matches!(opcode, Opcode::Close | Opcode::Ping | Opcode::Pong)
+      && (!fin || rsv.iter().any(|bit| *bit) || !mask || length > 125)
+    {
+      return Err(
+        io::Error::new(ErrorKind::InvalidData, "invalid WebSocket control frame header").into(),
+      );
+    }
     if length == 126 {
       stream.read_exact(&mut header)?;
       length = u16::from_be_bytes(header) as u64;
@@ -123,6 +131,28 @@ impl Frame {
       .for_each(|(i, tem)| *tem ^= util::unwrap_some(masking_key.get(i % 4)));
 
     Ok(Self { fin, rsv, opcode, mask, length, masking_key, payload })
+  }
+
+  /// Validates the status code and UTF-8 reason in a close payload.
+  pub fn validate_close_payload(&self) -> TiiResult<()> {
+    if self.payload.is_empty() {
+      return Ok(());
+    }
+
+    let [hi, lo, reason @ ..] = self.payload.as_slice() else {
+      return Err(
+        io::Error::new(ErrorKind::InvalidData, "incomplete websocket close status code").into(),
+      );
+    };
+    let code = u16::from_be_bytes([*hi, *lo]);
+    // exclude reserved and application/private codes.
+    if !matches!(code, 1000..=1003 | 1007..=1014 | 3000..=4999) {
+      return Err(
+        io::Error::new(ErrorKind::InvalidData, "invalid webSocket close status code").into(),
+      );
+    }
+    std::str::from_utf8(reason).map_err(|err| io::Error::new(ErrorKind::InvalidData, err))?;
+    Ok(())
   }
 
   pub fn write_to<T: ConnectionStreamWrite + ?Sized>(self, write: &T) -> TiiResult<()> {

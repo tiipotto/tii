@@ -22,7 +22,7 @@ enum CloseState {
   Closed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum WriteOutcome {
   Written,
   Closing,
@@ -43,7 +43,9 @@ impl WebSocketGuard {
 
   fn write_frame(&self, opcode: Opcode, payload: &[u8]) -> TiiResult<WriteOutcome> {
     let state = unwrap_poison(self.write_mutex.lock())?;
-    if self.closed.load(SeqCst) || !matches!(*state, CloseState::Open) {
+    let can_write =
+      *state == CloseState::Open || (*state == CloseState::CloseSent && opcode == Opcode::Pong);
+    if self.closed.load(SeqCst) || !can_write {
       return Ok(WriteOutcome::Closing);
     }
     Frame::write_unowned_payload_frame(self.stream.as_stream_write(), opcode, payload)
@@ -269,33 +271,46 @@ impl WebsocketReceiver {
   /// Silently responds to pings with pongs, as specified in [RFC 6455 Section 5.5.2](https://datatracker.ietf.org/doc/html/rfc6455#section-5.5.2).
   fn read_next_frame(&mut self) -> TiiResult<Option<WebsocketMessage>> {
     if self.guard.closed.load(SeqCst) {
+      self.state.clear();
       return Ok(None);
     }
 
     let as_read = self.guard.stream.as_stream_read();
     // Keep reading frames until we get the finish frame
     while self.state.last().map(|f| !f.fin).unwrap_or(true) {
+      if self.guard.closed.load(SeqCst) {
+        self.state.clear();
+        return Ok(None);
+      }
       let frame = Frame::from_stream(as_read).inspect_err(|e| {
         self.guard.closed.store(true, SeqCst);
         error_log!("WebsocketReceiver::read_next_frame Frame::from_stream error: {}", e);
       })?;
 
+      if self.guard.closed.load(SeqCst) {
+        self.state.clear();
+        return Ok(None);
+      }
+
       if frame.opcode == Opcode::Close {
         self.state.clear();
+        frame.validate_close_payload().inspect_err(|_| {
+          self.guard.closed.store(true, SeqCst);
+        })?;
         self.guard.close(Some(&frame.payload))?;
         return Ok(None);
       }
 
-      if self.guard.is_closed() {
-        self.state.clear();
+      if frame.opcode == Opcode::Ping {
+        if self.guard.write_frame(Opcode::Pong, &frame.payload)? == WriteOutcome::Written {
+          return Ok(Some(WebsocketMessage::Ping));
+        }
         continue;
       }
 
-      if frame.opcode == Opcode::Ping {
-        match self.guard.write_frame(Opcode::Pong, &frame.payload)? {
-          WriteOutcome::Written => return Ok(Some(WebsocketMessage::Ping)),
-          WriteOutcome::Closing => continue,
-        }
+      if self.guard.closing.load(SeqCst) {
+        self.state.clear();
+        continue;
       }
 
       if frame.opcode == Opcode::Pong {
