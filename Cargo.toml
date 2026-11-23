@@ -1,10 +1,9 @@
 [package]
 name = "tii"
-version = "0.0.8"
+version = "0.0.9"
 edition = "2021"
 authors = ["Alexander Schuetz <aschuetz@protonmail.com>", "Kevin Nakamura <grinkers@grinkers.net>"]
 license = "MIT"
-homepage = "https://github.com/tiipotto/tii"
 repository = "https://github.com/tiipotto/tii"
 readme = "README.md"
 description = "A Low-Latency Web Server."
@@ -47,7 +46,7 @@ tls = ["rust-tls-duplex-stream", "rustls"]
 extras = ["listener_poll"]
 
 [lints.rust]
-future-incompatible = "warn"
+future_incompatible = { level = "warn", priority = -1 }
 rust_2018_idioms = { level = "warn", priority = -1 }
 unsafe_code = "deny"
 

@@ -40,7 +40,8 @@ jobs:
 
   valgrind_linux:
     name: Valgrind
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 ships valgrind 3.26.0, whose XML output breaks cargo-valgrind (valgrind bug 514613, fixed in 3.27).
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
