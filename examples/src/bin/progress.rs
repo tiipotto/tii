@@ -7,6 +7,7 @@
 //! curl -N http://localhost:8080/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{"symbols":["AAPL","MSFT","NVDA"]},"_meta":{"progressToken":"lookup-1"}}}'
 //! ```
 use serde_json::{Value, json};
+use std::io::Write;
 use std::thread::sleep;
 use std::time::Duration;
 use tii::extras::{Connector, TcpConnector};
@@ -28,10 +29,10 @@ fn tools_call(request: &RequestContext) -> TiiResult<Response> {
   let events = ResponseBody::chunked(move |sink| {
     let send = |message: Value| {
       sink.write_all(format!("data: {message}\n\n").as_bytes())?;
-      sink.flush()
+      sink.as_write().flush()
     };
     // Sends the response headers right away, before the first step finishes.
-    sink.flush()?;
+    sink.as_write().flush()?;
     for (done, symbol) in symbols.iter().enumerate() {
       // The slow part of the tool, such as a web request per symbol.
       sleep(Duration::from_secs(1));

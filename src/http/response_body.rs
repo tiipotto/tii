@@ -114,7 +114,7 @@ impl<T> ReadAndSeek for T where T: Read + Seek + Send {}
 pub trait ResponseBodySink {
   fn write(&self, buffer: &[u8]) -> io::Result<usize>;
   fn write_all(&self, buffer: &[u8]) -> io::Result<()>;
-  fn flush(&self) -> io::Result<()>;
+
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_>;
 }
 impl ResponseBody {
@@ -220,7 +220,6 @@ impl ResponseBody {
   /// Creates a response body that streams data from a sink and will on the fly gzip it.
   /// Due to gzip encoding the implementation does not guarantee that each written chunk
   /// corresponds to exactly one http chunk and also does not guarantee that any such chunk is written immediately.
-  /// Call `ResponseBodySink::flush` to send everything written so far.
   pub fn chunked_gzip<T: FnOnce(&dyn ResponseBodySink) -> io::Result<()> + Send + 'static>(
     streamer: T,
   ) -> Self {
@@ -532,7 +531,8 @@ impl Write for ResponseBodySinkAsWrite<'_> {
   }
 
   fn flush(&mut self) -> io::Result<()> {
-    self.0.flush()
+    //Noop
+    Ok(())
   }
 }
 
@@ -545,10 +545,6 @@ impl ResponseBodySink for StreamSink<'_> {
 
   fn write_all(&self, buffer: &[u8]) -> io::Result<()> {
     self.0.write_all(buffer)
-  }
-
-  fn flush(&self) -> io::Result<()> {
-    self.0.flush()
   }
 
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
@@ -566,7 +562,8 @@ impl<'a> GzipChunkedSink<'a> {
     // We need BufWriter here because the gzip encoder calls write with like 2-4 bytes at a time.
     // We don't want to emit a http chunk every single time the gzip encoder writes a single symbol
     // the overhead would be several 100%.
-    // With the BufWriter a chunk is only emitted when its buffer is full, on finish, or on ResponseBodySink::flush.
+    // If we use the BufWriter the overhead only exist when gzip calls flush().
+    // This only happens when there is significant data buffered so it's reasonable to emit a chunk then.
     Ok(Self(
       request_id,
       RefCell::new(Some(crate::util::new_gzip_encoder(BufWriter::new(ChunkedSink(
@@ -600,16 +597,6 @@ impl ResponseBodySink for GzipChunkedSink<'_> {
     unwrap_some(self.1.borrow_mut().as_mut()).write_all(buffer)
   }
 
-  fn flush(&self) -> io::Result<()> {
-    trace_log!("tii: Request {} GzipChunkedSink::flush", self.0);
-    let mut encoder = self.1.borrow_mut();
-    let encoder = unwrap_some(encoder.as_mut());
-    encoder.flush()?;
-    // libflate keeps up to 15 bits of the flushed block buffered, which can hold back the last bytes written.
-    // Flushing again emits an empty block that pushes them out.
-    encoder.flush()
-  }
-
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
     ResponseBodySinkAsWrite(self)
   }
@@ -626,10 +613,6 @@ impl ResponseBodySink for RawSink<'_> {
     self.0.borrow_mut().write_all(buffer)
   }
 
-  fn flush(&self) -> io::Result<()> {
-    self.0.borrow_mut().flush()
-  }
-
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
     ResponseBodySinkAsWrite(self)
   }
@@ -644,7 +627,8 @@ impl Write for ChunkedSink<'_> {
   }
 
   fn flush(&mut self) -> io::Result<()> {
-    ResponseBodySink::flush(self)
+    //NOOP, we only truly flush the response as a whole!
+    Ok(())
   }
 }
 
@@ -673,10 +657,6 @@ impl ResponseBodySink for ChunkedSink<'_> {
 
     self.1.write_all(buffer)?;
     self.1.write_all(b"\r\n")
-  }
-
-  fn flush(&self) -> io::Result<()> {
-    self.1.flush()
   }
 
   fn as_write(&self) -> ResponseBodySinkAsWrite<'_> {
